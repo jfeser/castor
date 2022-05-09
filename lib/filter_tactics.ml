@@ -307,14 +307,20 @@ module Make (C : Config.S) = struct
           if List.is_empty key then
             Or_error.error_string "No candidate keys found."
           else
-            let%map all_keys = Tactics_util.all_values key r' in
+            let key =
+              List.map key ~f:(function
+                | Name n -> n
+                | _ -> failwith "expected a name")
+            in
+            let%map all_keys =
+              Tactics_util.all_values (Select_list.of_names key) r'
+            in
             let scope = fresh_name "s%d" in
-            let keys_schema = Schema.schema all_keys in
             A.select (Schema.to_select_list orig_schema)
             @@ A.ordered_idx all_keys scope
                  (filter_many
                     (List.map key ~f:(fun p ->
-                         P.(p = Pred.scoped keys_schema scope p)))
+                         P.(name p = name (Name.scoped scope p))))
                     r')
                  cmps
         in
@@ -563,7 +569,8 @@ module Make (C : Config.S) = struct
           union ds1 ds2
       | Binop (Eq, p1, p2) -> (
           match
-            (Tactics_util.all_values [ p1 ] r, Tactics_util.all_values [ p2 ] r)
+            ( Tactics_util.all_values [ (p1, "p1") ] r,
+              Tactics_util.all_values [ (p2, "p2") ] r )
           with
           | _, Ok vs2 when is_candidate_key p1 r && is_candidate_match p2 r ->
               Ok (Map.singleton (module Pred) p1 (Domain vs2))
@@ -762,30 +769,29 @@ module Make (C : Config.S) = struct
     let%bind keys =
       match Pred.to_type field with
       | IntT _ | DateT _ ->
-          let%map vals = Tactics_util.all_values [ field ] r |> Or_error.ok in
+          let val_name = fresh_name "v%d" in
+          let%map vals =
+            Tactics_util.all_values [ (field, val_name) ] r |> Or_error.ok
+          in
           let vals =
-            let val_name = List.hd_exn (Schema.schema vals) in
             let select_list =
               let alias_binds = List.filter_map aliases ~f:Fun.id in
-              Select_list.of_names (val_name :: alias_binds)
+              Select_list.of_names (Name.create val_name :: alias_binds)
             in
             A.select select_list vals
           and scope = fresh_name "k%d" in
 
           let open P in
-          A.dep_join
-            (A.select [ as_ (Min lo) "lo"; as_ (Max hi) "hi" ] vals)
-            scope
-          @@ A.select [ as_ (name (Name.create "range")) key_name ]
+          A.dep_join (A.select [ (Min lo, "lo"); (Max hi, "hi") ] vals) scope
+          @@ A.select [ (name (Name.create "range"), key_name) ]
           @@ A.range
                (name (Name.create ~scope "lo"))
                (name (Name.create ~scope "hi"))
       | StringT _ ->
-          let%map keys = Tactics_util.all_values [ field ] r |> Or_error.ok in
-          let select_list =
-            [ P.(name (List.hd_exn (Schema.schema keys)), key_name) ]
+          let%map keys =
+            Tactics_util.all_values [ (field, key_name) ] r |> Or_error.ok
           in
-          A.select select_list keys
+          A.select (Select_list.of_names [ Name.create key_name ]) keys
       | _ -> None
     in
     let scope = fresh_name "s%d" in

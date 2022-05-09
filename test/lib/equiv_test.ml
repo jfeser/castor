@@ -2,7 +2,7 @@ open Test_util
 
 let run_test conn str =
   Abslayout_load.load_string_exn conn str
-  |> Equiv.Private.eqs |> Set.to_list
+  |> Equiv.eqs |> Set.to_list
   |> Format.printf "%a" Fmt.Dump.(list @@ pair Name.pp Name.pp)
 
 let%expect_test "" =
@@ -46,10 +46,10 @@ join(((l_partkey = s3_ps_partkey) &&
      ((l_suppkey = s3_ps_suppkey) &&
      ((l_shipdate >= date("1995-01-02")) && ((l_shipdate < (date("1995-01-02") + year(1))) && true)))),
   dedup(
-    select([ps_availqty as s3_ps_availqty, 
-            ps_comment as s3_ps_comment, 
-            ps_partkey as s3_ps_partkey, 
-            ps_suppkey as s3_ps_suppkey, 
+    select([ps_availqty as s3_ps_availqty,
+            ps_comment as s3_ps_comment,
+            ps_partkey as s3_ps_partkey,
+            ps_suppkey as s3_ps_suppkey,
             ps_supplycost as s3_ps_supplycost], partsupp)),
   lineitem)
 |};
@@ -81,12 +81,12 @@ dedup(
           join((s0_c1_acctbal > q0),
             dedup(
               select([c1_acctbal as s0_c1_acctbal, c1_custkey as s0_c1_custkey, c1_phone as s0_c1_phone],
-                alist(select([c_phone as c1_phone, c_acctbal as c1_acctbal, 
-                              c_custkey as c1_custkey, c_acctbal as s1_c1_acctbal, 
+                alist(select([c_phone as c1_phone, c_acctbal as c1_acctbal,
+                              c_custkey as c1_custkey, c_acctbal as s1_c1_acctbal,
                               c_custkey as s1_c1_custkey, c_phone as s1_c1_phone],
                         dedup(select([c_phone, c_acctbal, c_custkey], customer))) as k1,
-                  select([s1_c1_acctbal, s1_c1_custkey, s1_c1_phone, 
-                          s1_c1_phone as c1_phone, s1_c1_acctbal as c1_acctbal, 
+                  select([s1_c1_acctbal, s1_c1_custkey, s1_c1_phone,
+                          s1_c1_phone as c1_phone, s1_c1_acctbal as c1_acctbal,
                           s1_c1_custkey as c1_custkey],
                     join((o_custkey = s1_c1_custkey),
                       dedup(

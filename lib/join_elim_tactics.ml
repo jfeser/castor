@@ -42,8 +42,8 @@ module Make (C : Config.S) = struct
     | Binop (Eq, kl, kr) ->
         let join_scope = Fresh.name Global.fresh "s%d"
         and hash_scope = Fresh.name Global.fresh "s%d"
-        and r1_schema = schema r1
-        and r2_schema = schema r2 in
+        and r1_schema = schema r1 in
+        let key_name = Fresh.name Global.fresh "k%d" in
         let layout =
           let slist =
             let r1_schema = Schema.scoped join_scope r1_schema in
@@ -51,10 +51,10 @@ module Make (C : Config.S) = struct
           in
           A.dep_join r1 join_scope @@ A.select slist
           @@ A.hash_idx
-               (A.dedup @@ A.select [ (kr, "key") ] r2)
+               (A.dedup @@ A.select [ (kr, key_name) ] r2)
                hash_scope
                (A.filter
-                  (Binop (Eq, Pred.scoped r2_schema hash_scope kr, kr))
+                  (Binop (Eq, Name (Name.create ~scope:hash_scope key_name), kr))
                   r2)
                [ Pred.scoped r1_schema join_scope kl ]
         in

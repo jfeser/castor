@@ -69,9 +69,9 @@ module Make (C : Config.S) = struct
      children. *)
   let gen_concat_select_list outer_preds inner_schema =
     let outer_aggs, inner_aggs =
-      List.fold_left outer_preds ~init:([], []) ~f:(fun (op, ip) p ->
+      List.fold_left outer_preds ~init:([], []) ~f:(fun (op, ip) (p, n) ->
           let ip, p = extend_aggs ip p in
-          (op @ [ p ], ip))
+          (op @ [ (p, n) ], ip))
     in
     let inner_aggs = List.map inner_aggs ~f:(fun (n, a) -> (a, Name.name n)) in
     (* Don't want to project out anything that we might need later. *)
@@ -97,13 +97,16 @@ module Make (C : Config.S) = struct
       let%map outer_preds, inner_preds =
         match r'.node with
         | AHashIdx h ->
-            let o = List.filter_map ps ~f:Pred.to_name |> List.map ~f:P.name
-            and i =
+            let o =
+              Select_list.names ps |> Iter.map Name.create |> Iter.to_list
+              |> Select_list.of_names
+            in
+            let i =
               (* TODO: This hack works around problems with sql conversion
                  and lateral joins. *)
               let kschema = schema h.hi_keys |> scoped h.hi_scope in
               List.filter ps ~f:(function
-                | Name n -> not (List.mem ~equal:Name.O.( = ) kschema n)
+                | Name n, _ -> not (List.mem ~equal:Name.O.( = ) kschema n)
                 | _ -> true)
             in
             return (o, i)
@@ -130,13 +133,14 @@ module Make (C : Config.S) = struct
       select outer_preds @@ mk_collection
       @@ fun rk_schema scope rv ->
       let inner_preds =
-        List.map inner_preds ~f:(Pred.scoped rk_schema scope)
-        |> List.filter ~f:(fun p ->
-               Pred.to_name p
-               |> Option.map ~f:(fun n ->
-                      not (List.mem rk_schema n ~equal:[%compare.equal: Name.t]))
-               |> Option.value ~default:true)
+        Select_list.map inner_preds ~f:(fun p _ ->
+            Pred.scoped rk_schema scope p)
+        |> List.filter ~f:(fun (_, n) ->
+               not
+                 (List.mem rk_schema (Name.create n)
+                    ~equal:[%compare.equal: Name.t]))
       in
+
       select inner_preds rv
 
   let push_select_collection =
@@ -181,10 +185,14 @@ module Make (C : Config.S) = struct
         method fresh_name () = Name.create @@ Fresh.name Global.fresh "q%d"
       end
     in
-    let ps, subqueries = List.map ps ~f:(visitor#visit_pred ()) |> List.unzip in
+    let ps, subqueries =
+      List.map ps ~f:(fun (p, n) ->
+          let p', subqueries = visitor#visit_pred () p in
+          ((p', n), subqueries))
+      |> List.unzip
+    in
     let subqueries =
-      List.concat subqueries
-      |> List.map ~f:(fun (n, p) -> As_pred (p, Name.name n))
+      List.concat subqueries |> List.map ~f:(fun (n, p) -> (p, Name.name n))
     in
     return @@ A.select ps
     @@ A.select ((Schema.schema r |> Schema.to_select_list) @ subqueries) r
@@ -196,15 +204,10 @@ module Make (C : Config.S) = struct
     let%bind ps, r = to_select r in
     let name = Name.fresh "x%d" in
     match ps with
-    | [ Binop (op, p, p') ] ->
+    | [ (Binop (op, p, p'), n) ] ->
         return
-        @@ A.select [ Binop (op, Name name, p') ]
-        @@ A.select [ As_pred (p, Name.name name) ]
-        @@ r
-    | [ As_pred (Binop (op, p, p'), n) ] ->
-        return
-        @@ A.select [ As_pred (Binop (op, Name name, p'), n) ]
-        @@ A.select [ As_pred (p, Name.name name) ]
+        @@ A.select [ (Binop (op, Name name, p'), n) ]
+        @@ A.select [ (p, Name.name name) ]
         @@ r
     | _ -> None
 
@@ -212,23 +215,15 @@ module Make (C : Config.S) = struct
 
   let hoist_param =
     let open A in
+    let open Option.Let_syntax in
     let f r =
-      match r.node with
-      | Select
-          ( [
-              As_pred
-                ( First
-                    {
-                      node = Select ([ As_pred (Binop (op, p1, p2), _) ], r');
-                      _;
-                    },
-                  n );
-            ],
-            r ) ->
+      let%bind ps, r = to_select r in
+      match ps with
+      | [ (First { node = Select ([ (Binop (op, p1, p2), _) ], r'); _ }, n) ] ->
           let fresh_id = Fresh.name Global.fresh "const%d" in
-          Option.return
-          @@ select [ As_pred (Binop (op, Name (Name.create fresh_id), p2), n) ]
-          @@ select [ As_pred (First (select [ p1 ] r'), fresh_id) ] r
+          return
+          @@ select [ (Binop (op, Name (Name.create fresh_id), p2), n) ]
+          @@ select [ (First (select [ (p1, "x") ] r'), fresh_id) ] r
       | _ -> None
     in
     of_func ~name:"hoist-param" f

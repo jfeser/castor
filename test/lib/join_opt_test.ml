@@ -18,7 +18,7 @@ open Ops.Make (Config)
 open Join_opt.Make (Config)
 
 module C =
-  (val Constructors.Annot.with_default
+  (val Constructors.Annot_default.with_meta
          object
            method stage : Name.t -> [ `Compile | `Run | `No_scope ] =
              assert false
@@ -191,10 +191,9 @@ let%expect_test "join-opt" =
            (Relation
             ((r_name nation)
              (r_schema
-              (((((name n_nationkey) (meta <opaque>)) (IntT))
-                (((name n_name) (meta <opaque>)) (StringT (padded)))
-                (((name n_regionkey) (meta <opaque>)) (IntT))
-                (((name n_comment) (meta <opaque>)) (StringT))))))))
+              (((((name n_nationkey)) (IntT))
+                (((name n_name)) (StringT (padded)))
+                (((name n_regionkey)) (IntT)) (((name n_comment)) (StringT))))))))
           (meta <opaque>))))
        (rhs
         (Flat
@@ -202,18 +201,16 @@ let%expect_test "join-opt" =
            (Relation
             ((r_name customer)
              (r_schema
-              (((((name c_custkey) (meta <opaque>)) (IntT))
-                (((name c_name) (meta <opaque>)) (StringT))
-                (((name c_address) (meta <opaque>)) (StringT))
-                (((name c_nationkey) (meta <opaque>)) (IntT))
-                (((name c_phone) (meta <opaque>)) (StringT (padded)))
-                (((name c_acctbal) (meta <opaque>)) (FixedT))
-                (((name c_mktsegment) (meta <opaque>)) (StringT (padded)))
-                (((name c_comment) (meta <opaque>)) (StringT))))))))
+              (((((name c_custkey)) (IntT)) (((name c_name)) (StringT))
+                (((name c_address)) (StringT)) (((name c_nationkey)) (IntT))
+                (((name c_phone)) (StringT (padded)))
+                (((name c_acctbal)) (FixedT))
+                (((name c_mktsegment)) (StringT (padded)))
+                (((name c_comment)) (StringT))))))))
           (meta <opaque>))))
        (pred
-        (Binop Eq (Name ((name c_nationkey) (meta <opaque>)))
-         (Name ((name n_nationkey) (meta <opaque>)))))))) |}]
+        (Binop Eq (Name ((name c_nationkey) (type_ (IntT))))
+         (Name ((name n_nationkey) (type_ (IntT))))))))) |}]
 
 let%expect_test "join-opt" =
   opt_test
@@ -223,19 +220,18 @@ let%expect_test "join-opt" =
   [%expect
     {|
     (((69208)
-      (Hash (lkey (Name ((name n_nationkey) (meta <opaque>))))
+      (Hash (lkey (Name ((name n_nationkey) (type_ (IntT)))))
        (lhs
         (Flat
          ((node
            (Relation
             ((r_name nation)
              (r_schema
-              (((((name n_nationkey) (meta <opaque>)) (IntT))
-                (((name n_name) (meta <opaque>)) (StringT (padded)))
-                (((name n_regionkey) (meta <opaque>)) (IntT))
-                (((name n_comment) (meta <opaque>)) (StringT))))))))
+              (((((name n_nationkey)) (IntT))
+                (((name n_name)) (StringT (padded)))
+                (((name n_regionkey)) (IntT)) (((name n_comment)) (StringT))))))))
           (meta <opaque>))))
-       (rkey (Name ((name c_nationkey) (meta <opaque>))))
+       (rkey (Name ((name c_nationkey) (type_ (IntT)))))
        (rhs
         (Nest
          (lhs
@@ -244,14 +240,12 @@ let%expect_test "join-opt" =
              (Relation
               ((r_name customer)
                (r_schema
-                (((((name c_custkey) (meta <opaque>)) (IntT))
-                  (((name c_name) (meta <opaque>)) (StringT))
-                  (((name c_address) (meta <opaque>)) (StringT))
-                  (((name c_nationkey) (meta <opaque>)) (IntT))
-                  (((name c_phone) (meta <opaque>)) (StringT (padded)))
-                  (((name c_acctbal) (meta <opaque>)) (FixedT))
-                  (((name c_mktsegment) (meta <opaque>)) (StringT (padded)))
-                  (((name c_comment) (meta <opaque>)) (StringT))))))))
+                (((((name c_custkey)) (IntT)) (((name c_name)) (StringT))
+                  (((name c_address)) (StringT)) (((name c_nationkey)) (IntT))
+                  (((name c_phone)) (StringT (padded)))
+                  (((name c_acctbal)) (FixedT))
+                  (((name c_mktsegment)) (StringT (padded)))
+                  (((name c_comment)) (StringT))))))))
             (meta <opaque>))))
          (rhs
           (Flat
@@ -259,19 +253,17 @@ let%expect_test "join-opt" =
              (Relation
               ((r_name orders)
                (r_schema
-                (((((name o_orderkey) (meta <opaque>)) (IntT))
-                  (((name o_custkey) (meta <opaque>)) (IntT))
-                  (((name o_orderstatus) (meta <opaque>)) (StringT (padded)))
-                  (((name o_totalprice) (meta <opaque>)) (FixedT))
-                  (((name o_orderdate) (meta <opaque>)) (DateT))
-                  (((name o_orderpriority) (meta <opaque>)) (StringT (padded)))
-                  (((name o_clerk) (meta <opaque>)) (StringT (padded)))
-                  (((name o_shippriority) (meta <opaque>)) (IntT))
-                  (((name o_comment) (meta <opaque>)) (StringT))))))))
+                (((((name o_orderkey)) (IntT)) (((name o_custkey)) (IntT))
+                  (((name o_orderstatus)) (StringT (padded)))
+                  (((name o_totalprice)) (FixedT)) (((name o_orderdate)) (DateT))
+                  (((name o_orderpriority)) (StringT (padded)))
+                  (((name o_clerk)) (StringT (padded)))
+                  (((name o_shippriority)) (IntT))
+                  (((name o_comment)) (StringT))))))))
             (meta <opaque>))))
          (pred
-          (Binop Eq (Name ((name c_custkey) (meta <opaque>)))
-           (Name ((name o_custkey) (meta <opaque>)))))))))) |}]
+          (Binop Eq (Name ((name c_custkey) (type_ (IntT))))
+           (Name ((name o_custkey) (type_ (IntT))))))))))) |}]
 
 let%expect_test "" =
   let params =
@@ -378,7 +370,7 @@ let%expect_test "" =
                 n1_nationkey, c_custkey, c_name, c_address, c_nationkey,
                 c_phone, c_acctbal, c_mktsegment, c_comment],
           ahashidx(dedup(
-                     select([n1_regionkey],
+                     select([n1_regionkey as k0],
                        alist(alist(select([n_regionkey as n1_regionkey,
                                            n_nationkey as n1_nationkey],
                                      nation) as s9,
@@ -400,7 +392,7 @@ let%expect_test "" =
                                              ascalar(s10.c_comment)],
                                        cross)))],
                            cross)))) as s8,
-            filter((s8.n1_regionkey = n1_regionkey),
+            filter((s8.k0 = n1_regionkey),
               alist(alist(select([n_regionkey as n1_regionkey,
                                   n_nationkey as n1_nationkey],
                             nation) as s4,

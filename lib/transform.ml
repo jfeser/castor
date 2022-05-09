@@ -1,3 +1,4 @@
+open Core
 open Collections
 open Ast
 module R = Resolve

@@ -22,27 +22,26 @@ module Make (C : Config.S) = struct
     match r.node with
     | GroupBy (ps, key, r) -> (
         let key_name = Fresh.name Global.fresh "k%d" in
-        let key_preds = List.map key ~f:P.name in
         let filter_pred =
           List.map key ~f:(fun n ->
               Pred.Infix.(name n = name (Name.copy n ~scope:(Some key_name))))
           |> Pred.conjoin
         in
-        let keys = A.dedup (A.select key_preds r) in
         (* Try to remove any remaining parameters from the keys relation. *)
-        match over_approx C.params keys with
+        match
+          over_approx C.params (A.dedup (A.select (Select_list.of_names key) r))
+        with
         | Ok keys ->
+            let schema = Schema.schema r in
             let scalars, rest =
-              let schema = Schema.schema r in
-              List.partition_tf ps ~f:(fun p ->
-                  match Pred.to_name p with
-                  | Some n -> List.mem schema n ~equal:[%compare.equal: Name.t]
-                  | None -> false)
+              List.partition_map ps ~f:(fun ((p, _) as s) ->
+                  match p with
+                  | Name n
+                    when List.mem schema n ~equal:[%compare.equal: Name.t] ->
+                      First n
+                  | _ -> Second s)
             in
-            let scalars =
-              List.map scalars ~f:(fun p ->
-                  A.scalar @@ Pred.scoped key key_name p)
-            in
+            let scalars = List.map scalars ~f:A.scalar_name in
             Option.return @@ A.list keys key_name
             @@ A.tuple
                  (scalars @ [ A.select rest (A.filter filter_pred r) ])
@@ -66,7 +65,7 @@ module Make (C : Config.S) = struct
     in
     (* Try to remove any remaining parameters from the keys relation. *)
     let%bind keys =
-      match all_values_approx key r with
+      match all_values_approx (Select_list.of_names key) r with
       | Ok keys -> return @@ A.dedup keys
       | Error err ->
           (* Otherwise, if some keys are computed, fail. *)
@@ -95,16 +94,16 @@ module Make (C : Config.S) = struct
                      .r_name
                  in
                  let lhs =
-                   dedup
-                     (select [ As_pred (Name k, key_name) ] (db_relation rel))
+                   dedup (select [ (Name k, key_name) ] (db_relation rel))
                  in
                  let new_key =
                    List.filter key ~f:(fun k' -> Name.O.(k <> k'))
                  in
                  let new_ps =
-                   List.filter ps ~f:(fun p ->
+                   List.filter ps ~f:(fun (p, _) ->
                        not ([%compare.equal: Pred.t] p (Name k)))
-                   |> List.map ~f:(Pred.scoped (Schema.schema lhs) scope)
+                   |> Select_list.map ~f:(fun p _ ->
+                          Pred.scoped (Schema.schema lhs) scope p)
                  in
                  let filter_pred =
                    Binop (Eq, Name k, Name (Name.create key_name))
@@ -120,9 +119,9 @@ module Make (C : Config.S) = struct
                  let key_scalar =
                    let p =
                      Pred.scoped (Schema.schema lhs) scope
-                       (As_pred (Name (Name.create key_name), Name.name k))
+                       (Name (Name.create key_name))
                    in
-                   scalar p
+                   scalar p (Name.name k)
                  in
                  list lhs scope (tuple [ key_scalar; new_group_by ] Cross))
       | _ -> Seq.empty)
