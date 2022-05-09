@@ -610,7 +610,7 @@ module Make (Config : Config.S) = struct
                  method resolved = meta#meta#resolved
                end)
       in
-      let x = opt (Castor.Path.get_exn p r) in
+      let x = opt (Path.get_exn p r) in
       info (fun m -> m "Found %d join options." (Pareto_set.length x#joins));
       let%bind j = Pareto_set.min_elt (fun a -> a.(0)) x#joins in
       info (fun m -> m "Chose %a." Sexp.pp_hum ([%sexp_of: t] j));

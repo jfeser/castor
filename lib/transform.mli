@@ -1,3 +1,4 @@
+open Core
 open Ast
 
 module Config : sig

@@ -1,3 +1,4 @@
+open Core
 include (val Log.make ~level:(Some Info) "castor-opt.mcmc")
 
 module Random_choice = struct

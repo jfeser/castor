@@ -1,6 +1,6 @@
 open Abslayout
 open Abslayout_load
-open Castor_test.Test_util
+open Test_util
 
 module C = struct
   let params = Set.empty (module Name)

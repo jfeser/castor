@@ -233,7 +233,7 @@ module Make (Config : Config.S) = struct
                              (* Push constant filters *)
                              traced ~name:"push-constant-filters"
                              @@ for_all Filter_tactics.push_filter
-                                  Castor.Path.(all >>? is_const_filter);
+                                  Path.(all >>? is_const_filter);
                              (* Push orderby operators into compile time position if possible. *)
                              traced ~name:"push-orderby"
                              @@ for_all Orderby_tactics.push_orderby

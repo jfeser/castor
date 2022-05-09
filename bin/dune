@@ -62,28 +62,28 @@
  (modules combine))
 
 (executable
+ (package castor)
  (name opt)
  (public_name opt.exe)
- (libraries core core_unix.command_unix castor castor_opt logs logs.fmt fmt
-   fmt.tty)
+ (libraries core core_unix.command_unix castor logs logs.fmt fmt fmt.tty)
  (preprocess
   (pps ppx_sexp_conv ppx_let ppx_sexp_conv ppx_compare ppx_hash))
  (modules opt))
 
 (executable
+ (package castor)
  (name xform)
  (public_name xform.exe)
- (libraries core core_unix.command_unix castor castor_opt logs logs.fmt fmt
-   fmt.tty)
+ (libraries core core_unix.command_unix castor logs logs.fmt fmt fmt.tty)
  (preprocess
   (pps ppx_sexp_conv ppx_let ppx_sexp_conv ppx_compare ppx_hash))
  (modules xform))
 
 (executable
+ (package castor)
  (name sql)
  (public_name sql.exe)
- (libraries core core_unix.command_unix castor castor_opt logs logs.fmt fmt
-   fmt.tty)
+ (libraries core core_unix.command_unix castor logs logs.fmt fmt fmt.tty)
  (preprocess
   (pps ppx_sexp_conv ppx_let ppx_sexp_conv ppx_compare ppx_hash))
  (modules sql))

@@ -56,7 +56,6 @@
   (expect_test_helpers_core (>= v0.12))))
 
 (using menhir 2.0)
-(using fmt 1.1)
 (generate_opam_files true)
 
 ; Local Variables:

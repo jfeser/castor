@@ -1,4 +1,3 @@
-open Castor_test
 open Collections
 module A = Abslayout
 

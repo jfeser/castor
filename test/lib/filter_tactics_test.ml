@@ -1,6 +1,6 @@
 open Abslayout
 open Abslayout_load
-open Castor_test.Test_util
+open Test_util
 
 module Test_db = struct
   module C = struct
@@ -362,8 +362,8 @@ aorderedidx(select([l_shipdate, o_orderdate],
                       join(true,
                         lineitem,
                         orders)) as s64,
-                atuple([ascalar(s64.l_orderkey), ascalar(s64.l_discount), 
-                        ascalar(s64.l_extendedprice), ascalar(s64.o_shippriority), 
+                atuple([ascalar(s64.l_orderkey), ascalar(s64.l_discount),
+                        ascalar(s64.l_extendedprice), ascalar(s64.o_shippriority),
                         ascalar(s64.o_orderdate)],
                   cross))],
         cross))),

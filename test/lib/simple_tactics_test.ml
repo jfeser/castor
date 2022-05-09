@@ -1,6 +1,6 @@
 open Abslayout
 open Simple_tactics
-open Castor_test.Test_util
+open Test_util
 
 module C = struct
   let params =

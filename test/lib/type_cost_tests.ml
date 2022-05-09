@@ -1,5 +1,6 @@
+open Core
 open Abslayout_load
-open Castor_test.Test_util
+open Test_util
 
 open Type_cost.Make (struct
   let params = Set.empty (module Name)
@@ -121,9 +122,9 @@ select([n1_name, n2_name, l_year, revenue],
                                        alist(select([l_suppkey, l_shipdate, l_discount, l_extendedprice],
                                                filter(((to_year(l_shipdate) = k0.l_year) &&
                                                       (c_nationkey = s4.n2_nationkey)),
-                                                 select([l_suppkey, l_shipdate, 
-                                                         l_discount, 
-                                                         l_extendedprice, 
+                                                 select([l_suppkey, l_shipdate,
+                                                         l_discount,
+                                                         l_extendedprice,
                                                          c_nationkey],
                                                    join((c_custkey = o_custkey),
                                                      join((o_orderkey = l_orderkey),
@@ -132,8 +133,8 @@ select([n1_name, n2_name, l_year, revenue],
                                                          lineitem),
                                                        orders),
                                                      customer)))) as s3,
-                                         atuple([atuple([ascalar(s3.l_shipdate), 
-                                                         ascalar(s3.l_discount), 
+                                         atuple([atuple([ascalar(s3.l_shipdate),
+                                                         ascalar(s3.l_discount),
                                                          ascalar(s3.l_extendedprice)],
                                                    cross),
                                                  alist(select([n1_name],
@@ -146,7 +147,7 @@ select([n1_name, n2_name, l_year, revenue],
                                            cross))],
                                  cross)))],
                      cross))) as s8,
-           atuple([ascalar(s8.count0), ascalar(s8.n1_name), ascalar(s8.n2_name), 
+           atuple([ascalar(s8.count0), ascalar(s8.n1_name), ascalar(s8.n2_name),
                    ascalar(s8.l_year), ascalar(s8.revenue)],
       cross)),
          ("", "")))))

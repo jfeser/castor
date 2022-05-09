@@ -1,4 +1,4 @@
-open Castor_test.Test_util
+open Test_util
 module A = Abslayout
 
 module Config = struct
@@ -22,7 +22,7 @@ let%expect_test "" =
                 select([l_suppkey as supplier_no, sum(agg0) as total_revenue],
                   aorderedidx(dedup(select([l_shipdate], lineitem)) as s4,
                     filter((count0 > 0),
-                      select([count() as count0, sum((l_extendedprice * (1 - l_discount))) as agg0, 
+                      select([count() as count0, sum((l_extendedprice * (1 - l_discount))) as agg0,
                               l_suppkey, l_extendedprice, l_discount],
                         atuple([ascalar(s4.l_shipdate),
                                 alist(select([l_suppkey, l_extendedprice, l_discount],
