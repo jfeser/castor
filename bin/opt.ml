@@ -1,7 +1,6 @@
-open! Core
+open Core
 open Castor
 open Collections
-open Castor_opt
 open Abslayout_load
 module A = Abslayout
 

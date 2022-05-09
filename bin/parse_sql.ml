@@ -127,7 +127,7 @@ class conv_sql db =
           let select_list =
             Schema.schema q
             |> List.map ~f:(fun n ->
-                   P.(as_ (name n) (sprintf "%s_%s" a (Name.name n))))
+                   P.(name n, sprintf "%s_%s" a (Name.name n)))
           in
           select select_list q
       | None -> q
@@ -225,7 +225,7 @@ class conv_sql db =
       let query =
         match s.Sql.from with
         | Some from -> self#nested from
-        | None -> scalar (P.int 0)
+        | None -> scalar (P.int 0) "x"
       in
       (* WHERE *)
       let query = self#filter s.where query in
@@ -235,8 +235,8 @@ class conv_sql db =
           | All | AllOf _ ->
               Log.warn (fun m -> m "All and AllOf unsupported.");
               None
-          | Expr (e, None) -> Some (self#expr e)
-          | Expr (e, Some a) -> Some (As_pred (self#expr e, a)))
+          | Expr (e, None) -> Some (self#expr e, "x")
+          | Expr (e, Some a) -> Some (self#expr e, a))
       in
       let query =
         if List.is_empty s.group then select select_list query

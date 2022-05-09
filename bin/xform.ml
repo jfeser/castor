@@ -1,10 +1,9 @@
 open! Core
 open Castor
 open Collections
-open Castor_opt
 open Abslayout_load
 module A = Abslayout
-open Match
+open Match.Query
 
 module type CONFIG = sig
   val conn : Db.t
