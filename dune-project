@@ -2,6 +2,7 @@
 
 (name castor)
 (source (github jfeser/castor))
+
 (license MIT)
 (authors "Jack Feser <feser@csail.mit.edu>")
 (maintainers "Jack Feser <feser@csail.mit.edu>")
@@ -54,8 +55,8 @@
   ounit
   (expect_test_helpers_core (>= v0.12))))
 
-
 (using menhir 2.0)
+(using fmt 1.1)
 (generate_opam_files true)
 
 ; Local Variables:

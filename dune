@@ -5,7 +5,3 @@
   (glob_files etc/*.h)))
 
 (dirs :standard \ bench)
-
-; Local Variables:
-; mode: tuareg-dune
-; End:
