@@ -11,103 +11,103 @@ class virtual ['self] base_endo =
 
     method visit_Name env this c0 =
       let r0 = (fun this -> this) c0 in
-      if c0 == r0 then this else Name r0
+      if c0 == r0 then this else `Name r0
 
     method visit_Int env this c0 =
       let r0 = (fun this -> this) c0 in
-      if c0 == r0 then this else Int r0
+      if c0 == r0 then this else `Int r0
 
     method visit_Fixed env this c0 =
       let r0 = (fun this -> this) c0 in
-      if c0 == r0 then this else Fixed r0
+      if c0 == r0 then this else `Fixed r0
 
     method visit_Date env this c0 =
       let r0 = (fun this -> this) c0 in
-      if c0 == r0 then this else Date r0
+      if c0 == r0 then this else `Date r0
 
     method visit_Bool env this c0 =
       let r0 = (fun this -> this) c0 in
-      if c0 == r0 then this else Bool r0
+      if c0 == r0 then this else `Bool r0
 
     method visit_String env this c0 =
       let r0 = (fun this -> this) c0 in
-      if c0 == r0 then this else String r0
+      if c0 == r0 then this else `String r0
 
     method visit_Null env this c0 =
       let r0 = (fun this -> this) c0 in
-      if c0 == r0 then this else Null r0
+      if c0 == r0 then this else `Null r0
 
     method visit_Unop env this c0 c1 =
       let r0 = (fun this -> this) c0 in
       let r1 = self#visit_pred env c1 in
-      if c0 == r0 && c1 == r1 then this else Unop (r0, r1)
+      if c0 == r0 && c1 == r1 then this else `Unop (r0, r1)
 
     method visit_Binop env this c0 c1 c2 =
       let r0 = (fun this -> this) c0 in
       let r1 = self#visit_pred env c1 in
       let r2 = self#visit_pred env c2 in
-      if c0 == r0 && c1 == r1 && c2 == r2 then this else Binop (r0, r1, r2)
+      if c0 == r0 && c1 == r1 && c2 == r2 then this else `Binop (r0, r1, r2)
 
-    method visit_Count env this = if true then this else Count
-    method visit_Row_number env this = if true then this else Row_number
+    method visit_Count env this = if true then this else `Count
+    method visit_Row_number env this = if true then this else `Row_number
 
     method visit_Sum env this c0 =
       let r0 = self#visit_pred env c0 in
-      if c0 == r0 then this else Sum r0
+      if c0 == r0 then this else `Sum r0
 
     method visit_Avg env this c0 =
       let r0 = self#visit_pred env c0 in
-      if c0 == r0 then this else Avg r0
+      if c0 == r0 then this else `Avg r0
 
     method visit_Min env this c0 =
       let r0 = self#visit_pred env c0 in
-      if c0 == r0 then this else Min r0
+      if c0 == r0 then this else `Min r0
 
     method visit_Max env this c0 =
       let r0 = self#visit_pred env c0 in
-      if c0 == r0 then this else Max r0
+      if c0 == r0 then this else `Max r0
 
     method visit_If env this c0 c1 c2 =
       let r0 = self#visit_pred env c0 in
       let r1 = self#visit_pred env c1 in
       let r2 = self#visit_pred env c2 in
-      if c0 == r0 && c1 == r1 && c2 == r2 then this else If (r0, r1, r2)
+      if c0 == r0 && c1 == r1 && c2 == r2 then this else `If (r0, r1, r2)
 
     method visit_First env this c0 =
       let r0 = self#visit_'r env c0 in
-      if c0 == r0 then this else First r0
+      if c0 == r0 then this else `First r0
 
     method visit_Exists env this c0 =
       let r0 = self#visit_'r env c0 in
-      if c0 == r0 then this else Exists r0
+      if c0 == r0 then this else `Exists r0
 
     method visit_Substring env this c0 c1 c2 =
       let r0 = self#visit_pred env c0 in
       let r1 = self#visit_pred env c1 in
       let r2 = self#visit_pred env c2 in
-      if c0 == r0 && c1 == r1 && c2 == r2 then this else Substring (r0, r1, r2)
+      if c0 == r0 && c1 == r1 && c2 == r2 then this else `Substring (r0, r1, r2)
 
     method visit_pred env this =
       match this with
-      | Name c0 as this -> self#visit_Name env this c0
-      | Int c0 as this -> self#visit_Int env this c0
-      | Fixed c0 as this -> self#visit_Fixed env this c0
-      | Date c0 as this -> self#visit_Date env this c0
-      | Bool c0 as this -> self#visit_Bool env this c0
-      | String c0 as this -> self#visit_String env this c0
-      | Null c0 as this -> self#visit_Null env this c0
-      | Unop (c0, c1) as this -> self#visit_Unop env this c0 c1
-      | Binop (c0, c1, c2) as this -> self#visit_Binop env this c0 c1 c2
-      | Count as this -> self#visit_Count env this
-      | Row_number as this -> self#visit_Row_number env this
-      | Sum c0 as this -> self#visit_Sum env this c0
-      | Avg c0 as this -> self#visit_Avg env this c0
-      | Min c0 as this -> self#visit_Min env this c0
-      | Max c0 as this -> self#visit_Max env this c0
-      | If (c0, c1, c2) as this -> self#visit_If env this c0 c1 c2
-      | First c0 as this -> self#visit_First env this c0
-      | Exists c0 as this -> self#visit_Exists env this c0
-      | Substring (c0, c1, c2) as this -> self#visit_Substring env this c0 c1 c2
+      | `Name c0 as this -> self#visit_Name env this c0
+      | `Int c0 as this -> self#visit_Int env this c0
+      | `Fixed c0 as this -> self#visit_Fixed env this c0
+      | `Date c0 as this -> self#visit_Date env this c0
+      | `Bool c0 as this -> self#visit_Bool env this c0
+      | `String c0 as this -> self#visit_String env this c0
+      | `Null c0 as this -> self#visit_Null env this c0
+      | `Unop (c0, c1) as this -> self#visit_Unop env this c0 c1
+      | `Binop (c0, c1, c2) as this -> self#visit_Binop env this c0 c1 c2
+      | `Count as this -> self#visit_Count env this
+      | `Row_number as this -> self#visit_Row_number env this
+      | `Sum c0 as this -> self#visit_Sum env this c0
+      | `Avg c0 as this -> self#visit_Avg env this c0
+      | `Min c0 as this -> self#visit_Min env this c0
+      | `Max c0 as this -> self#visit_Max env this c0
+      | `If (c0, c1, c2) as this -> self#visit_If env this c0 c1 c2
+      | `First c0 as this -> self#visit_First env this c0
+      | `Exists c0 as this -> self#visit_Exists env this c0
+      | `Substring (c0, c1, c2) as this -> self#visit_Substring env this c0 c1 c2
 
     method visit_scope env = self#visit_string env
 
@@ -339,103 +339,103 @@ class virtual ['self] base_map =
 
     method visit_Name env c0 =
       let r0 = (fun this -> this) c0 in
-      Name r0
+      `Name r0
 
     method visit_Int env c0 =
       let r0 = (fun this -> this) c0 in
-      Int r0
+      `Int r0
 
     method visit_Fixed env c0 =
       let r0 = (fun this -> this) c0 in
-      Fixed r0
+      `Fixed r0
 
     method visit_Date env c0 =
       let r0 = (fun this -> this) c0 in
-      Date r0
+      `Date r0
 
     method visit_Bool env c0 =
       let r0 = (fun this -> this) c0 in
-      Bool r0
+      `Bool r0
 
     method visit_String env c0 =
       let r0 = (fun this -> this) c0 in
-      String r0
+      `String r0
 
     method visit_Null env c0 =
       let r0 = (fun this -> this) c0 in
-      Null r0
+      `Null r0
 
     method visit_Unop env c0 c1 =
       let r0 = (fun this -> this) c0 in
       let r1 = self#visit_pred env c1 in
-      Unop (r0, r1)
+      `Unop (r0, r1)
 
     method visit_Binop env c0 c1 c2 =
       let r0 = (fun this -> this) c0 in
       let r1 = self#visit_pred env c1 in
       let r2 = self#visit_pred env c2 in
-      Binop (r0, r1, r2)
+      `Binop (r0, r1, r2)
 
-    method visit_Count env = Count
-    method visit_Row_number env = Row_number
+    method visit_Count env = `Count
+    method visit_Row_number env = `Row_number
 
     method visit_Sum env c0 =
       let r0 = self#visit_pred env c0 in
-      Sum r0
+      `Sum r0
 
     method visit_Avg env c0 =
       let r0 = self#visit_pred env c0 in
-      Avg r0
+      `Avg r0
 
     method visit_Min env c0 =
       let r0 = self#visit_pred env c0 in
-      Min r0
+      `Min r0
 
     method visit_Max env c0 =
       let r0 = self#visit_pred env c0 in
-      Max r0
+      `Max r0
 
     method visit_If env c0 c1 c2 =
       let r0 = self#visit_pred env c0 in
       let r1 = self#visit_pred env c1 in
       let r2 = self#visit_pred env c2 in
-      If (r0, r1, r2)
+      `If (r0, r1, r2)
 
     method visit_First env c0 =
       let r0 = self#visit_'r env c0 in
-      First r0
+      `First r0
 
     method visit_Exists env c0 =
       let r0 = self#visit_'r env c0 in
-      Exists r0
+      `Exists r0
 
     method visit_Substring env c0 c1 c2 =
       let r0 = self#visit_pred env c0 in
       let r1 = self#visit_pred env c1 in
       let r2 = self#visit_pred env c2 in
-      Substring (r0, r1, r2)
+      `Substring (r0, r1, r2)
 
     method visit_pred env this =
       match this with
-      | Name c0 -> self#visit_Name env c0
-      | Int c0 -> self#visit_Int env c0
-      | Fixed c0 -> self#visit_Fixed env c0
-      | Date c0 -> self#visit_Date env c0
-      | Bool c0 -> self#visit_Bool env c0
-      | String c0 -> self#visit_String env c0
-      | Null c0 -> self#visit_Null env c0
-      | Unop (c0, c1) -> self#visit_Unop env c0 c1
-      | Binop (c0, c1, c2) -> self#visit_Binop env c0 c1 c2
-      | Count -> self#visit_Count env
-      | Row_number -> self#visit_Row_number env
-      | Sum c0 -> self#visit_Sum env c0
-      | Avg c0 -> self#visit_Avg env c0
-      | Min c0 -> self#visit_Min env c0
-      | Max c0 -> self#visit_Max env c0
-      | If (c0, c1, c2) -> self#visit_If env c0 c1 c2
-      | First c0 -> self#visit_First env c0
-      | Exists c0 -> self#visit_Exists env c0
-      | Substring (c0, c1, c2) -> self#visit_Substring env c0 c1 c2
+      | `Name c0 -> self#visit_Name env c0
+      | `Int c0 -> self#visit_Int env c0
+      | `Fixed c0 -> self#visit_Fixed env c0
+      | `Date c0 -> self#visit_Date env c0
+      | `Bool c0 -> self#visit_Bool env c0
+      | `String c0 -> self#visit_String env c0
+      | `Null c0 -> self#visit_Null env c0
+      | `Unop (c0, c1) -> self#visit_Unop env c0 c1
+      | `Binop (c0, c1, c2) -> self#visit_Binop env c0 c1 c2
+      | `Count -> self#visit_Count env
+      | `Row_number -> self#visit_Row_number env
+      | `Sum c0 -> self#visit_Sum env c0
+      | `Avg c0 -> self#visit_Avg env c0
+      | `Min c0 -> self#visit_Min env c0
+      | `Max c0 -> self#visit_Max env c0
+      | `If (c0, c1, c2) -> self#visit_If env c0 c1 c2
+      | `First c0 -> self#visit_First env c0
+      | `Exists c0 -> self#visit_Exists env c0
+      | `Substring (c0, c1, c2) -> self#visit_Substring env c0 c1 c2
 
     method visit_scope env = self#visit_string env
 
@@ -728,25 +728,25 @@ class virtual ['self] base_iter =
 
     method visit_pred env this =
       match this with
-      | Name c0 -> self#visit_Name env c0
-      | Int c0 -> self#visit_Int env c0
-      | Fixed c0 -> self#visit_Fixed env c0
-      | Date c0 -> self#visit_Date env c0
-      | Bool c0 -> self#visit_Bool env c0
-      | String c0 -> self#visit_String env c0
-      | Null c0 -> self#visit_Null env c0
-      | Unop (c0, c1) -> self#visit_Unop env c0 c1
-      | Binop (c0, c1, c2) -> self#visit_Binop env c0 c1 c2
-      | Count -> self#visit_Count env
-      | Row_number -> self#visit_Row_number env
-      | Sum c0 -> self#visit_Sum env c0
-      | Avg c0 -> self#visit_Avg env c0
-      | Min c0 -> self#visit_Min env c0
-      | Max c0 -> self#visit_Max env c0
-      | If (c0, c1, c2) -> self#visit_If env c0 c1 c2
-      | First c0 -> self#visit_First env c0
-      | Exists c0 -> self#visit_Exists env c0
-      | Substring (c0, c1, c2) -> self#visit_Substring env c0 c1 c2
+      | `Name c0 -> self#visit_Name env c0
+      | `Int c0 -> self#visit_Int env c0
+      | `Fixed c0 -> self#visit_Fixed env c0
+      | `Date c0 -> self#visit_Date env c0
+      | `Bool c0 -> self#visit_Bool env c0
+      | `String c0 -> self#visit_String env c0
+      | `Null c0 -> self#visit_Null env c0
+      | `Unop (c0, c1) -> self#visit_Unop env c0 c1
+      | `Binop (c0, c1, c2) -> self#visit_Binop env c0 c1 c2
+      | `Count -> self#visit_Count env
+      | `Row_number -> self#visit_Row_number env
+      | `Sum c0 -> self#visit_Sum env c0
+      | `Avg c0 -> self#visit_Avg env c0
+      | `Min c0 -> self#visit_Min env c0
+      | `Max c0 -> self#visit_Max env c0
+      | `If (c0, c1, c2) -> self#visit_If env c0 c1 c2
+      | `First c0 -> self#visit_First env c0
+      | `Exists c0 -> self#visit_Exists env c0
+      | `Substring (c0, c1, c2) -> self#visit_Substring env c0 c1 c2
 
     method visit_scope env = self#visit_string env
 
@@ -1027,25 +1027,25 @@ class virtual ['self] base_reduce =
 
     method visit_pred env this =
       match this with
-      | Name c0 -> self#visit_Name env c0
-      | Int c0 -> self#visit_Int env c0
-      | Fixed c0 -> self#visit_Fixed env c0
-      | Date c0 -> self#visit_Date env c0
-      | Bool c0 -> self#visit_Bool env c0
-      | String c0 -> self#visit_String env c0
-      | Null c0 -> self#visit_Null env c0
-      | Unop (c0, c1) -> self#visit_Unop env c0 c1
-      | Binop (c0, c1, c2) -> self#visit_Binop env c0 c1 c2
-      | Count -> self#visit_Count env
-      | Row_number -> self#visit_Row_number env
-      | Sum c0 -> self#visit_Sum env c0
-      | Avg c0 -> self#visit_Avg env c0
-      | Min c0 -> self#visit_Min env c0
-      | Max c0 -> self#visit_Max env c0
-      | If (c0, c1, c2) -> self#visit_If env c0 c1 c2
-      | First c0 -> self#visit_First env c0
-      | Exists c0 -> self#visit_Exists env c0
-      | Substring (c0, c1, c2) -> self#visit_Substring env c0 c1 c2
+      | `Name c0 -> self#visit_Name env c0
+      | `Int c0 -> self#visit_Int env c0
+      | `Fixed c0 -> self#visit_Fixed env c0
+      | `Date c0 -> self#visit_Date env c0
+      | `Bool c0 -> self#visit_Bool env c0
+      | `String c0 -> self#visit_String env c0
+      | `Null c0 -> self#visit_Null env c0
+      | `Unop (c0, c1) -> self#visit_Unop env c0 c1
+      | `Binop (c0, c1, c2) -> self#visit_Binop env c0 c1 c2
+      | `Count -> self#visit_Count env
+      | `Row_number -> self#visit_Row_number env
+      | `Sum c0 -> self#visit_Sum env c0
+      | `Avg c0 -> self#visit_Avg env c0
+      | `Min c0 -> self#visit_Min env c0
+      | `Max c0 -> self#visit_Max env c0
+      | `If (c0, c1, c2) -> self#visit_If env c0 c1 c2
+      | `First c0 -> self#visit_First env c0
+      | `Exists c0 -> self#visit_Exists env c0
+      | `Substring (c0, c1, c2) -> self#visit_Substring env c0 c1 c2
 
     method visit_scope env = self#visit_string env
 
@@ -1326,25 +1326,25 @@ class virtual ['self] base_mapreduce =
 
     method visit_pred env this =
       match this with
-      | Name c0 -> self#visit_Name env c0
-      | Int c0 -> self#visit_Int env c0
-      | Fixed c0 -> self#visit_Fixed env c0
-      | Date c0 -> self#visit_Date env c0
-      | Bool c0 -> self#visit_Bool env c0
-      | String c0 -> self#visit_String env c0
-      | Null c0 -> self#visit_Null env c0
-      | Unop (c0, c1) -> self#visit_Unop env c0 c1
-      | Binop (c0, c1, c2) -> self#visit_Binop env c0 c1 c2
-      | Count -> self#visit_Count env
-      | Row_number -> self#visit_Row_number env
-      | Sum c0 -> self#visit_Sum env c0
-      | Avg c0 -> self#visit_Avg env c0
-      | Min c0 -> self#visit_Min env c0
-      | Max c0 -> self#visit_Max env c0
-      | If (c0, c1, c2) -> self#visit_If env c0 c1 c2
-      | First c0 -> self#visit_First env c0
-      | Exists c0 -> self#visit_Exists env c0
-      | Substring (c0, c1, c2) -> self#visit_Substring env c0 c1 c2
+      | `Name c0 -> self#visit_Name env c0
+      | `Int c0 -> self#visit_Int env c0
+      | `Fixed c0 -> self#visit_Fixed env c0
+      | `Date c0 -> self#visit_Date env c0
+      | `Bool c0 -> self#visit_Bool env c0
+      | `String c0 -> self#visit_String env c0
+      | `Null c0 -> self#visit_Null env c0
+      | `Unop (c0, c1) -> self#visit_Unop env c0 c1
+      | `Binop (c0, c1, c2) -> self#visit_Binop env c0 c1 c2
+      | `Count -> self#visit_Count env
+      | `Row_number -> self#visit_Row_number env
+      | `Sum c0 -> self#visit_Sum env c0
+      | `Avg c0 -> self#visit_Avg env c0
+      | `Min c0 -> self#visit_Min env c0
+      | `Max c0 -> self#visit_Max env c0
+      | `If (c0, c1, c2) -> self#visit_If env c0 c1 c2
+      | `First c0 -> self#visit_First env c0
+      | `Exists c0 -> self#visit_Exists env c0
+      | `Substring (c0, c1, c2) -> self#visit_Substring env c0 c1 c2
 
     method visit_scope env = self#visit_string env
 
@@ -1556,3 +1556,4 @@ class virtual ['self] base_mapreduce =
 
     method visit_t env = self#visit_annot env
   end
+
