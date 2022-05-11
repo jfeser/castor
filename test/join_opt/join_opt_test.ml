@@ -191,9 +191,9 @@ let%expect_test "join-opt" =
            (Relation
             ((r_name nation)
              (r_schema
-              (((((name n_nationkey)) (IntT))
+              (((((name n_comment)) (StringT))
                 (((name n_name)) (StringT (padded)))
-                (((name n_regionkey)) (IntT)) (((name n_comment)) (StringT))))))))
+                (((name n_nationkey)) (IntT)) (((name n_regionkey)) (IntT))))))))
           (meta <opaque>))))
        (rhs
         (Flat
@@ -201,12 +201,11 @@ let%expect_test "join-opt" =
            (Relation
             ((r_name customer)
              (r_schema
-              (((((name c_custkey)) (IntT)) (((name c_name)) (StringT))
-                (((name c_address)) (StringT)) (((name c_nationkey)) (IntT))
-                (((name c_phone)) (StringT (padded)))
-                (((name c_acctbal)) (FixedT))
+              (((((name c_acctbal)) (FixedT)) (((name c_address)) (StringT))
+                (((name c_comment)) (StringT)) (((name c_custkey)) (IntT))
                 (((name c_mktsegment)) (StringT (padded)))
-                (((name c_comment)) (StringT))))))))
+                (((name c_name)) (StringT)) (((name c_nationkey)) (IntT))
+                (((name c_phone)) (StringT (padded)))))))))
           (meta <opaque>))))
        (pred
         (Binop Eq (Name ((name c_nationkey) (type_ (IntT))))
@@ -227,9 +226,9 @@ let%expect_test "join-opt" =
            (Relation
             ((r_name nation)
              (r_schema
-              (((((name n_nationkey)) (IntT))
+              (((((name n_comment)) (StringT))
                 (((name n_name)) (StringT (padded)))
-                (((name n_regionkey)) (IntT)) (((name n_comment)) (StringT))))))))
+                (((name n_nationkey)) (IntT)) (((name n_regionkey)) (IntT))))))))
           (meta <opaque>))))
        (rkey (Name ((name c_nationkey) (type_ (IntT)))))
        (rhs
@@ -240,12 +239,11 @@ let%expect_test "join-opt" =
              (Relation
               ((r_name customer)
                (r_schema
-                (((((name c_custkey)) (IntT)) (((name c_name)) (StringT))
-                  (((name c_address)) (StringT)) (((name c_nationkey)) (IntT))
-                  (((name c_phone)) (StringT (padded)))
-                  (((name c_acctbal)) (FixedT))
+                (((((name c_acctbal)) (FixedT)) (((name c_address)) (StringT))
+                  (((name c_comment)) (StringT)) (((name c_custkey)) (IntT))
                   (((name c_mktsegment)) (StringT (padded)))
-                  (((name c_comment)) (StringT))))))))
+                  (((name c_name)) (StringT)) (((name c_nationkey)) (IntT))
+                  (((name c_phone)) (StringT (padded)))))))))
             (meta <opaque>))))
          (rhs
           (Flat
@@ -253,13 +251,13 @@ let%expect_test "join-opt" =
              (Relation
               ((r_name orders)
                (r_schema
-                (((((name o_orderkey)) (IntT)) (((name o_custkey)) (IntT))
-                  (((name o_orderstatus)) (StringT (padded)))
-                  (((name o_totalprice)) (FixedT)) (((name o_orderdate)) (DateT))
+                (((((name o_clerk)) (StringT (padded)))
+                  (((name o_comment)) (StringT)) (((name o_custkey)) (IntT))
+                  (((name o_orderdate)) (DateT)) (((name o_orderkey)) (IntT))
                   (((name o_orderpriority)) (StringT (padded)))
-                  (((name o_clerk)) (StringT (padded)))
+                  (((name o_orderstatus)) (StringT (padded)))
                   (((name o_shippriority)) (IntT))
-                  (((name o_comment)) (StringT))))))))
+                  (((name o_totalprice)) (FixedT))))))))
             (meta <opaque>))))
          (pred
           (Binop Eq (Name ((name c_custkey) (type_ (IntT))))
@@ -322,27 +320,27 @@ join(((n1_name = k0_n1_name) &&
                               customer)),
                           supplier) as s1,
                     atuple([ascalar(s1.n2_name), ascalar(s1.n2_nationkey),
+                            ascalar(s1.l_comment), ascalar(s1.l_commitdate),
+                            ascalar(s1.l_discount), ascalar(s1.l_extendedprice),
+                            ascalar(s1.l_linenumber), ascalar(s1.l_linestatus),
                             ascalar(s1.l_orderkey), ascalar(s1.l_partkey),
-                            ascalar(s1.l_suppkey), ascalar(s1.l_linenumber),
-                            ascalar(s1.l_quantity), ascalar(s1.l_extendedprice),
-                            ascalar(s1.l_discount), ascalar(s1.l_tax),
-                            ascalar(s1.l_returnflag), ascalar(s1.l_linestatus),
-                            ascalar(s1.l_shipdate), ascalar(s1.l_commitdate),
-                            ascalar(s1.l_receiptdate),
+                            ascalar(s1.l_quantity), ascalar(s1.l_receiptdate),
+                            ascalar(s1.l_returnflag), ascalar(s1.l_shipdate),
                             ascalar(s1.l_shipinstruct), ascalar(s1.l_shipmode),
-                            ascalar(s1.l_comment), ascalar(s1.o_orderkey),
-                            ascalar(s1.o_custkey), ascalar(s1.o_orderstatus),
-                            ascalar(s1.o_totalprice), ascalar(s1.o_orderdate),
-                            ascalar(s1.o_orderpriority), ascalar(s1.o_clerk),
-                            ascalar(s1.o_shippriority), ascalar(s1.o_comment),
-                            ascalar(s1.c_custkey), ascalar(s1.c_name),
-                            ascalar(s1.c_address), ascalar(s1.c_nationkey),
-                            ascalar(s1.c_phone), ascalar(s1.c_acctbal),
-                            ascalar(s1.c_mktsegment), ascalar(s1.c_comment),
-                            ascalar(s1.s_suppkey), ascalar(s1.s_name),
-                            ascalar(s1.s_address), ascalar(s1.s_nationkey),
-                            ascalar(s1.s_phone), ascalar(s1.s_acctbal),
-                            ascalar(s1.s_comment)],
+                            ascalar(s1.l_suppkey), ascalar(s1.l_tax),
+                            ascalar(s1.o_clerk), ascalar(s1.o_comment),
+                            ascalar(s1.o_custkey), ascalar(s1.o_orderdate),
+                            ascalar(s1.o_orderkey), ascalar(s1.o_orderpriority),
+                            ascalar(s1.o_orderstatus),
+                            ascalar(s1.o_shippriority), ascalar(s1.o_totalprice),
+                            ascalar(s1.c_acctbal), ascalar(s1.c_address),
+                            ascalar(s1.c_comment), ascalar(s1.c_custkey),
+                            ascalar(s1.c_mktsegment), ascalar(s1.c_name),
+                            ascalar(s1.c_nationkey), ascalar(s1.c_phone),
+                            ascalar(s1.s_acctbal), ascalar(s1.s_address),
+                            ascalar(s1.s_comment), ascalar(s1.s_name),
+                            ascalar(s1.s_nationkey), ascalar(s1.s_phone),
+                            ascalar(s1.s_suppkey)],
                       cross)))],
           cross))) |}]
 
@@ -363,12 +361,12 @@ let%expect_test "" =
     {|
     filter(true,
       depjoin(alist(filter(true, region) as s3,
-                atuple([ascalar(s3.r_regionkey), ascalar(s3.r_name),
-                        ascalar(s3.r_comment)],
+                atuple([ascalar(s3.r_comment), ascalar(s3.r_name),
+                        ascalar(s3.r_regionkey)],
                   cross)) as s7,
-        select([s7.r_regionkey, s7.r_name, s7.r_comment, n1_regionkey,
-                n1_nationkey, c_custkey, c_name, c_address, c_nationkey,
-                c_phone, c_acctbal, c_mktsegment, c_comment],
+        select([s7.r_comment, s7.r_name, s7.r_regionkey, n1_regionkey,
+                n1_nationkey, c_acctbal, c_address, c_comment, c_custkey,
+                c_mktsegment, c_name, c_nationkey, c_phone],
           ahashidx(dedup(
                      select([n1_regionkey as k0],
                        alist(alist(select([n_regionkey as n1_regionkey,
@@ -382,14 +380,14 @@ let%expect_test "" =
                                    cross),
                                  filter((c_nationkey = s11.n1_nationkey),
                                    alist(customer as s10,
-                                     atuple([ascalar(s10.c_custkey),
-                                             ascalar(s10.c_name),
+                                     atuple([ascalar(s10.c_acctbal),
                                              ascalar(s10.c_address),
-                                             ascalar(s10.c_nationkey),
-                                             ascalar(s10.c_phone),
-                                             ascalar(s10.c_acctbal),
+                                             ascalar(s10.c_comment),
+                                             ascalar(s10.c_custkey),
                                              ascalar(s10.c_mktsegment),
-                                             ascalar(s10.c_comment)],
+                                             ascalar(s10.c_name),
+                                             ascalar(s10.c_nationkey),
+                                             ascalar(s10.c_phone)],
                                        cross)))],
                            cross)))) as s8,
             filter((s8.k0 = n1_regionkey),
@@ -403,12 +401,10 @@ let%expect_test "" =
                           cross),
                         filter((c_nationkey = s6.n1_nationkey),
                           alist(customer as s5,
-                            atuple([ascalar(s5.c_custkey), ascalar(s5.c_name),
-                                    ascalar(s5.c_address),
-                                    ascalar(s5.c_nationkey), ascalar(s5.c_phone),
-                                    ascalar(s5.c_acctbal),
-                                    ascalar(s5.c_mktsegment),
-                                    ascalar(s5.c_comment)],
+                            atuple([ascalar(s5.c_acctbal), ascalar(s5.c_address),
+                                    ascalar(s5.c_comment), ascalar(s5.c_custkey),
+                                    ascalar(s5.c_mktsegment), ascalar(s5.c_name),
+                                    ascalar(s5.c_nationkey), ascalar(s5.c_phone)],
                               cross)))],
                   cross))),
             s7.r_regionkey)))) |}]

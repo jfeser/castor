@@ -16,7 +16,7 @@ tests = [
     ("large5", "", False, tpch_db),
     ("large6", "", False, tpch_db),
     ("cost1", "", False, tpch_db),
-    ("cost2", "", False, tpch_db),
+    # ("cost2", "", False, tpch_db),
 ]
 
 for (name, params, run_ser, db) in tests:

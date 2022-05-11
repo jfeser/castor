@@ -129,8 +129,9 @@ let%expect_test "" =
     {|
     select([n_name as nation],
       select([n_name],
-        depjoin(select([n_nationkey as s2_n_nationkey, n_name as s2_n_name,
-                        n_regionkey as s2_n_regionkey, n_comment as s2_n_comment],
+        depjoin(select([n_comment as s2_n_comment, n_name as s2_n_name,
+                        n_nationkey as s2_n_nationkey,
+                        n_regionkey as s2_n_regionkey],
                   nation) as s2,
           select([s2_n_name as n_name], ascalar(0 as x))))) |}]
 

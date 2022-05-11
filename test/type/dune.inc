@@ -162,17 +162,3 @@
  (action (diff cost1.cost.expected cost1.cost.output)))
 
 
-
-(rule
- (targets cost2.par.output cost2.cost.output)
- (deps (alias ../test_db))
- (action (with-stdin-from cost2 (run ../bin/type.exe  -db postgresql:///tpch_1k -parallel cost2.par.output -cost cost2.cost.output))))
-
-(rule
- (alias runtest)
- (action (diff cost2.par.expected cost2.par.output)))
-(rule
- (alias runtest)
- (action (diff cost2.cost.expected cost2.cost.output)))
-
-

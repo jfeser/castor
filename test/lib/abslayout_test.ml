@@ -264,25 +264,25 @@ let%expect_test "example-1" =
   [%expect
     {|
     List
-    List key: ((Int 1) (Int 4) (Int 1))
+    List key: ((Int 1) (Int 1) (Int 4))
     Tuple
     Scalar: (Int 1)
     Scalar: (Int 1)
     List
-    List key: ((Int 2) (Int 3) (Int 2))
+    List key: ((Int 2) (Int 2) (Int 3))
     Tuple
     Scalar: (Int 2)
     Scalar: (Int 2)
-    List key: ((Int 3) (Int 4) (Int 3))
+    List key: ((Int 3) (Int 3) (Int 4))
     Tuple
     Scalar: (Int 3)
     Scalar: (Int 3)
-    List key: ((Int 4) (Int 6) (Int 1))
+    List key: ((Int 4) (Int 1) (Int 6))
     Tuple
     Scalar: (Int 1)
     Scalar: (Int 4)
     List
-    List key: ((Int 5) (Int 6) (Int 3))
+    List key: ((Int 5) (Int 3) (Int 6))
     Tuple
     Scalar: (Int 3)
     Scalar: (Int 5) |}]
@@ -343,31 +343,31 @@ let%expect_test "example-3" =
     OrderedIdx
     OrderedIdx key: ((Int 1))
     List
-    List key: ((Int 1) (Int 4) (Int 1))
+    List key: ((Int 1) (Int 1) (Int 4))
     Tuple
     Scalar: (Int 1)
     Scalar: (Int 1)
     OrderedIdx key: ((Int 2))
     List
-    List key: ((Int 2) (Int 3) (Int 2))
+    List key: ((Int 2) (Int 2) (Int 3))
     Tuple
     Scalar: (Int 2)
     Scalar: (Int 2)
     OrderedIdx key: ((Int 3))
     List
-    List key: ((Int 3) (Int 4) (Int 3))
+    List key: ((Int 3) (Int 3) (Int 4))
     Tuple
     Scalar: (Int 3)
     Scalar: (Int 3)
     OrderedIdx key: ((Int 4))
     List
-    List key: ((Int 4) (Int 6) (Int 1))
+    List key: ((Int 4) (Int 1) (Int 6))
     Tuple
     Scalar: (Int 1)
     Scalar: (Int 4)
     OrderedIdx key: ((Int 5))
     List
-    List key: ((Int 5) (Int 6) (Int 3))
+    List key: ((Int 5) (Int 3) (Int 6))
     Tuple
     Scalar: (Int 3)
     Scalar: (Int 5) |}]

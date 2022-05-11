@@ -203,6 +203,7 @@ let relation conn r_name =
     |> List.map ~f:(fun fname ->
            let type_ = type_of_field conn fname r_name |> Or_error.ok_exn in
            (Name.create fname, type_))
+    |> List.sort ~compare:[%compare: Name.t * Prim_type.t]
     |> Option.some
   in
   Relation.{ r_name; r_schema }

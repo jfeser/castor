@@ -243,8 +243,8 @@ let%expect_test "" =
   [%expect
     {|
     select([p_brand, p_type, p_size, count() as supplier_cnt],
-      alist(select([p_brand, p_type, p_size],
-              select([p_brand, p_type, p_size],
+      alist(select([p_brand, p_size, p_type],
+              select([p_brand, p_size, p_type],
                 dedup(join(true, part, partsupp)))) as s5,
         select([p_type, p_brand, p_size],
           atuple([ascalar(s5.p_brand), ascalar(s5.p_type), ascalar(s5.p_size)],
@@ -316,8 +316,8 @@ let%expect_test "" =
       select([p_brand, p_type, p_size, supplier_cnt],
         select([p_brand, p_type, p_size, count() as supplier_cnt],
           dedup(
-            alist(select([p_brand, p_type, p_size, ps_suppkey],
-                    select([p_brand, p_type, p_size, ps_suppkey],
+            alist(select([p_brand, p_size, p_type, ps_suppkey],
+                    select([p_brand, p_size, p_type, ps_suppkey],
                       join(((not(exists(filter(((ps_suppkey = s_suppkey) &&
                                                ((strpos(s_comment, "Customer") >=
                                                 1) &&
