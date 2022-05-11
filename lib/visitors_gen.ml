@@ -1,6 +1,6 @@
 open Ast
 
-[@@@ocaml.warning "-4-26-27"]
+[@@@ocaml.warning "-4-26-27-17"]
 
 class virtual ['self] base_endo =
   object (self : 'self)
@@ -640,8 +640,6 @@ class virtual ['self] base_map =
 
     method visit_t env = self#visit_annot env
   end
-
-[@@@ocaml.warning "-4-26-27"]
 
 class virtual ['self] base_iter =
   object (self : 'self)
