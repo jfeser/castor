@@ -9,487 +9,323 @@ class virtual ['self] base_endo =
     method virtual visit_'p : _
     method virtual visit_'r : _
 
-    method visit_Name env _visitors_this _visitors_c0 =
-      let _visitors_r0 = (fun _visitors_this -> _visitors_this) _visitors_c0 in
-      if _visitors_c0 == _visitors_r0 then _visitors_this else Name _visitors_r0
+    method visit_Name env this c0 =
+      let r0 = (fun this -> this) c0 in
+      if c0 == r0 then this else Name r0
 
-    method visit_Int env _visitors_this _visitors_c0 =
-      let _visitors_r0 = (fun _visitors_this -> _visitors_this) _visitors_c0 in
-      if _visitors_c0 == _visitors_r0 then _visitors_this else Int _visitors_r0
+    method visit_Int env this c0 =
+      let r0 = (fun this -> this) c0 in
+      if c0 == r0 then this else Int r0
 
-    method visit_Fixed env _visitors_this _visitors_c0 =
-      let _visitors_r0 = (fun _visitors_this -> _visitors_this) _visitors_c0 in
-      if _visitors_c0 == _visitors_r0 then _visitors_this
-      else Fixed _visitors_r0
+    method visit_Fixed env this c0 =
+      let r0 = (fun this -> this) c0 in
+      if c0 == r0 then this else Fixed r0
 
-    method visit_Date env _visitors_this _visitors_c0 =
-      let _visitors_r0 = (fun _visitors_this -> _visitors_this) _visitors_c0 in
-      if _visitors_c0 == _visitors_r0 then _visitors_this else Date _visitors_r0
+    method visit_Date env this c0 =
+      let r0 = (fun this -> this) c0 in
+      if c0 == r0 then this else Date r0
 
-    method visit_Bool env _visitors_this _visitors_c0 =
-      let _visitors_r0 = (fun _visitors_this -> _visitors_this) _visitors_c0 in
-      if _visitors_c0 == _visitors_r0 then _visitors_this else Bool _visitors_r0
+    method visit_Bool env this c0 =
+      let r0 = (fun this -> this) c0 in
+      if c0 == r0 then this else Bool r0
 
-    method visit_String env _visitors_this _visitors_c0 =
-      let _visitors_r0 = (fun _visitors_this -> _visitors_this) _visitors_c0 in
-      if _visitors_c0 == _visitors_r0 then _visitors_this
-      else String _visitors_r0
+    method visit_String env this c0 =
+      let r0 = (fun this -> this) c0 in
+      if c0 == r0 then this else String r0
 
-    method visit_Null env _visitors_this _visitors_c0 =
-      let _visitors_r0 = (fun _visitors_this -> _visitors_this) _visitors_c0 in
-      if _visitors_c0 == _visitors_r0 then _visitors_this else Null _visitors_r0
+    method visit_Null env this c0 =
+      let r0 = (fun this -> this) c0 in
+      if c0 == r0 then this else Null r0
 
-    method visit_Unop env _visitors_this _visitors_c0 _visitors_c1 =
-      let _visitors_r0 = (fun _visitors_this -> _visitors_this) _visitors_c0 in
-      let _visitors_r1 = self#visit_pred env _visitors_c1 in
-      if _visitors_c0 == _visitors_r0 && _visitors_c1 == _visitors_r1 then
-        _visitors_this
-      else Unop (_visitors_r0, _visitors_r1)
+    method visit_Unop env this c0 c1 =
+      let r0 = (fun this -> this) c0 in
+      let r1 = self#visit_pred env c1 in
+      if c0 == r0 && c1 == r1 then this else Unop (r0, r1)
 
-    method visit_Binop env _visitors_this _visitors_c0 _visitors_c1 _visitors_c2
-        =
-      let _visitors_r0 = (fun _visitors_this -> _visitors_this) _visitors_c0 in
-      let _visitors_r1 = self#visit_pred env _visitors_c1 in
-      let _visitors_r2 = self#visit_pred env _visitors_c2 in
-      if
-        _visitors_c0 == _visitors_r0
-        && _visitors_c1 == _visitors_r1
-        && _visitors_c2 == _visitors_r2
-      then _visitors_this
-      else Binop (_visitors_r0, _visitors_r1, _visitors_r2)
+    method visit_Binop env this c0 c1 c2 =
+      let r0 = (fun this -> this) c0 in
+      let r1 = self#visit_pred env c1 in
+      let r2 = self#visit_pred env c2 in
+      if c0 == r0 && c1 == r1 && c2 == r2 then this else Binop (r0, r1, r2)
 
-    method visit_Count env _visitors_this =
-      if true then _visitors_this else Count
+    method visit_Count env this = if true then this else Count
+    method visit_Row_number env this = if true then this else Row_number
 
-    method visit_Row_number env _visitors_this =
-      if true then _visitors_this else Row_number
+    method visit_Sum env this c0 =
+      let r0 = self#visit_pred env c0 in
+      if c0 == r0 then this else Sum r0
 
-    method visit_Sum env _visitors_this _visitors_c0 =
-      let _visitors_r0 = self#visit_pred env _visitors_c0 in
-      if _visitors_c0 == _visitors_r0 then _visitors_this else Sum _visitors_r0
+    method visit_Avg env this c0 =
+      let r0 = self#visit_pred env c0 in
+      if c0 == r0 then this else Avg r0
 
-    method visit_Avg env _visitors_this _visitors_c0 =
-      let _visitors_r0 = self#visit_pred env _visitors_c0 in
-      if _visitors_c0 == _visitors_r0 then _visitors_this else Avg _visitors_r0
+    method visit_Min env this c0 =
+      let r0 = self#visit_pred env c0 in
+      if c0 == r0 then this else Min r0
 
-    method visit_Min env _visitors_this _visitors_c0 =
-      let _visitors_r0 = self#visit_pred env _visitors_c0 in
-      if _visitors_c0 == _visitors_r0 then _visitors_this else Min _visitors_r0
+    method visit_Max env this c0 =
+      let r0 = self#visit_pred env c0 in
+      if c0 == r0 then this else Max r0
 
-    method visit_Max env _visitors_this _visitors_c0 =
-      let _visitors_r0 = self#visit_pred env _visitors_c0 in
-      if _visitors_c0 == _visitors_r0 then _visitors_this else Max _visitors_r0
+    method visit_If env this c0 c1 c2 =
+      let r0 = self#visit_pred env c0 in
+      let r1 = self#visit_pred env c1 in
+      let r2 = self#visit_pred env c2 in
+      if c0 == r0 && c1 == r1 && c2 == r2 then this else If (r0, r1, r2)
 
-    method visit_If env _visitors_this _visitors_c0 _visitors_c1 _visitors_c2 =
-      let _visitors_r0 = self#visit_pred env _visitors_c0 in
-      let _visitors_r1 = self#visit_pred env _visitors_c1 in
-      let _visitors_r2 = self#visit_pred env _visitors_c2 in
-      if
-        _visitors_c0 == _visitors_r0
-        && _visitors_c1 == _visitors_r1
-        && _visitors_c2 == _visitors_r2
-      then _visitors_this
-      else If (_visitors_r0, _visitors_r1, _visitors_r2)
+    method visit_First env this c0 =
+      let r0 = self#visit_'r env c0 in
+      if c0 == r0 then this else First r0
 
-    method visit_First env _visitors_this _visitors_c0 =
-      let _visitors_r0 = self#visit_'r env _visitors_c0 in
-      if _visitors_c0 == _visitors_r0 then _visitors_this
-      else First _visitors_r0
+    method visit_Exists env this c0 =
+      let r0 = self#visit_'r env c0 in
+      if c0 == r0 then this else Exists r0
 
-    method visit_Exists env _visitors_this _visitors_c0 =
-      let _visitors_r0 = self#visit_'r env _visitors_c0 in
-      if _visitors_c0 == _visitors_r0 then _visitors_this
-      else Exists _visitors_r0
+    method visit_Substring env this c0 c1 c2 =
+      let r0 = self#visit_pred env c0 in
+      let r1 = self#visit_pred env c1 in
+      let r2 = self#visit_pred env c2 in
+      if c0 == r0 && c1 == r1 && c2 == r2 then this else Substring (r0, r1, r2)
 
-    method visit_Substring env _visitors_this _visitors_c0 _visitors_c1
-        _visitors_c2 =
-      let _visitors_r0 = self#visit_pred env _visitors_c0 in
-      let _visitors_r1 = self#visit_pred env _visitors_c1 in
-      let _visitors_r2 = self#visit_pred env _visitors_c2 in
-      if
-        _visitors_c0 == _visitors_r0
-        && _visitors_c1 == _visitors_r1
-        && _visitors_c2 == _visitors_r2
-      then _visitors_this
-      else Substring (_visitors_r0, _visitors_r1, _visitors_r2)
-
-    method visit_pred env _visitors_this =
-      match _visitors_this with
-      | Name _visitors_c0 as _visitors_this ->
-          self#visit_Name env _visitors_this _visitors_c0
-      | Int _visitors_c0 as _visitors_this ->
-          self#visit_Int env _visitors_this _visitors_c0
-      | Fixed _visitors_c0 as _visitors_this ->
-          self#visit_Fixed env _visitors_this _visitors_c0
-      | Date _visitors_c0 as _visitors_this ->
-          self#visit_Date env _visitors_this _visitors_c0
-      | Bool _visitors_c0 as _visitors_this ->
-          self#visit_Bool env _visitors_this _visitors_c0
-      | String _visitors_c0 as _visitors_this ->
-          self#visit_String env _visitors_this _visitors_c0
-      | Null _visitors_c0 as _visitors_this ->
-          self#visit_Null env _visitors_this _visitors_c0
-      | Unop (_visitors_c0, _visitors_c1) as _visitors_this ->
-          self#visit_Unop env _visitors_this _visitors_c0 _visitors_c1
-      | Binop (_visitors_c0, _visitors_c1, _visitors_c2) as _visitors_this ->
-          self#visit_Binop env _visitors_this _visitors_c0 _visitors_c1
-            _visitors_c2
-      | Count as _visitors_this -> self#visit_Count env _visitors_this
-      | Row_number as _visitors_this -> self#visit_Row_number env _visitors_this
-      | Sum _visitors_c0 as _visitors_this ->
-          self#visit_Sum env _visitors_this _visitors_c0
-      | Avg _visitors_c0 as _visitors_this ->
-          self#visit_Avg env _visitors_this _visitors_c0
-      | Min _visitors_c0 as _visitors_this ->
-          self#visit_Min env _visitors_this _visitors_c0
-      | Max _visitors_c0 as _visitors_this ->
-          self#visit_Max env _visitors_this _visitors_c0
-      | If (_visitors_c0, _visitors_c1, _visitors_c2) as _visitors_this ->
-          self#visit_If env _visitors_this _visitors_c0 _visitors_c1
-            _visitors_c2
-      | First _visitors_c0 as _visitors_this ->
-          self#visit_First env _visitors_this _visitors_c0
-      | Exists _visitors_c0 as _visitors_this ->
-          self#visit_Exists env _visitors_this _visitors_c0
-      | Substring (_visitors_c0, _visitors_c1, _visitors_c2) as _visitors_this
-        ->
-          self#visit_Substring env _visitors_this _visitors_c0 _visitors_c1
-            _visitors_c2
+    method visit_pred env this =
+      match this with
+      | Name c0 as this -> self#visit_Name env this c0
+      | Int c0 as this -> self#visit_Int env this c0
+      | Fixed c0 as this -> self#visit_Fixed env this c0
+      | Date c0 as this -> self#visit_Date env this c0
+      | Bool c0 as this -> self#visit_Bool env this c0
+      | String c0 as this -> self#visit_String env this c0
+      | Null c0 as this -> self#visit_Null env this c0
+      | Unop (c0, c1) as this -> self#visit_Unop env this c0 c1
+      | Binop (c0, c1, c2) as this -> self#visit_Binop env this c0 c1 c2
+      | Count as this -> self#visit_Count env this
+      | Row_number as this -> self#visit_Row_number env this
+      | Sum c0 as this -> self#visit_Sum env this c0
+      | Avg c0 as this -> self#visit_Avg env this c0
+      | Min c0 as this -> self#visit_Min env this c0
+      | Max c0 as this -> self#visit_Max env this c0
+      | If (c0, c1, c2) as this -> self#visit_If env this c0 c1 c2
+      | First c0 as this -> self#visit_First env this c0
+      | Exists c0 as this -> self#visit_Exists env this c0
+      | Substring (c0, c1, c2) as this -> self#visit_Substring env this c0 c1 c2
 
     method visit_scope env = self#visit_string env
 
-    method visit_hash_idx env _visitors_this =
-      let _visitors_r0 = self#visit_'r env _visitors_this.hi_keys in
-      let _visitors_r1 = self#visit_'r env _visitors_this.hi_values in
-      let _visitors_r2 = self#visit_scope env _visitors_this.hi_scope in
-      let _visitors_r3 =
-        self#visit_option self#visit_'r env _visitors_this.hi_key_layout
-      in
-      let _visitors_r4 =
-        self#visit_list self#visit_'p env _visitors_this.hi_lookup
-      in
+    method visit_hash_idx env this =
+      let r0 = self#visit_'r env this.hi_keys in
+      let r1 = self#visit_'r env this.hi_values in
+      let r2 = self#visit_scope env this.hi_scope in
+      let r3 = self#visit_option self#visit_'r env this.hi_key_layout in
+      let r4 = self#visit_list self#visit_'p env this.hi_lookup in
       if
-        _visitors_this.hi_keys == _visitors_r0
-        && _visitors_this.hi_values == _visitors_r1
-        && _visitors_this.hi_scope == _visitors_r2
-        && _visitors_this.hi_key_layout == _visitors_r3
-        && _visitors_this.hi_lookup == _visitors_r4
-      then _visitors_this
+        this.hi_keys == r0 && this.hi_values == r1 && this.hi_scope == r2
+        && this.hi_key_layout == r3 && this.hi_lookup == r4
+      then this
       else
         {
-          hi_keys = _visitors_r0;
-          hi_values = _visitors_r1;
-          hi_scope = _visitors_r2;
-          hi_key_layout = _visitors_r3;
-          hi_lookup = _visitors_r4;
+          hi_keys = r0;
+          hi_values = r1;
+          hi_scope = r2;
+          hi_key_layout = r3;
+          hi_lookup = r4;
         }
 
-    method visit_bound env ((_visitors_c0, _visitors_c1) as _visitors_this) =
-      let _visitors_r0 = self#visit_'p env _visitors_c0 in
-      let _visitors_r1 = (fun _visitors_this -> _visitors_this) _visitors_c1 in
-      if _visitors_c0 == _visitors_r0 && _visitors_c1 == _visitors_r1 then
-        _visitors_this
-      else (_visitors_r0, _visitors_r1)
+    method visit_bound env ((c0, c1) as this) =
+      let r0 = self#visit_'p env c0 in
+      let r1 = (fun this -> this) c1 in
+      if c0 == r0 && c1 == r1 then this else (r0, r1)
 
-    method visit_ordered_idx env _visitors_this =
-      let _visitors_r0 = self#visit_'r env _visitors_this.oi_keys in
-      let _visitors_r1 = self#visit_'r env _visitors_this.oi_values in
-      let _visitors_r2 = self#visit_scope env _visitors_this.oi_scope in
-      let _visitors_r3 =
-        self#visit_option self#visit_'r env _visitors_this.oi_key_layout
-      in
-      let _visitors_r4 =
+    method visit_ordered_idx env this =
+      let r0 = self#visit_'r env this.oi_keys in
+      let r1 = self#visit_'r env this.oi_values in
+      let r2 = self#visit_scope env this.oi_scope in
+      let r3 = self#visit_option self#visit_'r env this.oi_key_layout in
+      let r4 =
         self#visit_list
-          (fun env ((_visitors_c0, _visitors_c1) as _visitors_this) ->
-            let _visitors_r0 =
-              self#visit_option self#visit_bound env _visitors_c0
-            in
-            let _visitors_r1 =
-              self#visit_option self#visit_bound env _visitors_c1
-            in
-            if _visitors_c0 == _visitors_r0 && _visitors_c1 == _visitors_r1 then
-              _visitors_this
-            else (_visitors_r0, _visitors_r1))
-          env _visitors_this.oi_lookup
+          (fun env ((c0, c1) as this) ->
+            let r0 = self#visit_option self#visit_bound env c0 in
+            let r1 = self#visit_option self#visit_bound env c1 in
+            if c0 == r0 && c1 == r1 then this else (r0, r1))
+          env this.oi_lookup
       in
       if
-        _visitors_this.oi_keys == _visitors_r0
-        && _visitors_this.oi_values == _visitors_r1
-        && _visitors_this.oi_scope == _visitors_r2
-        && _visitors_this.oi_key_layout == _visitors_r3
-        && _visitors_this.oi_lookup == _visitors_r4
-      then _visitors_this
+        this.oi_keys == r0 && this.oi_values == r1 && this.oi_scope == r2
+        && this.oi_key_layout == r3 && this.oi_lookup == r4
+      then this
       else
         {
-          oi_keys = _visitors_r0;
-          oi_values = _visitors_r1;
-          oi_scope = _visitors_r2;
-          oi_key_layout = _visitors_r3;
-          oi_lookup = _visitors_r4;
+          oi_keys = r0;
+          oi_values = r1;
+          oi_scope = r2;
+          oi_key_layout = r3;
+          oi_lookup = r4;
         }
 
-    method visit_list_ env _visitors_this =
-      let _visitors_r0 = self#visit_'r env _visitors_this.l_keys in
-      let _visitors_r1 = self#visit_'r env _visitors_this.l_values in
-      let _visitors_r2 = self#visit_scope env _visitors_this.l_scope in
-      if
-        _visitors_this.l_keys == _visitors_r0
-        && _visitors_this.l_values == _visitors_r1
-        && _visitors_this.l_scope == _visitors_r2
-      then _visitors_this
-      else
-        {
-          l_keys = _visitors_r0;
-          l_values = _visitors_r1;
-          l_scope = _visitors_r2;
-        }
+    method visit_list_ env this =
+      let r0 = self#visit_'r env this.l_keys in
+      let r1 = self#visit_'r env this.l_values in
+      let r2 = self#visit_scope env this.l_scope in
+      if this.l_keys == r0 && this.l_values == r1 && this.l_scope == r2 then
+        this
+      else { l_keys = r0; l_values = r1; l_scope = r2 }
 
-    method visit_depjoin env _visitors_this =
-      let _visitors_r0 = self#visit_'r env _visitors_this.d_lhs in
-      let _visitors_r1 = self#visit_scope env _visitors_this.d_alias in
-      let _visitors_r2 = self#visit_'r env _visitors_this.d_rhs in
-      if
-        _visitors_this.d_lhs == _visitors_r0
-        && _visitors_this.d_alias == _visitors_r1
-        && _visitors_this.d_rhs == _visitors_r2
-      then _visitors_this
-      else
-        { d_lhs = _visitors_r0; d_alias = _visitors_r1; d_rhs = _visitors_r2 }
+    method visit_depjoin env this =
+      let r0 = self#visit_'r env this.d_lhs in
+      let r1 = self#visit_scope env this.d_alias in
+      let r2 = self#visit_'r env this.d_rhs in
+      if this.d_lhs == r0 && this.d_alias == r1 && this.d_rhs == r2 then this
+      else { d_lhs = r0; d_alias = r1; d_rhs = r2 }
 
-    method visit_join env _visitors_this =
-      let _visitors_r0 = self#visit_'p env _visitors_this.pred in
-      let _visitors_r1 = self#visit_'r env _visitors_this.r1 in
-      let _visitors_r2 = self#visit_'r env _visitors_this.r2 in
-      if
-        _visitors_this.pred == _visitors_r0
-        && _visitors_this.r1 == _visitors_r1
-        && _visitors_this.r2 == _visitors_r2
-      then _visitors_this
-      else { pred = _visitors_r0; r1 = _visitors_r1; r2 = _visitors_r2 }
+    method visit_join env this =
+      let r0 = self#visit_'p env this.pred in
+      let r1 = self#visit_'r env this.r1 in
+      let r2 = self#visit_'r env this.r2 in
+      if this.pred == r0 && this.r1 == r1 && this.r2 == r2 then this
+      else { pred = r0; r1; r2 }
 
-    method visit_order_by env _visitors_this =
-      let _visitors_r0 =
+    method visit_order_by env this =
+      let r0 =
         self#visit_list
-          (fun env ((_visitors_c0, _visitors_c1) as _visitors_this) ->
-            let _visitors_r0 = self#visit_'p env _visitors_c0 in
-            let _visitors_r1 =
-              (fun _visitors_this -> _visitors_this) _visitors_c1
-            in
-            if _visitors_c0 == _visitors_r0 && _visitors_c1 == _visitors_r1 then
-              _visitors_this
-            else (_visitors_r0, _visitors_r1))
-          env _visitors_this.key
+          (fun env ((c0, c1) as this) ->
+            let r0 = self#visit_'p env c0 in
+            let r1 = (fun this -> this) c1 in
+            if c0 == r0 && c1 == r1 then this else (r0, r1))
+          env this.key
       in
-      let _visitors_r1 = self#visit_'r env _visitors_this.rel in
-      if
-        _visitors_this.key == _visitors_r0 && _visitors_this.rel == _visitors_r1
-      then _visitors_this
-      else { key = _visitors_r0; rel = _visitors_r1 }
+      let r1 = self#visit_'r env this.rel in
+      if this.key == r0 && this.rel == r1 then this else { key = r0; rel = r1 }
 
-    method visit_scalar env _visitors_this =
-      let _visitors_r0 = self#visit_'p env _visitors_this.s_pred in
-      let _visitors_r1 = self#visit_string env _visitors_this.s_name in
-      if
-        _visitors_this.s_pred == _visitors_r0
-        && _visitors_this.s_name == _visitors_r1
-      then _visitors_this
-      else { s_pred = _visitors_r0; s_name = _visitors_r1 }
+    method visit_scalar env this =
+      let r0 = self#visit_'p env this.s_pred in
+      let r1 = self#visit_string env this.s_name in
+      if this.s_pred == r0 && this.s_name == r1 then this
+      else { s_pred = r0; s_name = r1 }
 
-    method visit_scan_type env _visitors_this =
-      let _visitors_r0 =
-        self#visit_select_list self#visit_'p env _visitors_this.select
+    method visit_scan_type env this =
+      let r0 = self#visit_select_list self#visit_'p env this.select in
+      let r1 = self#visit_list self#visit_'p env this.filter in
+      let r2 = self#visit_list (fun env this -> this) env this.tables in
+      if this.select == r0 && this.filter == r1 && this.tables == r2 then this
+      else { select = r0; filter = r1; tables = r2 }
+
+    method visit_Select env this c0 =
+      let r0 =
+        (fun ((c0, c1) as this) ->
+          let r0 = self#visit_select_list self#visit_'p env c0 in
+          let r1 = self#visit_'r env c1 in
+          if c0 == r0 && c1 == r1 then this else (r0, r1))
+          c0
       in
-      let _visitors_r1 =
-        self#visit_list self#visit_'p env _visitors_this.filter
+      if c0 == r0 then this else Select r0
+
+    method visit_Filter env this c0 =
+      let r0 =
+        (fun ((c0, c1) as this) ->
+          let r0 = self#visit_'p env c0 in
+          let r1 = self#visit_'r env c1 in
+          if c0 == r0 && c1 == r1 then this else (r0, r1))
+          c0
       in
-      let _visitors_r2 =
-        self#visit_list
-          (fun env _visitors_this -> _visitors_this)
-          env _visitors_this.tables
+      if c0 == r0 then this else Filter r0
+
+    method visit_Join env this c0 =
+      let r0 = self#visit_join env c0 in
+      if c0 == r0 then this else Join r0
+
+    method visit_DepJoin env this c0 =
+      let r0 = self#visit_depjoin env c0 in
+      if c0 == r0 then this else DepJoin r0
+
+    method visit_GroupBy env this c0 =
+      let r0 =
+        (fun ((c0, c1, c2) as this) ->
+          let r0 = self#visit_select_list self#visit_'p env c0 in
+          let r1 = self#visit_list (fun env this -> this) env c1 in
+          let r2 = self#visit_'r env c2 in
+          if c0 == r0 && c1 == r1 && c2 == r2 then this else (r0, r1, r2))
+          c0
       in
-      if
-        _visitors_this.select == _visitors_r0
-        && _visitors_this.filter == _visitors_r1
-        && _visitors_this.tables == _visitors_r2
-      then _visitors_this
-      else
-        { select = _visitors_r0; filter = _visitors_r1; tables = _visitors_r2 }
+      if c0 == r0 then this else GroupBy r0
 
-    method visit_Select env _visitors_this _visitors_c0 =
-      let _visitors_r0 =
-        (fun ((_visitors_c0, _visitors_c1) as _visitors_this) ->
-          let _visitors_r0 =
-            self#visit_select_list self#visit_'p env _visitors_c0
-          in
-          let _visitors_r1 = self#visit_'r env _visitors_c1 in
-          if _visitors_c0 == _visitors_r0 && _visitors_c1 == _visitors_r1 then
-            _visitors_this
-          else (_visitors_r0, _visitors_r1))
-          _visitors_c0
+    method visit_OrderBy env this c0 =
+      let r0 = self#visit_order_by env c0 in
+      if c0 == r0 then this else OrderBy r0
+
+    method visit_Dedup env this c0 =
+      let r0 = self#visit_'r env c0 in
+      if c0 == r0 then this else Dedup r0
+
+    method visit_Relation env this c0 =
+      let r0 = (fun this -> this) c0 in
+      if c0 == r0 then this else Relation r0
+
+    method visit_Range env this c0 =
+      let r0 =
+        (fun ((c0, c1) as this) ->
+          let r0 = self#visit_'p env c0 in
+          let r1 = self#visit_'p env c1 in
+          if c0 == r0 && c1 == r1 then this else (r0, r1))
+          c0
       in
-      if _visitors_c0 == _visitors_r0 then _visitors_this
-      else Select _visitors_r0
+      if c0 == r0 then this else Range r0
 
-    method visit_Filter env _visitors_this _visitors_c0 =
-      let _visitors_r0 =
-        (fun ((_visitors_c0, _visitors_c1) as _visitors_this) ->
-          let _visitors_r0 = self#visit_'p env _visitors_c0 in
-          let _visitors_r1 = self#visit_'r env _visitors_c1 in
-          if _visitors_c0 == _visitors_r0 && _visitors_c1 == _visitors_r1 then
-            _visitors_this
-          else (_visitors_r0, _visitors_r1))
-          _visitors_c0
+    method visit_AEmpty env this = if true then this else AEmpty
+
+    method visit_AScalar env this c0 =
+      let r0 = self#visit_scalar env c0 in
+      if c0 == r0 then this else AScalar r0
+
+    method visit_AList env this c0 =
+      let r0 = self#visit_list_ env c0 in
+      if c0 == r0 then this else AList r0
+
+    method visit_ATuple env this c0 =
+      let r0 =
+        (fun ((c0, c1) as this) ->
+          let r0 = self#visit_list self#visit_'r env c0 in
+          let r1 = (fun this -> this) c1 in
+          if c0 == r0 && c1 == r1 then this else (r0, r1))
+          c0
       in
-      if _visitors_c0 == _visitors_r0 then _visitors_this
-      else Filter _visitors_r0
+      if c0 == r0 then this else ATuple r0
 
-    method visit_Join env _visitors_this _visitors_c0 =
-      let _visitors_r0 = self#visit_join env _visitors_c0 in
-      if _visitors_c0 == _visitors_r0 then _visitors_this else Join _visitors_r0
+    method visit_AHashIdx env this c0 =
+      let r0 = self#visit_hash_idx env c0 in
+      if c0 == r0 then this else AHashIdx r0
 
-    method visit_DepJoin env _visitors_this _visitors_c0 =
-      let _visitors_r0 = self#visit_depjoin env _visitors_c0 in
-      if _visitors_c0 == _visitors_r0 then _visitors_this
-      else DepJoin _visitors_r0
+    method visit_AOrderedIdx env this c0 =
+      let r0 = self#visit_ordered_idx env c0 in
+      if c0 == r0 then this else AOrderedIdx r0
 
-    method visit_GroupBy env _visitors_this _visitors_c0 =
-      let _visitors_r0 =
-        (fun ((_visitors_c0, _visitors_c1, _visitors_c2) as _visitors_this) ->
-          let _visitors_r0 =
-            self#visit_select_list self#visit_'p env _visitors_c0
-          in
-          let _visitors_r1 =
-            self#visit_list
-              (fun env _visitors_this -> _visitors_this)
-              env _visitors_c1
-          in
-          let _visitors_r2 = self#visit_'r env _visitors_c2 in
-          if
-            _visitors_c0 == _visitors_r0
-            && _visitors_c1 == _visitors_r1
-            && _visitors_c2 == _visitors_r2
-          then _visitors_this
-          else (_visitors_r0, _visitors_r1, _visitors_r2))
-          _visitors_c0
-      in
-      if _visitors_c0 == _visitors_r0 then _visitors_this
-      else GroupBy _visitors_r0
+    method visit_Call env this c0 c1 =
+      let r0 = self#visit_scan_type env c0 in
+      let r1 = self#visit_string env c1 in
+      if c0 == r0 && c1 == r1 then this else Call (r0, r1)
 
-    method visit_OrderBy env _visitors_this _visitors_c0 =
-      let _visitors_r0 = self#visit_order_by env _visitors_c0 in
-      if _visitors_c0 == _visitors_r0 then _visitors_this
-      else OrderBy _visitors_r0
+    method visit_query env this =
+      match this with
+      | Select c0 as this -> self#visit_Select env this c0
+      | Filter c0 as this -> self#visit_Filter env this c0
+      | Join c0 as this -> self#visit_Join env this c0
+      | DepJoin c0 as this -> self#visit_DepJoin env this c0
+      | GroupBy c0 as this -> self#visit_GroupBy env this c0
+      | OrderBy c0 as this -> self#visit_OrderBy env this c0
+      | Dedup c0 as this -> self#visit_Dedup env this c0
+      | Relation c0 as this -> self#visit_Relation env this c0
+      | Range c0 as this -> self#visit_Range env this c0
+      | AEmpty as this -> self#visit_AEmpty env this
+      | AScalar c0 as this -> self#visit_AScalar env this c0
+      | AList c0 as this -> self#visit_AList env this c0
+      | ATuple c0 as this -> self#visit_ATuple env this c0
+      | AHashIdx c0 as this -> self#visit_AHashIdx env this c0
+      | AOrderedIdx c0 as this -> self#visit_AOrderedIdx env this c0
+      | Call (c0, c1) as this -> self#visit_Call env this c0 c1
 
-    method visit_Dedup env _visitors_this _visitors_c0 =
-      let _visitors_r0 = self#visit_'r env _visitors_c0 in
-      if _visitors_c0 == _visitors_r0 then _visitors_this
-      else Dedup _visitors_r0
-
-    method visit_Relation env _visitors_this _visitors_c0 =
-      let _visitors_r0 = (fun _visitors_this -> _visitors_this) _visitors_c0 in
-      if _visitors_c0 == _visitors_r0 then _visitors_this
-      else Relation _visitors_r0
-
-    method visit_Range env _visitors_this _visitors_c0 =
-      let _visitors_r0 =
-        (fun ((_visitors_c0, _visitors_c1) as _visitors_this) ->
-          let _visitors_r0 = self#visit_'p env _visitors_c0 in
-          let _visitors_r1 = self#visit_'p env _visitors_c1 in
-          if _visitors_c0 == _visitors_r0 && _visitors_c1 == _visitors_r1 then
-            _visitors_this
-          else (_visitors_r0, _visitors_r1))
-          _visitors_c0
-      in
-      if _visitors_c0 == _visitors_r0 then _visitors_this
-      else Range _visitors_r0
-
-    method visit_AEmpty env _visitors_this =
-      if true then _visitors_this else AEmpty
-
-    method visit_AScalar env _visitors_this _visitors_c0 =
-      let _visitors_r0 = self#visit_scalar env _visitors_c0 in
-      if _visitors_c0 == _visitors_r0 then _visitors_this
-      else AScalar _visitors_r0
-
-    method visit_AList env _visitors_this _visitors_c0 =
-      let _visitors_r0 = self#visit_list_ env _visitors_c0 in
-      if _visitors_c0 == _visitors_r0 then _visitors_this
-      else AList _visitors_r0
-
-    method visit_ATuple env _visitors_this _visitors_c0 =
-      let _visitors_r0 =
-        (fun ((_visitors_c0, _visitors_c1) as _visitors_this) ->
-          let _visitors_r0 = self#visit_list self#visit_'r env _visitors_c0 in
-          let _visitors_r1 =
-            (fun _visitors_this -> _visitors_this) _visitors_c1
-          in
-          if _visitors_c0 == _visitors_r0 && _visitors_c1 == _visitors_r1 then
-            _visitors_this
-          else (_visitors_r0, _visitors_r1))
-          _visitors_c0
-      in
-      if _visitors_c0 == _visitors_r0 then _visitors_this
-      else ATuple _visitors_r0
-
-    method visit_AHashIdx env _visitors_this _visitors_c0 =
-      let _visitors_r0 = self#visit_hash_idx env _visitors_c0 in
-      if _visitors_c0 == _visitors_r0 then _visitors_this
-      else AHashIdx _visitors_r0
-
-    method visit_AOrderedIdx env _visitors_this _visitors_c0 =
-      let _visitors_r0 = self#visit_ordered_idx env _visitors_c0 in
-      if _visitors_c0 == _visitors_r0 then _visitors_this
-      else AOrderedIdx _visitors_r0
-
-    method visit_Call env _visitors_this _visitors_c0 _visitors_c1 =
-      let _visitors_r0 = self#visit_scan_type env _visitors_c0 in
-      let _visitors_r1 = self#visit_string env _visitors_c1 in
-      if _visitors_c0 == _visitors_r0 && _visitors_c1 == _visitors_r1 then
-        _visitors_this
-      else Call (_visitors_r0, _visitors_r1)
-
-    method visit_query env _visitors_this =
-      match _visitors_this with
-      | Select _visitors_c0 as _visitors_this ->
-          self#visit_Select env _visitors_this _visitors_c0
-      | Filter _visitors_c0 as _visitors_this ->
-          self#visit_Filter env _visitors_this _visitors_c0
-      | Join _visitors_c0 as _visitors_this ->
-          self#visit_Join env _visitors_this _visitors_c0
-      | DepJoin _visitors_c0 as _visitors_this ->
-          self#visit_DepJoin env _visitors_this _visitors_c0
-      | GroupBy _visitors_c0 as _visitors_this ->
-          self#visit_GroupBy env _visitors_this _visitors_c0
-      | OrderBy _visitors_c0 as _visitors_this ->
-          self#visit_OrderBy env _visitors_this _visitors_c0
-      | Dedup _visitors_c0 as _visitors_this ->
-          self#visit_Dedup env _visitors_this _visitors_c0
-      | Relation _visitors_c0 as _visitors_this ->
-          self#visit_Relation env _visitors_this _visitors_c0
-      | Range _visitors_c0 as _visitors_this ->
-          self#visit_Range env _visitors_this _visitors_c0
-      | AEmpty as _visitors_this -> self#visit_AEmpty env _visitors_this
-      | AScalar _visitors_c0 as _visitors_this ->
-          self#visit_AScalar env _visitors_this _visitors_c0
-      | AList _visitors_c0 as _visitors_this ->
-          self#visit_AList env _visitors_this _visitors_c0
-      | ATuple _visitors_c0 as _visitors_this ->
-          self#visit_ATuple env _visitors_this _visitors_c0
-      | AHashIdx _visitors_c0 as _visitors_this ->
-          self#visit_AHashIdx env _visitors_this _visitors_c0
-      | AOrderedIdx _visitors_c0 as _visitors_this ->
-          self#visit_AOrderedIdx env _visitors_this _visitors_c0
-      | Call (_visitors_c0, _visitors_c1) as _visitors_this ->
-          self#visit_Call env _visitors_this _visitors_c0 _visitors_c1
-
-    method visit_annot env _visitors_this =
-      let _visitors_r0 = self#visit_query env _visitors_this.node in
-      let _visitors_r1 = self#visit_'m env _visitors_this.meta in
-      if
-        _visitors_this.node == _visitors_r0
-        && _visitors_this.meta == _visitors_r1
-      then _visitors_this
-      else { node = _visitors_r0; meta = _visitors_r1 }
+    method visit_annot env this =
+      let r0 = self#visit_query env this.node in
+      let r1 = self#visit_'m env this.meta in
+      if this.node == r0 && this.meta == r1 then this
+      else { node = r0; meta = r1 }
 
     method visit_t env = self#visit_annot env
   end
@@ -501,341 +337,306 @@ class virtual ['self] base_map =
     method virtual visit_'p : _
     method virtual visit_'r : _
 
-    method visit_Name env _visitors_c0 =
-      let _visitors_r0 = (fun _visitors_this -> _visitors_this) _visitors_c0 in
-      Name _visitors_r0
+    method visit_Name env c0 =
+      let r0 = (fun this -> this) c0 in
+      Name r0
 
-    method visit_Int env _visitors_c0 =
-      let _visitors_r0 = (fun _visitors_this -> _visitors_this) _visitors_c0 in
-      Int _visitors_r0
+    method visit_Int env c0 =
+      let r0 = (fun this -> this) c0 in
+      Int r0
 
-    method visit_Fixed env _visitors_c0 =
-      let _visitors_r0 = (fun _visitors_this -> _visitors_this) _visitors_c0 in
-      Fixed _visitors_r0
+    method visit_Fixed env c0 =
+      let r0 = (fun this -> this) c0 in
+      Fixed r0
 
-    method visit_Date env _visitors_c0 =
-      let _visitors_r0 = (fun _visitors_this -> _visitors_this) _visitors_c0 in
-      Date _visitors_r0
+    method visit_Date env c0 =
+      let r0 = (fun this -> this) c0 in
+      Date r0
 
-    method visit_Bool env _visitors_c0 =
-      let _visitors_r0 = (fun _visitors_this -> _visitors_this) _visitors_c0 in
-      Bool _visitors_r0
+    method visit_Bool env c0 =
+      let r0 = (fun this -> this) c0 in
+      Bool r0
 
-    method visit_String env _visitors_c0 =
-      let _visitors_r0 = (fun _visitors_this -> _visitors_this) _visitors_c0 in
-      String _visitors_r0
+    method visit_String env c0 =
+      let r0 = (fun this -> this) c0 in
+      String r0
 
-    method visit_Null env _visitors_c0 =
-      let _visitors_r0 = (fun _visitors_this -> _visitors_this) _visitors_c0 in
-      Null _visitors_r0
+    method visit_Null env c0 =
+      let r0 = (fun this -> this) c0 in
+      Null r0
 
-    method visit_Unop env _visitors_c0 _visitors_c1 =
-      let _visitors_r0 = (fun _visitors_this -> _visitors_this) _visitors_c0 in
-      let _visitors_r1 = self#visit_pred env _visitors_c1 in
-      Unop (_visitors_r0, _visitors_r1)
+    method visit_Unop env c0 c1 =
+      let r0 = (fun this -> this) c0 in
+      let r1 = self#visit_pred env c1 in
+      Unop (r0, r1)
 
-    method visit_Binop env _visitors_c0 _visitors_c1 _visitors_c2 =
-      let _visitors_r0 = (fun _visitors_this -> _visitors_this) _visitors_c0 in
-      let _visitors_r1 = self#visit_pred env _visitors_c1 in
-      let _visitors_r2 = self#visit_pred env _visitors_c2 in
-      Binop (_visitors_r0, _visitors_r1, _visitors_r2)
+    method visit_Binop env c0 c1 c2 =
+      let r0 = (fun this -> this) c0 in
+      let r1 = self#visit_pred env c1 in
+      let r2 = self#visit_pred env c2 in
+      Binop (r0, r1, r2)
 
     method visit_Count env = Count
     method visit_Row_number env = Row_number
 
-    method visit_Sum env _visitors_c0 =
-      let _visitors_r0 = self#visit_pred env _visitors_c0 in
-      Sum _visitors_r0
+    method visit_Sum env c0 =
+      let r0 = self#visit_pred env c0 in
+      Sum r0
 
-    method visit_Avg env _visitors_c0 =
-      let _visitors_r0 = self#visit_pred env _visitors_c0 in
-      Avg _visitors_r0
+    method visit_Avg env c0 =
+      let r0 = self#visit_pred env c0 in
+      Avg r0
 
-    method visit_Min env _visitors_c0 =
-      let _visitors_r0 = self#visit_pred env _visitors_c0 in
-      Min _visitors_r0
+    method visit_Min env c0 =
+      let r0 = self#visit_pred env c0 in
+      Min r0
 
-    method visit_Max env _visitors_c0 =
-      let _visitors_r0 = self#visit_pred env _visitors_c0 in
-      Max _visitors_r0
+    method visit_Max env c0 =
+      let r0 = self#visit_pred env c0 in
+      Max r0
 
-    method visit_If env _visitors_c0 _visitors_c1 _visitors_c2 =
-      let _visitors_r0 = self#visit_pred env _visitors_c0 in
-      let _visitors_r1 = self#visit_pred env _visitors_c1 in
-      let _visitors_r2 = self#visit_pred env _visitors_c2 in
-      If (_visitors_r0, _visitors_r1, _visitors_r2)
+    method visit_If env c0 c1 c2 =
+      let r0 = self#visit_pred env c0 in
+      let r1 = self#visit_pred env c1 in
+      let r2 = self#visit_pred env c2 in
+      If (r0, r1, r2)
 
-    method visit_First env _visitors_c0 =
-      let _visitors_r0 = self#visit_'r env _visitors_c0 in
-      First _visitors_r0
+    method visit_First env c0 =
+      let r0 = self#visit_'r env c0 in
+      First r0
 
-    method visit_Exists env _visitors_c0 =
-      let _visitors_r0 = self#visit_'r env _visitors_c0 in
-      Exists _visitors_r0
+    method visit_Exists env c0 =
+      let r0 = self#visit_'r env c0 in
+      Exists r0
 
-    method visit_Substring env _visitors_c0 _visitors_c1 _visitors_c2 =
-      let _visitors_r0 = self#visit_pred env _visitors_c0 in
-      let _visitors_r1 = self#visit_pred env _visitors_c1 in
-      let _visitors_r2 = self#visit_pred env _visitors_c2 in
-      Substring (_visitors_r0, _visitors_r1, _visitors_r2)
+    method visit_Substring env c0 c1 c2 =
+      let r0 = self#visit_pred env c0 in
+      let r1 = self#visit_pred env c1 in
+      let r2 = self#visit_pred env c2 in
+      Substring (r0, r1, r2)
 
-    method visit_pred env _visitors_this =
-      match _visitors_this with
-      | Name _visitors_c0 -> self#visit_Name env _visitors_c0
-      | Int _visitors_c0 -> self#visit_Int env _visitors_c0
-      | Fixed _visitors_c0 -> self#visit_Fixed env _visitors_c0
-      | Date _visitors_c0 -> self#visit_Date env _visitors_c0
-      | Bool _visitors_c0 -> self#visit_Bool env _visitors_c0
-      | String _visitors_c0 -> self#visit_String env _visitors_c0
-      | Null _visitors_c0 -> self#visit_Null env _visitors_c0
-      | Unop (_visitors_c0, _visitors_c1) ->
-          self#visit_Unop env _visitors_c0 _visitors_c1
-      | Binop (_visitors_c0, _visitors_c1, _visitors_c2) ->
-          self#visit_Binop env _visitors_c0 _visitors_c1 _visitors_c2
+    method visit_pred env this =
+      match this with
+      | Name c0 -> self#visit_Name env c0
+      | Int c0 -> self#visit_Int env c0
+      | Fixed c0 -> self#visit_Fixed env c0
+      | Date c0 -> self#visit_Date env c0
+      | Bool c0 -> self#visit_Bool env c0
+      | String c0 -> self#visit_String env c0
+      | Null c0 -> self#visit_Null env c0
+      | Unop (c0, c1) -> self#visit_Unop env c0 c1
+      | Binop (c0, c1, c2) -> self#visit_Binop env c0 c1 c2
       | Count -> self#visit_Count env
       | Row_number -> self#visit_Row_number env
-      | Sum _visitors_c0 -> self#visit_Sum env _visitors_c0
-      | Avg _visitors_c0 -> self#visit_Avg env _visitors_c0
-      | Min _visitors_c0 -> self#visit_Min env _visitors_c0
-      | Max _visitors_c0 -> self#visit_Max env _visitors_c0
-      | If (_visitors_c0, _visitors_c1, _visitors_c2) ->
-          self#visit_If env _visitors_c0 _visitors_c1 _visitors_c2
-      | First _visitors_c0 -> self#visit_First env _visitors_c0
-      | Exists _visitors_c0 -> self#visit_Exists env _visitors_c0
-      | Substring (_visitors_c0, _visitors_c1, _visitors_c2) ->
-          self#visit_Substring env _visitors_c0 _visitors_c1 _visitors_c2
+      | Sum c0 -> self#visit_Sum env c0
+      | Avg c0 -> self#visit_Avg env c0
+      | Min c0 -> self#visit_Min env c0
+      | Max c0 -> self#visit_Max env c0
+      | If (c0, c1, c2) -> self#visit_If env c0 c1 c2
+      | First c0 -> self#visit_First env c0
+      | Exists c0 -> self#visit_Exists env c0
+      | Substring (c0, c1, c2) -> self#visit_Substring env c0 c1 c2
 
     method visit_scope env = self#visit_string env
 
-    method visit_hash_idx env _visitors_this =
-      let _visitors_r0 = self#visit_'r env _visitors_this.hi_keys in
-      let _visitors_r1 = self#visit_'r env _visitors_this.hi_values in
-      let _visitors_r2 = self#visit_scope env _visitors_this.hi_scope in
-      let _visitors_r3 =
-        self#visit_option self#visit_'r env _visitors_this.hi_key_layout
-      in
-      let _visitors_r4 =
-        self#visit_list self#visit_'p env _visitors_this.hi_lookup
-      in
+    method visit_hash_idx env this =
+      let r0 = self#visit_'r env this.hi_keys in
+      let r1 = self#visit_'r env this.hi_values in
+      let r2 = self#visit_scope env this.hi_scope in
+      let r3 = self#visit_option self#visit_'r env this.hi_key_layout in
+      let r4 = self#visit_list self#visit_'p env this.hi_lookup in
       {
-        hi_keys = _visitors_r0;
-        hi_values = _visitors_r1;
-        hi_scope = _visitors_r2;
-        hi_key_layout = _visitors_r3;
-        hi_lookup = _visitors_r4;
+        hi_keys = r0;
+        hi_values = r1;
+        hi_scope = r2;
+        hi_key_layout = r3;
+        hi_lookup = r4;
       }
 
-    method visit_bound env (_visitors_c0, _visitors_c1) =
-      let _visitors_r0 = self#visit_'p env _visitors_c0 in
-      let _visitors_r1 = (fun _visitors_this -> _visitors_this) _visitors_c1 in
-      (_visitors_r0, _visitors_r1)
+    method visit_bound env (c0, c1) =
+      let r0 = self#visit_'p env c0 in
+      let r1 = (fun this -> this) c1 in
+      (r0, r1)
 
-    method visit_ordered_idx env _visitors_this =
-      let _visitors_r0 = self#visit_'r env _visitors_this.oi_keys in
-      let _visitors_r1 = self#visit_'r env _visitors_this.oi_values in
-      let _visitors_r2 = self#visit_scope env _visitors_this.oi_scope in
-      let _visitors_r3 =
-        self#visit_option self#visit_'r env _visitors_this.oi_key_layout
-      in
-      let _visitors_r4 =
+    method visit_ordered_idx env this =
+      let r0 = self#visit_'r env this.oi_keys in
+      let r1 = self#visit_'r env this.oi_values in
+      let r2 = self#visit_scope env this.oi_scope in
+      let r3 = self#visit_option self#visit_'r env this.oi_key_layout in
+      let r4 =
         self#visit_list
-          (fun env (_visitors_c0, _visitors_c1) ->
-            let _visitors_r0 =
-              self#visit_option self#visit_bound env _visitors_c0
-            in
-            let _visitors_r1 =
-              self#visit_option self#visit_bound env _visitors_c1
-            in
-            (_visitors_r0, _visitors_r1))
-          env _visitors_this.oi_lookup
+          (fun env (c0, c1) ->
+            let r0 = self#visit_option self#visit_bound env c0 in
+            let r1 = self#visit_option self#visit_bound env c1 in
+            (r0, r1))
+          env this.oi_lookup
       in
       {
-        oi_keys = _visitors_r0;
-        oi_values = _visitors_r1;
-        oi_scope = _visitors_r2;
-        oi_key_layout = _visitors_r3;
-        oi_lookup = _visitors_r4;
+        oi_keys = r0;
+        oi_values = r1;
+        oi_scope = r2;
+        oi_key_layout = r3;
+        oi_lookup = r4;
       }
 
-    method visit_list_ env _visitors_this =
-      let _visitors_r0 = self#visit_'r env _visitors_this.l_keys in
-      let _visitors_r1 = self#visit_'r env _visitors_this.l_values in
-      let _visitors_r2 = self#visit_scope env _visitors_this.l_scope in
-      { l_keys = _visitors_r0; l_values = _visitors_r1; l_scope = _visitors_r2 }
+    method visit_list_ env this =
+      let r0 = self#visit_'r env this.l_keys in
+      let r1 = self#visit_'r env this.l_values in
+      let r2 = self#visit_scope env this.l_scope in
+      { l_keys = r0; l_values = r1; l_scope = r2 }
 
-    method visit_depjoin env _visitors_this =
-      let _visitors_r0 = self#visit_'r env _visitors_this.d_lhs in
-      let _visitors_r1 = self#visit_scope env _visitors_this.d_alias in
-      let _visitors_r2 = self#visit_'r env _visitors_this.d_rhs in
-      { d_lhs = _visitors_r0; d_alias = _visitors_r1; d_rhs = _visitors_r2 }
+    method visit_depjoin env this =
+      let r0 = self#visit_'r env this.d_lhs in
+      let r1 = self#visit_scope env this.d_alias in
+      let r2 = self#visit_'r env this.d_rhs in
+      { d_lhs = r0; d_alias = r1; d_rhs = r2 }
 
-    method visit_join env _visitors_this =
-      let _visitors_r0 = self#visit_'p env _visitors_this.pred in
-      let _visitors_r1 = self#visit_'r env _visitors_this.r1 in
-      let _visitors_r2 = self#visit_'r env _visitors_this.r2 in
-      { pred = _visitors_r0; r1 = _visitors_r1; r2 = _visitors_r2 }
+    method visit_join env this =
+      let r0 = self#visit_'p env this.pred in
+      let r1 = self#visit_'r env this.r1 in
+      let r2 = self#visit_'r env this.r2 in
+      { pred = r0; r1; r2 }
 
-    method visit_order_by env _visitors_this =
-      let _visitors_r0 =
+    method visit_order_by env this =
+      let r0 =
         self#visit_list
-          (fun env (_visitors_c0, _visitors_c1) ->
-            let _visitors_r0 = self#visit_'p env _visitors_c0 in
-            let _visitors_r1 =
-              (fun _visitors_this -> _visitors_this) _visitors_c1
-            in
-            (_visitors_r0, _visitors_r1))
-          env _visitors_this.key
+          (fun env (c0, c1) ->
+            let r0 = self#visit_'p env c0 in
+            let r1 = (fun this -> this) c1 in
+            (r0, r1))
+          env this.key
       in
-      let _visitors_r1 = self#visit_'r env _visitors_this.rel in
-      { key = _visitors_r0; rel = _visitors_r1 }
+      let r1 = self#visit_'r env this.rel in
+      { key = r0; rel = r1 }
 
-    method visit_scalar env _visitors_this =
-      let _visitors_r0 = self#visit_'p env _visitors_this.s_pred in
-      let _visitors_r1 = self#visit_string env _visitors_this.s_name in
-      { s_pred = _visitors_r0; s_name = _visitors_r1 }
+    method visit_scalar env this =
+      let r0 = self#visit_'p env this.s_pred in
+      let r1 = self#visit_string env this.s_name in
+      { s_pred = r0; s_name = r1 }
 
-    method visit_scan_type env _visitors_this =
-      let _visitors_r0 =
-        self#visit_select_list self#visit_'p env _visitors_this.select
+    method visit_scan_type env this =
+      let r0 = self#visit_select_list self#visit_'p env this.select in
+      let r1 = self#visit_list self#visit_'p env this.filter in
+      let r2 = self#visit_list (fun env this -> this) env this.tables in
+      { select = r0; filter = r1; tables = r2 }
+
+    method visit_Select env c0 =
+      let r0 =
+        (fun (c0, c1) ->
+          let r0 = self#visit_select_list self#visit_'p env c0 in
+          let r1 = self#visit_'r env c1 in
+          (r0, r1))
+          c0
       in
-      let _visitors_r1 =
-        self#visit_list self#visit_'p env _visitors_this.filter
+      Select r0
+
+    method visit_Filter env c0 =
+      let r0 =
+        (fun (c0, c1) ->
+          let r0 = self#visit_'p env c0 in
+          let r1 = self#visit_'r env c1 in
+          (r0, r1))
+          c0
       in
-      let _visitors_r2 =
-        self#visit_list
-          (fun env _visitors_this -> _visitors_this)
-          env _visitors_this.tables
+      Filter r0
+
+    method visit_Join env c0 =
+      let r0 = self#visit_join env c0 in
+      Join r0
+
+    method visit_DepJoin env c0 =
+      let r0 = self#visit_depjoin env c0 in
+      DepJoin r0
+
+    method visit_GroupBy env c0 =
+      let r0 =
+        (fun (c0, c1, c2) ->
+          let r0 = self#visit_select_list self#visit_'p env c0 in
+          let r1 = self#visit_list (fun env this -> this) env c1 in
+          let r2 = self#visit_'r env c2 in
+          (r0, r1, r2))
+          c0
       in
-      { select = _visitors_r0; filter = _visitors_r1; tables = _visitors_r2 }
+      GroupBy r0
 
-    method visit_Select env _visitors_c0 =
-      let _visitors_r0 =
-        (fun (_visitors_c0, _visitors_c1) ->
-          let _visitors_r0 =
-            self#visit_select_list self#visit_'p env _visitors_c0
-          in
-          let _visitors_r1 = self#visit_'r env _visitors_c1 in
-          (_visitors_r0, _visitors_r1))
-          _visitors_c0
+    method visit_OrderBy env c0 =
+      let r0 = self#visit_order_by env c0 in
+      OrderBy r0
+
+    method visit_Dedup env c0 =
+      let r0 = self#visit_'r env c0 in
+      Dedup r0
+
+    method visit_Relation env c0 =
+      let r0 = (fun this -> this) c0 in
+      Relation r0
+
+    method visit_Range env c0 =
+      let r0 =
+        (fun (c0, c1) ->
+          let r0 = self#visit_'p env c0 in
+          let r1 = self#visit_'p env c1 in
+          (r0, r1))
+          c0
       in
-      Select _visitors_r0
-
-    method visit_Filter env _visitors_c0 =
-      let _visitors_r0 =
-        (fun (_visitors_c0, _visitors_c1) ->
-          let _visitors_r0 = self#visit_'p env _visitors_c0 in
-          let _visitors_r1 = self#visit_'r env _visitors_c1 in
-          (_visitors_r0, _visitors_r1))
-          _visitors_c0
-      in
-      Filter _visitors_r0
-
-    method visit_Join env _visitors_c0 =
-      let _visitors_r0 = self#visit_join env _visitors_c0 in
-      Join _visitors_r0
-
-    method visit_DepJoin env _visitors_c0 =
-      let _visitors_r0 = self#visit_depjoin env _visitors_c0 in
-      DepJoin _visitors_r0
-
-    method visit_GroupBy env _visitors_c0 =
-      let _visitors_r0 =
-        (fun (_visitors_c0, _visitors_c1, _visitors_c2) ->
-          let _visitors_r0 =
-            self#visit_select_list self#visit_'p env _visitors_c0
-          in
-          let _visitors_r1 =
-            self#visit_list
-              (fun env _visitors_this -> _visitors_this)
-              env _visitors_c1
-          in
-          let _visitors_r2 = self#visit_'r env _visitors_c2 in
-          (_visitors_r0, _visitors_r1, _visitors_r2))
-          _visitors_c0
-      in
-      GroupBy _visitors_r0
-
-    method visit_OrderBy env _visitors_c0 =
-      let _visitors_r0 = self#visit_order_by env _visitors_c0 in
-      OrderBy _visitors_r0
-
-    method visit_Dedup env _visitors_c0 =
-      let _visitors_r0 = self#visit_'r env _visitors_c0 in
-      Dedup _visitors_r0
-
-    method visit_Relation env _visitors_c0 =
-      let _visitors_r0 = (fun _visitors_this -> _visitors_this) _visitors_c0 in
-      Relation _visitors_r0
-
-    method visit_Range env _visitors_c0 =
-      let _visitors_r0 =
-        (fun (_visitors_c0, _visitors_c1) ->
-          let _visitors_r0 = self#visit_'p env _visitors_c0 in
-          let _visitors_r1 = self#visit_'p env _visitors_c1 in
-          (_visitors_r0, _visitors_r1))
-          _visitors_c0
-      in
-      Range _visitors_r0
+      Range r0
 
     method visit_AEmpty env = AEmpty
 
-    method visit_AScalar env _visitors_c0 =
-      let _visitors_r0 = self#visit_scalar env _visitors_c0 in
-      AScalar _visitors_r0
+    method visit_AScalar env c0 =
+      let r0 = self#visit_scalar env c0 in
+      AScalar r0
 
-    method visit_AList env _visitors_c0 =
-      let _visitors_r0 = self#visit_list_ env _visitors_c0 in
-      AList _visitors_r0
+    method visit_AList env c0 =
+      let r0 = self#visit_list_ env c0 in
+      AList r0
 
-    method visit_ATuple env _visitors_c0 =
-      let _visitors_r0 =
-        (fun (_visitors_c0, _visitors_c1) ->
-          let _visitors_r0 = self#visit_list self#visit_'r env _visitors_c0 in
-          let _visitors_r1 =
-            (fun _visitors_this -> _visitors_this) _visitors_c1
-          in
-          (_visitors_r0, _visitors_r1))
-          _visitors_c0
+    method visit_ATuple env c0 =
+      let r0 =
+        (fun (c0, c1) ->
+          let r0 = self#visit_list self#visit_'r env c0 in
+          let r1 = (fun this -> this) c1 in
+          (r0, r1))
+          c0
       in
-      ATuple _visitors_r0
+      ATuple r0
 
-    method visit_AHashIdx env _visitors_c0 =
-      let _visitors_r0 = self#visit_hash_idx env _visitors_c0 in
-      AHashIdx _visitors_r0
+    method visit_AHashIdx env c0 =
+      let r0 = self#visit_hash_idx env c0 in
+      AHashIdx r0
 
-    method visit_AOrderedIdx env _visitors_c0 =
-      let _visitors_r0 = self#visit_ordered_idx env _visitors_c0 in
-      AOrderedIdx _visitors_r0
+    method visit_AOrderedIdx env c0 =
+      let r0 = self#visit_ordered_idx env c0 in
+      AOrderedIdx r0
 
-    method visit_Call env _visitors_c0 _visitors_c1 =
-      let _visitors_r0 = self#visit_scan_type env _visitors_c0 in
-      let _visitors_r1 = self#visit_string env _visitors_c1 in
-      Call (_visitors_r0, _visitors_r1)
+    method visit_Call env c0 c1 =
+      let r0 = self#visit_scan_type env c0 in
+      let r1 = self#visit_string env c1 in
+      Call (r0, r1)
 
-    method visit_query env _visitors_this =
-      match _visitors_this with
-      | Select _visitors_c0 -> self#visit_Select env _visitors_c0
-      | Filter _visitors_c0 -> self#visit_Filter env _visitors_c0
-      | Join _visitors_c0 -> self#visit_Join env _visitors_c0
-      | DepJoin _visitors_c0 -> self#visit_DepJoin env _visitors_c0
-      | GroupBy _visitors_c0 -> self#visit_GroupBy env _visitors_c0
-      | OrderBy _visitors_c0 -> self#visit_OrderBy env _visitors_c0
-      | Dedup _visitors_c0 -> self#visit_Dedup env _visitors_c0
-      | Relation _visitors_c0 -> self#visit_Relation env _visitors_c0
-      | Range _visitors_c0 -> self#visit_Range env _visitors_c0
+    method visit_query env this =
+      match this with
+      | Select c0 -> self#visit_Select env c0
+      | Filter c0 -> self#visit_Filter env c0
+      | Join c0 -> self#visit_Join env c0
+      | DepJoin c0 -> self#visit_DepJoin env c0
+      | GroupBy c0 -> self#visit_GroupBy env c0
+      | OrderBy c0 -> self#visit_OrderBy env c0
+      | Dedup c0 -> self#visit_Dedup env c0
+      | Relation c0 -> self#visit_Relation env c0
+      | Range c0 -> self#visit_Range env c0
       | AEmpty -> self#visit_AEmpty env
-      | AScalar _visitors_c0 -> self#visit_AScalar env _visitors_c0
-      | AList _visitors_c0 -> self#visit_AList env _visitors_c0
-      | ATuple _visitors_c0 -> self#visit_ATuple env _visitors_c0
-      | AHashIdx _visitors_c0 -> self#visit_AHashIdx env _visitors_c0
-      | AOrderedIdx _visitors_c0 -> self#visit_AOrderedIdx env _visitors_c0
-      | Call (_visitors_c0, _visitors_c1) ->
-          self#visit_Call env _visitors_c0 _visitors_c1
+      | AScalar c0 -> self#visit_AScalar env c0
+      | AList c0 -> self#visit_AList env c0
+      | ATuple c0 -> self#visit_ATuple env c0
+      | AHashIdx c0 -> self#visit_AHashIdx env c0
+      | AOrderedIdx c0 -> self#visit_AOrderedIdx env c0
+      | Call (c0, c1) -> self#visit_Call env c0 c1
 
-    method visit_annot env _visitors_this =
-      let _visitors_r0 = self#visit_query env _visitors_this.node in
-      let _visitors_r1 = self#visit_'m env _visitors_this.meta in
-      { node = _visitors_r0; meta = _visitors_r1 }
+    method visit_annot env this =
+      let r0 = self#visit_query env this.node in
+      let r1 = self#visit_'m env this.meta in
+      { node = r0; meta = r1 }
 
     method visit_t env = self#visit_annot env
   end
@@ -849,320 +650,293 @@ class virtual ['self] base_iter =
     method virtual visit_'p : _
     method virtual visit_'r : _
 
-    method visit_Name env _visitors_c0 =
-      let _visitors_r0 = (fun _visitors_this -> ()) _visitors_c0 in
+    method visit_Name env c0 =
+      let r0 = (fun this -> ()) c0 in
       ()
 
-    method visit_Int env _visitors_c0 =
-      let _visitors_r0 = (fun _visitors_this -> ()) _visitors_c0 in
+    method visit_Int env c0 =
+      let r0 = (fun this -> ()) c0 in
       ()
 
-    method visit_Fixed env _visitors_c0 =
-      let _visitors_r0 = (fun _visitors_this -> ()) _visitors_c0 in
+    method visit_Fixed env c0 =
+      let r0 = (fun this -> ()) c0 in
       ()
 
-    method visit_Date env _visitors_c0 =
-      let _visitors_r0 = (fun _visitors_this -> ()) _visitors_c0 in
+    method visit_Date env c0 =
+      let r0 = (fun this -> ()) c0 in
       ()
 
-    method visit_Bool env _visitors_c0 =
-      let _visitors_r0 = (fun _visitors_this -> ()) _visitors_c0 in
+    method visit_Bool env c0 =
+      let r0 = (fun this -> ()) c0 in
       ()
 
-    method visit_String env _visitors_c0 =
-      let _visitors_r0 = (fun _visitors_this -> ()) _visitors_c0 in
+    method visit_String env c0 =
+      let r0 = (fun this -> ()) c0 in
       ()
 
-    method visit_Null env _visitors_c0 =
-      let _visitors_r0 = (fun _visitors_this -> ()) _visitors_c0 in
+    method visit_Null env c0 =
+      let r0 = (fun this -> ()) c0 in
       ()
 
-    method visit_Unop env _visitors_c0 _visitors_c1 =
-      let _visitors_r0 = (fun _visitors_this -> ()) _visitors_c0 in
-      let _visitors_r1 = self#visit_pred env _visitors_c1 in
+    method visit_Unop env c0 c1 =
+      let r0 = (fun this -> ()) c0 in
+      let r1 = self#visit_pred env c1 in
       ()
 
-    method visit_Binop env _visitors_c0 _visitors_c1 _visitors_c2 =
-      let _visitors_r0 = (fun _visitors_this -> ()) _visitors_c0 in
-      let _visitors_r1 = self#visit_pred env _visitors_c1 in
-      let _visitors_r2 = self#visit_pred env _visitors_c2 in
+    method visit_Binop env c0 c1 c2 =
+      let r0 = (fun this -> ()) c0 in
+      let r1 = self#visit_pred env c1 in
+      let r2 = self#visit_pred env c2 in
       ()
 
     method visit_Count env = ()
     method visit_Row_number env = ()
 
-    method visit_Sum env _visitors_c0 =
-      let _visitors_r0 = self#visit_pred env _visitors_c0 in
+    method visit_Sum env c0 =
+      let r0 = self#visit_pred env c0 in
       ()
 
-    method visit_Avg env _visitors_c0 =
-      let _visitors_r0 = self#visit_pred env _visitors_c0 in
+    method visit_Avg env c0 =
+      let r0 = self#visit_pred env c0 in
       ()
 
-    method visit_Min env _visitors_c0 =
-      let _visitors_r0 = self#visit_pred env _visitors_c0 in
+    method visit_Min env c0 =
+      let r0 = self#visit_pred env c0 in
       ()
 
-    method visit_Max env _visitors_c0 =
-      let _visitors_r0 = self#visit_pred env _visitors_c0 in
+    method visit_Max env c0 =
+      let r0 = self#visit_pred env c0 in
       ()
 
-    method visit_If env _visitors_c0 _visitors_c1 _visitors_c2 =
-      let _visitors_r0 = self#visit_pred env _visitors_c0 in
-      let _visitors_r1 = self#visit_pred env _visitors_c1 in
-      let _visitors_r2 = self#visit_pred env _visitors_c2 in
+    method visit_If env c0 c1 c2 =
+      let r0 = self#visit_pred env c0 in
+      let r1 = self#visit_pred env c1 in
+      let r2 = self#visit_pred env c2 in
       ()
 
-    method visit_First env _visitors_c0 =
-      let _visitors_r0 = self#visit_'r env _visitors_c0 in
+    method visit_First env c0 =
+      let r0 = self#visit_'r env c0 in
       ()
 
-    method visit_Exists env _visitors_c0 =
-      let _visitors_r0 = self#visit_'r env _visitors_c0 in
+    method visit_Exists env c0 =
+      let r0 = self#visit_'r env c0 in
       ()
 
-    method visit_Substring env _visitors_c0 _visitors_c1 _visitors_c2 =
-      let _visitors_r0 = self#visit_pred env _visitors_c0 in
-      let _visitors_r1 = self#visit_pred env _visitors_c1 in
-      let _visitors_r2 = self#visit_pred env _visitors_c2 in
+    method visit_Substring env c0 c1 c2 =
+      let r0 = self#visit_pred env c0 in
+      let r1 = self#visit_pred env c1 in
+      let r2 = self#visit_pred env c2 in
       ()
 
-    method visit_pred env _visitors_this =
-      match _visitors_this with
-      | Name _visitors_c0 -> self#visit_Name env _visitors_c0
-      | Int _visitors_c0 -> self#visit_Int env _visitors_c0
-      | Fixed _visitors_c0 -> self#visit_Fixed env _visitors_c0
-      | Date _visitors_c0 -> self#visit_Date env _visitors_c0
-      | Bool _visitors_c0 -> self#visit_Bool env _visitors_c0
-      | String _visitors_c0 -> self#visit_String env _visitors_c0
-      | Null _visitors_c0 -> self#visit_Null env _visitors_c0
-      | Unop (_visitors_c0, _visitors_c1) ->
-          self#visit_Unop env _visitors_c0 _visitors_c1
-      | Binop (_visitors_c0, _visitors_c1, _visitors_c2) ->
-          self#visit_Binop env _visitors_c0 _visitors_c1 _visitors_c2
+    method visit_pred env this =
+      match this with
+      | Name c0 -> self#visit_Name env c0
+      | Int c0 -> self#visit_Int env c0
+      | Fixed c0 -> self#visit_Fixed env c0
+      | Date c0 -> self#visit_Date env c0
+      | Bool c0 -> self#visit_Bool env c0
+      | String c0 -> self#visit_String env c0
+      | Null c0 -> self#visit_Null env c0
+      | Unop (c0, c1) -> self#visit_Unop env c0 c1
+      | Binop (c0, c1, c2) -> self#visit_Binop env c0 c1 c2
       | Count -> self#visit_Count env
       | Row_number -> self#visit_Row_number env
-      | Sum _visitors_c0 -> self#visit_Sum env _visitors_c0
-      | Avg _visitors_c0 -> self#visit_Avg env _visitors_c0
-      | Min _visitors_c0 -> self#visit_Min env _visitors_c0
-      | Max _visitors_c0 -> self#visit_Max env _visitors_c0
-      | If (_visitors_c0, _visitors_c1, _visitors_c2) ->
-          self#visit_If env _visitors_c0 _visitors_c1 _visitors_c2
-      | First _visitors_c0 -> self#visit_First env _visitors_c0
-      | Exists _visitors_c0 -> self#visit_Exists env _visitors_c0
-      | Substring (_visitors_c0, _visitors_c1, _visitors_c2) ->
-          self#visit_Substring env _visitors_c0 _visitors_c1 _visitors_c2
+      | Sum c0 -> self#visit_Sum env c0
+      | Avg c0 -> self#visit_Avg env c0
+      | Min c0 -> self#visit_Min env c0
+      | Max c0 -> self#visit_Max env c0
+      | If (c0, c1, c2) -> self#visit_If env c0 c1 c2
+      | First c0 -> self#visit_First env c0
+      | Exists c0 -> self#visit_Exists env c0
+      | Substring (c0, c1, c2) -> self#visit_Substring env c0 c1 c2
 
     method visit_scope env = self#visit_string env
 
-    method visit_hash_idx env _visitors_this =
-      let _visitors_r0 = self#visit_'r env _visitors_this.hi_keys in
-      let _visitors_r1 = self#visit_'r env _visitors_this.hi_values in
-      let _visitors_r2 = self#visit_scope env _visitors_this.hi_scope in
-      let _visitors_r3 =
-        self#visit_option self#visit_'r env _visitors_this.hi_key_layout
-      in
-      let _visitors_r4 =
-        self#visit_list self#visit_'p env _visitors_this.hi_lookup
-      in
+    method visit_hash_idx env this =
+      let r0 = self#visit_'r env this.hi_keys in
+      let r1 = self#visit_'r env this.hi_values in
+      let r2 = self#visit_scope env this.hi_scope in
+      let r3 = self#visit_option self#visit_'r env this.hi_key_layout in
+      let r4 = self#visit_list self#visit_'p env this.hi_lookup in
       ()
 
-    method visit_bound env (_visitors_c0, _visitors_c1) =
-      let _visitors_r0 = self#visit_'p env _visitors_c0 in
-      let _visitors_r1 = (fun _visitors_this -> ()) _visitors_c1 in
+    method visit_bound env (c0, c1) =
+      let r0 = self#visit_'p env c0 in
+      let r1 = (fun this -> ()) c1 in
       ()
 
-    method visit_ordered_idx env _visitors_this =
-      let _visitors_r0 = self#visit_'r env _visitors_this.oi_keys in
-      let _visitors_r1 = self#visit_'r env _visitors_this.oi_values in
-      let _visitors_r2 = self#visit_scope env _visitors_this.oi_scope in
-      let _visitors_r3 =
-        self#visit_option self#visit_'r env _visitors_this.oi_key_layout
-      in
-      let _visitors_r4 =
+    method visit_ordered_idx env this =
+      let r0 = self#visit_'r env this.oi_keys in
+      let r1 = self#visit_'r env this.oi_values in
+      let r2 = self#visit_scope env this.oi_scope in
+      let r3 = self#visit_option self#visit_'r env this.oi_key_layout in
+      let r4 =
         self#visit_list
-          (fun env (_visitors_c0, _visitors_c1) ->
-            let _visitors_r0 =
-              self#visit_option self#visit_bound env _visitors_c0
-            in
-            let _visitors_r1 =
-              self#visit_option self#visit_bound env _visitors_c1
-            in
+          (fun env (c0, c1) ->
+            let r0 = self#visit_option self#visit_bound env c0 in
+            let r1 = self#visit_option self#visit_bound env c1 in
             ())
-          env _visitors_this.oi_lookup
+          env this.oi_lookup
       in
       ()
 
-    method visit_list_ env _visitors_this =
-      let _visitors_r0 = self#visit_'r env _visitors_this.l_keys in
-      let _visitors_r1 = self#visit_'r env _visitors_this.l_values in
-      let _visitors_r2 = self#visit_scope env _visitors_this.l_scope in
+    method visit_list_ env this =
+      let r0 = self#visit_'r env this.l_keys in
+      let r1 = self#visit_'r env this.l_values in
+      let r2 = self#visit_scope env this.l_scope in
       ()
 
-    method visit_depjoin env _visitors_this =
-      let _visitors_r0 = self#visit_'r env _visitors_this.d_lhs in
-      let _visitors_r1 = self#visit_scope env _visitors_this.d_alias in
-      let _visitors_r2 = self#visit_'r env _visitors_this.d_rhs in
+    method visit_depjoin env this =
+      let r0 = self#visit_'r env this.d_lhs in
+      let r1 = self#visit_scope env this.d_alias in
+      let r2 = self#visit_'r env this.d_rhs in
       ()
 
-    method visit_join env _visitors_this =
-      let _visitors_r0 = self#visit_'p env _visitors_this.pred in
-      let _visitors_r1 = self#visit_'r env _visitors_this.r1 in
-      let _visitors_r2 = self#visit_'r env _visitors_this.r2 in
+    method visit_join env this =
+      let r0 = self#visit_'p env this.pred in
+      let r1 = self#visit_'r env this.r1 in
+      let r2 = self#visit_'r env this.r2 in
       ()
 
-    method visit_order_by env _visitors_this =
-      let _visitors_r0 =
+    method visit_order_by env this =
+      let r0 =
         self#visit_list
-          (fun env (_visitors_c0, _visitors_c1) ->
-            let _visitors_r0 = self#visit_'p env _visitors_c0 in
-            let _visitors_r1 = (fun _visitors_this -> ()) _visitors_c1 in
+          (fun env (c0, c1) ->
+            let r0 = self#visit_'p env c0 in
+            let r1 = (fun this -> ()) c1 in
             ())
-          env _visitors_this.key
+          env this.key
       in
-      let _visitors_r1 = self#visit_'r env _visitors_this.rel in
+      let r1 = self#visit_'r env this.rel in
       ()
 
-    method visit_scalar env _visitors_this =
-      let _visitors_r0 = self#visit_'p env _visitors_this.s_pred in
-      let _visitors_r1 = self#visit_string env _visitors_this.s_name in
+    method visit_scalar env this =
+      let r0 = self#visit_'p env this.s_pred in
+      let r1 = self#visit_string env this.s_name in
       ()
 
-    method visit_scan_type env _visitors_this =
-      let _visitors_r0 =
-        self#visit_select_list self#visit_'p env _visitors_this.select
-      in
-      let _visitors_r1 =
-        self#visit_list self#visit_'p env _visitors_this.filter
-      in
-      let _visitors_r2 =
-        self#visit_list (fun env _visitors_this -> ()) env _visitors_this.tables
-      in
+    method visit_scan_type env this =
+      let r0 = self#visit_select_list self#visit_'p env this.select in
+      let r1 = self#visit_list self#visit_'p env this.filter in
+      let r2 = self#visit_list (fun env this -> ()) env this.tables in
       ()
 
-    method visit_Select env _visitors_c0 =
-      let _visitors_r0 =
-        (fun (_visitors_c0, _visitors_c1) ->
-          let _visitors_r0 =
-            self#visit_select_list self#visit_'p env _visitors_c0
-          in
-          let _visitors_r1 = self#visit_'r env _visitors_c1 in
+    method visit_Select env c0 =
+      let r0 =
+        (fun (c0, c1) ->
+          let r0 = self#visit_select_list self#visit_'p env c0 in
+          let r1 = self#visit_'r env c1 in
           ())
-          _visitors_c0
+          c0
       in
       ()
 
-    method visit_Filter env _visitors_c0 =
-      let _visitors_r0 =
-        (fun (_visitors_c0, _visitors_c1) ->
-          let _visitors_r0 = self#visit_'p env _visitors_c0 in
-          let _visitors_r1 = self#visit_'r env _visitors_c1 in
+    method visit_Filter env c0 =
+      let r0 =
+        (fun (c0, c1) ->
+          let r0 = self#visit_'p env c0 in
+          let r1 = self#visit_'r env c1 in
           ())
-          _visitors_c0
+          c0
       in
       ()
 
-    method visit_Join env _visitors_c0 =
-      let _visitors_r0 = self#visit_join env _visitors_c0 in
+    method visit_Join env c0 =
+      let r0 = self#visit_join env c0 in
       ()
 
-    method visit_DepJoin env _visitors_c0 =
-      let _visitors_r0 = self#visit_depjoin env _visitors_c0 in
+    method visit_DepJoin env c0 =
+      let r0 = self#visit_depjoin env c0 in
       ()
 
-    method visit_GroupBy env _visitors_c0 =
-      let _visitors_r0 =
-        (fun (_visitors_c0, _visitors_c1, _visitors_c2) ->
-          let _visitors_r0 =
-            self#visit_select_list self#visit_'p env _visitors_c0
-          in
-          let _visitors_r1 =
-            self#visit_list (fun env _visitors_this -> ()) env _visitors_c1
-          in
-          let _visitors_r2 = self#visit_'r env _visitors_c2 in
+    method visit_GroupBy env c0 =
+      let r0 =
+        (fun (c0, c1, c2) ->
+          let r0 = self#visit_select_list self#visit_'p env c0 in
+          let r1 = self#visit_list (fun env this -> ()) env c1 in
+          let r2 = self#visit_'r env c2 in
           ())
-          _visitors_c0
+          c0
       in
       ()
 
-    method visit_OrderBy env _visitors_c0 =
-      let _visitors_r0 = self#visit_order_by env _visitors_c0 in
+    method visit_OrderBy env c0 =
+      let r0 = self#visit_order_by env c0 in
       ()
 
-    method visit_Dedup env _visitors_c0 =
-      let _visitors_r0 = self#visit_'r env _visitors_c0 in
+    method visit_Dedup env c0 =
+      let r0 = self#visit_'r env c0 in
       ()
 
-    method visit_Relation env _visitors_c0 =
-      let _visitors_r0 = (fun _visitors_this -> ()) _visitors_c0 in
+    method visit_Relation env c0 =
+      let r0 = (fun this -> ()) c0 in
       ()
 
-    method visit_Range env _visitors_c0 =
-      let _visitors_r0 =
-        (fun (_visitors_c0, _visitors_c1) ->
-          let _visitors_r0 = self#visit_'p env _visitors_c0 in
-          let _visitors_r1 = self#visit_'p env _visitors_c1 in
+    method visit_Range env c0 =
+      let r0 =
+        (fun (c0, c1) ->
+          let r0 = self#visit_'p env c0 in
+          let r1 = self#visit_'p env c1 in
           ())
-          _visitors_c0
+          c0
       in
       ()
 
     method visit_AEmpty env = ()
 
-    method visit_AScalar env _visitors_c0 =
-      let _visitors_r0 = self#visit_scalar env _visitors_c0 in
+    method visit_AScalar env c0 =
+      let r0 = self#visit_scalar env c0 in
       ()
 
-    method visit_AList env _visitors_c0 =
-      let _visitors_r0 = self#visit_list_ env _visitors_c0 in
+    method visit_AList env c0 =
+      let r0 = self#visit_list_ env c0 in
       ()
 
-    method visit_ATuple env _visitors_c0 =
-      let _visitors_r0 =
-        (fun (_visitors_c0, _visitors_c1) ->
-          let _visitors_r0 = self#visit_list self#visit_'r env _visitors_c0 in
-          let _visitors_r1 = (fun _visitors_this -> ()) _visitors_c1 in
+    method visit_ATuple env c0 =
+      let r0 =
+        (fun (c0, c1) ->
+          let r0 = self#visit_list self#visit_'r env c0 in
+          let r1 = (fun this -> ()) c1 in
           ())
-          _visitors_c0
+          c0
       in
       ()
 
-    method visit_AHashIdx env _visitors_c0 =
-      let _visitors_r0 = self#visit_hash_idx env _visitors_c0 in
+    method visit_AHashIdx env c0 =
+      let r0 = self#visit_hash_idx env c0 in
       ()
 
-    method visit_AOrderedIdx env _visitors_c0 =
-      let _visitors_r0 = self#visit_ordered_idx env _visitors_c0 in
+    method visit_AOrderedIdx env c0 =
+      let r0 = self#visit_ordered_idx env c0 in
       ()
 
-    method visit_Call env _visitors_c0 _visitors_c1 =
-      let _visitors_r0 = self#visit_scan_type env _visitors_c0 in
-      let _visitors_r1 = self#visit_string env _visitors_c1 in
+    method visit_Call env c0 c1 =
+      let r0 = self#visit_scan_type env c0 in
+      let r1 = self#visit_string env c1 in
       ()
 
-    method visit_query env _visitors_this =
-      match _visitors_this with
-      | Select _visitors_c0 -> self#visit_Select env _visitors_c0
-      | Filter _visitors_c0 -> self#visit_Filter env _visitors_c0
-      | Join _visitors_c0 -> self#visit_Join env _visitors_c0
-      | DepJoin _visitors_c0 -> self#visit_DepJoin env _visitors_c0
-      | GroupBy _visitors_c0 -> self#visit_GroupBy env _visitors_c0
-      | OrderBy _visitors_c0 -> self#visit_OrderBy env _visitors_c0
-      | Dedup _visitors_c0 -> self#visit_Dedup env _visitors_c0
-      | Relation _visitors_c0 -> self#visit_Relation env _visitors_c0
-      | Range _visitors_c0 -> self#visit_Range env _visitors_c0
+    method visit_query env this =
+      match this with
+      | Select c0 -> self#visit_Select env c0
+      | Filter c0 -> self#visit_Filter env c0
+      | Join c0 -> self#visit_Join env c0
+      | DepJoin c0 -> self#visit_DepJoin env c0
+      | GroupBy c0 -> self#visit_GroupBy env c0
+      | OrderBy c0 -> self#visit_OrderBy env c0
+      | Dedup c0 -> self#visit_Dedup env c0
+      | Relation c0 -> self#visit_Relation env c0
+      | Range c0 -> self#visit_Range env c0
       | AEmpty -> self#visit_AEmpty env
-      | AScalar _visitors_c0 -> self#visit_AScalar env _visitors_c0
-      | AList _visitors_c0 -> self#visit_AList env _visitors_c0
-      | ATuple _visitors_c0 -> self#visit_ATuple env _visitors_c0
-      | AHashIdx _visitors_c0 -> self#visit_AHashIdx env _visitors_c0
-      | AOrderedIdx _visitors_c0 -> self#visit_AOrderedIdx env _visitors_c0
-      | Call (_visitors_c0, _visitors_c1) ->
-          self#visit_Call env _visitors_c0 _visitors_c1
+      | AScalar c0 -> self#visit_AScalar env c0
+      | AList c0 -> self#visit_AList env c0
+      | ATuple c0 -> self#visit_ATuple env c0
+      | AHashIdx c0 -> self#visit_AHashIdx env c0
+      | AOrderedIdx c0 -> self#visit_AOrderedIdx env c0
+      | Call (c0, c1) -> self#visit_Call env c0 c1
 
-    method visit_annot env _visitors_this =
-      let _visitors_r0 = self#visit_query env _visitors_this.node in
-      let _visitors_r1 = self#visit_'m env _visitors_this.meta in
+    method visit_annot env this =
+      let r0 = self#visit_query env this.node in
+      let r1 = self#visit_'m env this.meta in
       ()
 
     method visit_t env = self#visit_annot env
@@ -1175,333 +949,294 @@ class virtual ['self] base_reduce =
     method virtual visit_'p : _
     method virtual visit_'r : _
 
-    method visit_Name env _visitors_c0 =
-      let _visitors_s0 = (fun _visitors_this -> self#zero) _visitors_c0 in
-      _visitors_s0
+    method visit_Name env c0 =
+      let s0 = (fun this -> self#zero) c0 in
+      s0
 
-    method visit_Int env _visitors_c0 =
-      let _visitors_s0 = (fun _visitors_this -> self#zero) _visitors_c0 in
-      _visitors_s0
+    method visit_Int env c0 =
+      let s0 = (fun this -> self#zero) c0 in
+      s0
 
-    method visit_Fixed env _visitors_c0 =
-      let _visitors_s0 = (fun _visitors_this -> self#zero) _visitors_c0 in
-      _visitors_s0
+    method visit_Fixed env c0 =
+      let s0 = (fun this -> self#zero) c0 in
+      s0
 
-    method visit_Date env _visitors_c0 =
-      let _visitors_s0 = (fun _visitors_this -> self#zero) _visitors_c0 in
-      _visitors_s0
+    method visit_Date env c0 =
+      let s0 = (fun this -> self#zero) c0 in
+      s0
 
-    method visit_Bool env _visitors_c0 =
-      let _visitors_s0 = (fun _visitors_this -> self#zero) _visitors_c0 in
-      _visitors_s0
+    method visit_Bool env c0 =
+      let s0 = (fun this -> self#zero) c0 in
+      s0
 
-    method visit_String env _visitors_c0 =
-      let _visitors_s0 = (fun _visitors_this -> self#zero) _visitors_c0 in
-      _visitors_s0
+    method visit_String env c0 =
+      let s0 = (fun this -> self#zero) c0 in
+      s0
 
-    method visit_Null env _visitors_c0 =
-      let _visitors_s0 = (fun _visitors_this -> self#zero) _visitors_c0 in
-      _visitors_s0
+    method visit_Null env c0 =
+      let s0 = (fun this -> self#zero) c0 in
+      s0
 
-    method visit_Unop env _visitors_c0 _visitors_c1 =
-      let _visitors_s0 = (fun _visitors_this -> self#zero) _visitors_c0 in
-      let _visitors_s1 = self#visit_pred env _visitors_c1 in
-      self#plus _visitors_s0 _visitors_s1
+    method visit_Unop env c0 c1 =
+      let s0 = (fun this -> self#zero) c0 in
+      let s1 = self#visit_pred env c1 in
+      self#plus s0 s1
 
-    method visit_Binop env _visitors_c0 _visitors_c1 _visitors_c2 =
-      let _visitors_s0 = (fun _visitors_this -> self#zero) _visitors_c0 in
-      let _visitors_s1 = self#visit_pred env _visitors_c1 in
-      let _visitors_s2 = self#visit_pred env _visitors_c2 in
-      self#plus (self#plus _visitors_s0 _visitors_s1) _visitors_s2
+    method visit_Binop env c0 c1 c2 =
+      let s0 = (fun this -> self#zero) c0 in
+      let s1 = self#visit_pred env c1 in
+      let s2 = self#visit_pred env c2 in
+      self#plus (self#plus s0 s1) s2
 
     method visit_Count env = self#zero
     method visit_Row_number env = self#zero
 
-    method visit_Sum env _visitors_c0 =
-      let _visitors_s0 = self#visit_pred env _visitors_c0 in
-      _visitors_s0
+    method visit_Sum env c0 =
+      let s0 = self#visit_pred env c0 in
+      s0
 
-    method visit_Avg env _visitors_c0 =
-      let _visitors_s0 = self#visit_pred env _visitors_c0 in
-      _visitors_s0
+    method visit_Avg env c0 =
+      let s0 = self#visit_pred env c0 in
+      s0
 
-    method visit_Min env _visitors_c0 =
-      let _visitors_s0 = self#visit_pred env _visitors_c0 in
-      _visitors_s0
+    method visit_Min env c0 =
+      let s0 = self#visit_pred env c0 in
+      s0
 
-    method visit_Max env _visitors_c0 =
-      let _visitors_s0 = self#visit_pred env _visitors_c0 in
-      _visitors_s0
+    method visit_Max env c0 =
+      let s0 = self#visit_pred env c0 in
+      s0
 
-    method visit_If env _visitors_c0 _visitors_c1 _visitors_c2 =
-      let _visitors_s0 = self#visit_pred env _visitors_c0 in
-      let _visitors_s1 = self#visit_pred env _visitors_c1 in
-      let _visitors_s2 = self#visit_pred env _visitors_c2 in
-      self#plus (self#plus _visitors_s0 _visitors_s1) _visitors_s2
+    method visit_If env c0 c1 c2 =
+      let s0 = self#visit_pred env c0 in
+      let s1 = self#visit_pred env c1 in
+      let s2 = self#visit_pred env c2 in
+      self#plus (self#plus s0 s1) s2
 
-    method visit_First env _visitors_c0 =
-      let _visitors_s0 = self#visit_'r env _visitors_c0 in
-      _visitors_s0
+    method visit_First env c0 =
+      let s0 = self#visit_'r env c0 in
+      s0
 
-    method visit_Exists env _visitors_c0 =
-      let _visitors_s0 = self#visit_'r env _visitors_c0 in
-      _visitors_s0
+    method visit_Exists env c0 =
+      let s0 = self#visit_'r env c0 in
+      s0
 
-    method visit_Substring env _visitors_c0 _visitors_c1 _visitors_c2 =
-      let _visitors_s0 = self#visit_pred env _visitors_c0 in
-      let _visitors_s1 = self#visit_pred env _visitors_c1 in
-      let _visitors_s2 = self#visit_pred env _visitors_c2 in
-      self#plus (self#plus _visitors_s0 _visitors_s1) _visitors_s2
+    method visit_Substring env c0 c1 c2 =
+      let s0 = self#visit_pred env c0 in
+      let s1 = self#visit_pred env c1 in
+      let s2 = self#visit_pred env c2 in
+      self#plus (self#plus s0 s1) s2
 
-    method visit_pred env _visitors_this =
-      match _visitors_this with
-      | Name _visitors_c0 -> self#visit_Name env _visitors_c0
-      | Int _visitors_c0 -> self#visit_Int env _visitors_c0
-      | Fixed _visitors_c0 -> self#visit_Fixed env _visitors_c0
-      | Date _visitors_c0 -> self#visit_Date env _visitors_c0
-      | Bool _visitors_c0 -> self#visit_Bool env _visitors_c0
-      | String _visitors_c0 -> self#visit_String env _visitors_c0
-      | Null _visitors_c0 -> self#visit_Null env _visitors_c0
-      | Unop (_visitors_c0, _visitors_c1) ->
-          self#visit_Unop env _visitors_c0 _visitors_c1
-      | Binop (_visitors_c0, _visitors_c1, _visitors_c2) ->
-          self#visit_Binop env _visitors_c0 _visitors_c1 _visitors_c2
+    method visit_pred env this =
+      match this with
+      | Name c0 -> self#visit_Name env c0
+      | Int c0 -> self#visit_Int env c0
+      | Fixed c0 -> self#visit_Fixed env c0
+      | Date c0 -> self#visit_Date env c0
+      | Bool c0 -> self#visit_Bool env c0
+      | String c0 -> self#visit_String env c0
+      | Null c0 -> self#visit_Null env c0
+      | Unop (c0, c1) -> self#visit_Unop env c0 c1
+      | Binop (c0, c1, c2) -> self#visit_Binop env c0 c1 c2
       | Count -> self#visit_Count env
       | Row_number -> self#visit_Row_number env
-      | Sum _visitors_c0 -> self#visit_Sum env _visitors_c0
-      | Avg _visitors_c0 -> self#visit_Avg env _visitors_c0
-      | Min _visitors_c0 -> self#visit_Min env _visitors_c0
-      | Max _visitors_c0 -> self#visit_Max env _visitors_c0
-      | If (_visitors_c0, _visitors_c1, _visitors_c2) ->
-          self#visit_If env _visitors_c0 _visitors_c1 _visitors_c2
-      | First _visitors_c0 -> self#visit_First env _visitors_c0
-      | Exists _visitors_c0 -> self#visit_Exists env _visitors_c0
-      | Substring (_visitors_c0, _visitors_c1, _visitors_c2) ->
-          self#visit_Substring env _visitors_c0 _visitors_c1 _visitors_c2
+      | Sum c0 -> self#visit_Sum env c0
+      | Avg c0 -> self#visit_Avg env c0
+      | Min c0 -> self#visit_Min env c0
+      | Max c0 -> self#visit_Max env c0
+      | If (c0, c1, c2) -> self#visit_If env c0 c1 c2
+      | First c0 -> self#visit_First env c0
+      | Exists c0 -> self#visit_Exists env c0
+      | Substring (c0, c1, c2) -> self#visit_Substring env c0 c1 c2
 
     method visit_scope env = self#visit_string env
 
-    method visit_hash_idx env _visitors_this =
-      let _visitors_s0 = self#visit_'r env _visitors_this.hi_keys in
-      let _visitors_s1 = self#visit_'r env _visitors_this.hi_values in
-      let _visitors_s2 = self#visit_scope env _visitors_this.hi_scope in
-      let _visitors_s3 =
-        self#visit_option self#visit_'r env _visitors_this.hi_key_layout
-      in
-      let _visitors_s4 =
-        self#visit_list self#visit_'p env _visitors_this.hi_lookup
-      in
-      self#plus
-        (self#plus
-           (self#plus (self#plus _visitors_s0 _visitors_s1) _visitors_s2)
-           _visitors_s3)
-        _visitors_s4
+    method visit_hash_idx env this =
+      let s0 = self#visit_'r env this.hi_keys in
+      let s1 = self#visit_'r env this.hi_values in
+      let s2 = self#visit_scope env this.hi_scope in
+      let s3 = self#visit_option self#visit_'r env this.hi_key_layout in
+      let s4 = self#visit_list self#visit_'p env this.hi_lookup in
+      self#plus (self#plus (self#plus (self#plus s0 s1) s2) s3) s4
 
-    method visit_bound env (_visitors_c0, _visitors_c1) =
-      let _visitors_s0 = self#visit_'p env _visitors_c0 in
-      let _visitors_s1 = (fun _visitors_this -> self#zero) _visitors_c1 in
-      self#plus _visitors_s0 _visitors_s1
+    method visit_bound env (c0, c1) =
+      let s0 = self#visit_'p env c0 in
+      let s1 = (fun this -> self#zero) c1 in
+      self#plus s0 s1
 
-    method visit_ordered_idx env _visitors_this =
-      let _visitors_s0 = self#visit_'r env _visitors_this.oi_keys in
-      let _visitors_s1 = self#visit_'r env _visitors_this.oi_values in
-      let _visitors_s2 = self#visit_scope env _visitors_this.oi_scope in
-      let _visitors_s3 =
-        self#visit_option self#visit_'r env _visitors_this.oi_key_layout
-      in
-      let _visitors_s4 =
+    method visit_ordered_idx env this =
+      let s0 = self#visit_'r env this.oi_keys in
+      let s1 = self#visit_'r env this.oi_values in
+      let s2 = self#visit_scope env this.oi_scope in
+      let s3 = self#visit_option self#visit_'r env this.oi_key_layout in
+      let s4 =
         self#visit_list
-          (fun env (_visitors_c0, _visitors_c1) ->
-            let _visitors_s0 =
-              self#visit_option self#visit_bound env _visitors_c0
-            in
-            let _visitors_s1 =
-              self#visit_option self#visit_bound env _visitors_c1
-            in
-            self#plus _visitors_s0 _visitors_s1)
-          env _visitors_this.oi_lookup
+          (fun env (c0, c1) ->
+            let s0 = self#visit_option self#visit_bound env c0 in
+            let s1 = self#visit_option self#visit_bound env c1 in
+            self#plus s0 s1)
+          env this.oi_lookup
       in
-      self#plus
-        (self#plus
-           (self#plus (self#plus _visitors_s0 _visitors_s1) _visitors_s2)
-           _visitors_s3)
-        _visitors_s4
+      self#plus (self#plus (self#plus (self#plus s0 s1) s2) s3) s4
 
-    method visit_list_ env _visitors_this =
-      let _visitors_s0 = self#visit_'r env _visitors_this.l_keys in
-      let _visitors_s1 = self#visit_'r env _visitors_this.l_values in
-      let _visitors_s2 = self#visit_scope env _visitors_this.l_scope in
-      self#plus (self#plus _visitors_s0 _visitors_s1) _visitors_s2
+    method visit_list_ env this =
+      let s0 = self#visit_'r env this.l_keys in
+      let s1 = self#visit_'r env this.l_values in
+      let s2 = self#visit_scope env this.l_scope in
+      self#plus (self#plus s0 s1) s2
 
-    method visit_depjoin env _visitors_this =
-      let _visitors_s0 = self#visit_'r env _visitors_this.d_lhs in
-      let _visitors_s1 = self#visit_scope env _visitors_this.d_alias in
-      let _visitors_s2 = self#visit_'r env _visitors_this.d_rhs in
-      self#plus (self#plus _visitors_s0 _visitors_s1) _visitors_s2
+    method visit_depjoin env this =
+      let s0 = self#visit_'r env this.d_lhs in
+      let s1 = self#visit_scope env this.d_alias in
+      let s2 = self#visit_'r env this.d_rhs in
+      self#plus (self#plus s0 s1) s2
 
-    method visit_join env _visitors_this =
-      let _visitors_s0 = self#visit_'p env _visitors_this.pred in
-      let _visitors_s1 = self#visit_'r env _visitors_this.r1 in
-      let _visitors_s2 = self#visit_'r env _visitors_this.r2 in
-      self#plus (self#plus _visitors_s0 _visitors_s1) _visitors_s2
+    method visit_join env this =
+      let s0 = self#visit_'p env this.pred in
+      let s1 = self#visit_'r env this.r1 in
+      let s2 = self#visit_'r env this.r2 in
+      self#plus (self#plus s0 s1) s2
 
-    method visit_order_by env _visitors_this =
-      let _visitors_s0 =
+    method visit_order_by env this =
+      let s0 =
         self#visit_list
-          (fun env (_visitors_c0, _visitors_c1) ->
-            let _visitors_s0 = self#visit_'p env _visitors_c0 in
-            let _visitors_s1 = (fun _visitors_this -> self#zero) _visitors_c1 in
-            self#plus _visitors_s0 _visitors_s1)
-          env _visitors_this.key
+          (fun env (c0, c1) ->
+            let s0 = self#visit_'p env c0 in
+            let s1 = (fun this -> self#zero) c1 in
+            self#plus s0 s1)
+          env this.key
       in
-      let _visitors_s1 = self#visit_'r env _visitors_this.rel in
-      self#plus _visitors_s0 _visitors_s1
+      let s1 = self#visit_'r env this.rel in
+      self#plus s0 s1
 
-    method visit_scalar env _visitors_this =
-      let _visitors_s0 = self#visit_'p env _visitors_this.s_pred in
-      let _visitors_s1 = self#visit_string env _visitors_this.s_name in
-      self#plus _visitors_s0 _visitors_s1
+    method visit_scalar env this =
+      let s0 = self#visit_'p env this.s_pred in
+      let s1 = self#visit_string env this.s_name in
+      self#plus s0 s1
 
-    method visit_scan_type env _visitors_this =
-      let _visitors_s0 =
-        self#visit_select_list self#visit_'p env _visitors_this.select
+    method visit_scan_type env this =
+      let s0 = self#visit_select_list self#visit_'p env this.select in
+      let s1 = self#visit_list self#visit_'p env this.filter in
+      let s2 = self#visit_list (fun env this -> self#zero) env this.tables in
+      self#plus (self#plus s0 s1) s2
+
+    method visit_Select env c0 =
+      let s0 =
+        (fun (c0, c1) ->
+          let s0 = self#visit_select_list self#visit_'p env c0 in
+          let s1 = self#visit_'r env c1 in
+          self#plus s0 s1)
+          c0
       in
-      let _visitors_s1 =
-        self#visit_list self#visit_'p env _visitors_this.filter
+      s0
+
+    method visit_Filter env c0 =
+      let s0 =
+        (fun (c0, c1) ->
+          let s0 = self#visit_'p env c0 in
+          let s1 = self#visit_'r env c1 in
+          self#plus s0 s1)
+          c0
       in
-      let _visitors_s2 =
-        self#visit_list
-          (fun env _visitors_this -> self#zero)
-          env _visitors_this.tables
+      s0
+
+    method visit_Join env c0 =
+      let s0 = self#visit_join env c0 in
+      s0
+
+    method visit_DepJoin env c0 =
+      let s0 = self#visit_depjoin env c0 in
+      s0
+
+    method visit_GroupBy env c0 =
+      let s0 =
+        (fun (c0, c1, c2) ->
+          let s0 = self#visit_select_list self#visit_'p env c0 in
+          let s1 = self#visit_list (fun env this -> self#zero) env c1 in
+          let s2 = self#visit_'r env c2 in
+          self#plus (self#plus s0 s1) s2)
+          c0
       in
-      self#plus (self#plus _visitors_s0 _visitors_s1) _visitors_s2
+      s0
 
-    method visit_Select env _visitors_c0 =
-      let _visitors_s0 =
-        (fun (_visitors_c0, _visitors_c1) ->
-          let _visitors_s0 =
-            self#visit_select_list self#visit_'p env _visitors_c0
-          in
-          let _visitors_s1 = self#visit_'r env _visitors_c1 in
-          self#plus _visitors_s0 _visitors_s1)
-          _visitors_c0
+    method visit_OrderBy env c0 =
+      let s0 = self#visit_order_by env c0 in
+      s0
+
+    method visit_Dedup env c0 =
+      let s0 = self#visit_'r env c0 in
+      s0
+
+    method visit_Relation env c0 =
+      let s0 = (fun this -> self#zero) c0 in
+      s0
+
+    method visit_Range env c0 =
+      let s0 =
+        (fun (c0, c1) ->
+          let s0 = self#visit_'p env c0 in
+          let s1 = self#visit_'p env c1 in
+          self#plus s0 s1)
+          c0
       in
-      _visitors_s0
-
-    method visit_Filter env _visitors_c0 =
-      let _visitors_s0 =
-        (fun (_visitors_c0, _visitors_c1) ->
-          let _visitors_s0 = self#visit_'p env _visitors_c0 in
-          let _visitors_s1 = self#visit_'r env _visitors_c1 in
-          self#plus _visitors_s0 _visitors_s1)
-          _visitors_c0
-      in
-      _visitors_s0
-
-    method visit_Join env _visitors_c0 =
-      let _visitors_s0 = self#visit_join env _visitors_c0 in
-      _visitors_s0
-
-    method visit_DepJoin env _visitors_c0 =
-      let _visitors_s0 = self#visit_depjoin env _visitors_c0 in
-      _visitors_s0
-
-    method visit_GroupBy env _visitors_c0 =
-      let _visitors_s0 =
-        (fun (_visitors_c0, _visitors_c1, _visitors_c2) ->
-          let _visitors_s0 =
-            self#visit_select_list self#visit_'p env _visitors_c0
-          in
-          let _visitors_s1 =
-            self#visit_list
-              (fun env _visitors_this -> self#zero)
-              env _visitors_c1
-          in
-          let _visitors_s2 = self#visit_'r env _visitors_c2 in
-          self#plus (self#plus _visitors_s0 _visitors_s1) _visitors_s2)
-          _visitors_c0
-      in
-      _visitors_s0
-
-    method visit_OrderBy env _visitors_c0 =
-      let _visitors_s0 = self#visit_order_by env _visitors_c0 in
-      _visitors_s0
-
-    method visit_Dedup env _visitors_c0 =
-      let _visitors_s0 = self#visit_'r env _visitors_c0 in
-      _visitors_s0
-
-    method visit_Relation env _visitors_c0 =
-      let _visitors_s0 = (fun _visitors_this -> self#zero) _visitors_c0 in
-      _visitors_s0
-
-    method visit_Range env _visitors_c0 =
-      let _visitors_s0 =
-        (fun (_visitors_c0, _visitors_c1) ->
-          let _visitors_s0 = self#visit_'p env _visitors_c0 in
-          let _visitors_s1 = self#visit_'p env _visitors_c1 in
-          self#plus _visitors_s0 _visitors_s1)
-          _visitors_c0
-      in
-      _visitors_s0
+      s0
 
     method visit_AEmpty env = self#zero
 
-    method visit_AScalar env _visitors_c0 =
-      let _visitors_s0 = self#visit_scalar env _visitors_c0 in
-      _visitors_s0
+    method visit_AScalar env c0 =
+      let s0 = self#visit_scalar env c0 in
+      s0
 
-    method visit_AList env _visitors_c0 =
-      let _visitors_s0 = self#visit_list_ env _visitors_c0 in
-      _visitors_s0
+    method visit_AList env c0 =
+      let s0 = self#visit_list_ env c0 in
+      s0
 
-    method visit_ATuple env _visitors_c0 =
-      let _visitors_s0 =
-        (fun (_visitors_c0, _visitors_c1) ->
-          let _visitors_s0 = self#visit_list self#visit_'r env _visitors_c0 in
-          let _visitors_s1 = (fun _visitors_this -> self#zero) _visitors_c1 in
-          self#plus _visitors_s0 _visitors_s1)
-          _visitors_c0
+    method visit_ATuple env c0 =
+      let s0 =
+        (fun (c0, c1) ->
+          let s0 = self#visit_list self#visit_'r env c0 in
+          let s1 = (fun this -> self#zero) c1 in
+          self#plus s0 s1)
+          c0
       in
-      _visitors_s0
+      s0
 
-    method visit_AHashIdx env _visitors_c0 =
-      let _visitors_s0 = self#visit_hash_idx env _visitors_c0 in
-      _visitors_s0
+    method visit_AHashIdx env c0 =
+      let s0 = self#visit_hash_idx env c0 in
+      s0
 
-    method visit_AOrderedIdx env _visitors_c0 =
-      let _visitors_s0 = self#visit_ordered_idx env _visitors_c0 in
-      _visitors_s0
+    method visit_AOrderedIdx env c0 =
+      let s0 = self#visit_ordered_idx env c0 in
+      s0
 
-    method visit_Call env _visitors_c0 _visitors_c1 =
-      let _visitors_s0 = self#visit_scan_type env _visitors_c0 in
-      let _visitors_s1 = self#visit_string env _visitors_c1 in
-      self#plus _visitors_s0 _visitors_s1
+    method visit_Call env c0 c1 =
+      let s0 = self#visit_scan_type env c0 in
+      let s1 = self#visit_string env c1 in
+      self#plus s0 s1
 
-    method visit_query env _visitors_this =
-      match _visitors_this with
-      | Select _visitors_c0 -> self#visit_Select env _visitors_c0
-      | Filter _visitors_c0 -> self#visit_Filter env _visitors_c0
-      | Join _visitors_c0 -> self#visit_Join env _visitors_c0
-      | DepJoin _visitors_c0 -> self#visit_DepJoin env _visitors_c0
-      | GroupBy _visitors_c0 -> self#visit_GroupBy env _visitors_c0
-      | OrderBy _visitors_c0 -> self#visit_OrderBy env _visitors_c0
-      | Dedup _visitors_c0 -> self#visit_Dedup env _visitors_c0
-      | Relation _visitors_c0 -> self#visit_Relation env _visitors_c0
-      | Range _visitors_c0 -> self#visit_Range env _visitors_c0
+    method visit_query env this =
+      match this with
+      | Select c0 -> self#visit_Select env c0
+      | Filter c0 -> self#visit_Filter env c0
+      | Join c0 -> self#visit_Join env c0
+      | DepJoin c0 -> self#visit_DepJoin env c0
+      | GroupBy c0 -> self#visit_GroupBy env c0
+      | OrderBy c0 -> self#visit_OrderBy env c0
+      | Dedup c0 -> self#visit_Dedup env c0
+      | Relation c0 -> self#visit_Relation env c0
+      | Range c0 -> self#visit_Range env c0
       | AEmpty -> self#visit_AEmpty env
-      | AScalar _visitors_c0 -> self#visit_AScalar env _visitors_c0
-      | AList _visitors_c0 -> self#visit_AList env _visitors_c0
-      | ATuple _visitors_c0 -> self#visit_ATuple env _visitors_c0
-      | AHashIdx _visitors_c0 -> self#visit_AHashIdx env _visitors_c0
-      | AOrderedIdx _visitors_c0 -> self#visit_AOrderedIdx env _visitors_c0
-      | Call (_visitors_c0, _visitors_c1) ->
-          self#visit_Call env _visitors_c0 _visitors_c1
+      | AScalar c0 -> self#visit_AScalar env c0
+      | AList c0 -> self#visit_AList env c0
+      | ATuple c0 -> self#visit_ATuple env c0
+      | AHashIdx c0 -> self#visit_AHashIdx env c0
+      | AOrderedIdx c0 -> self#visit_AOrderedIdx env c0
+      | Call (c0, c1) -> self#visit_Call env c0 c1
 
-    method visit_annot env _visitors_this =
-      let _visitors_s0 = self#visit_query env _visitors_this.node in
-      let _visitors_s1 = self#visit_'m env _visitors_this.meta in
-      self#plus _visitors_s0 _visitors_s1
+    method visit_annot env this =
+      let s0 = self#visit_query env this.node in
+      let s1 = self#visit_'m env this.meta in
+      self#plus s0 s1
 
     method visit_t env = self#visit_annot env
   end
@@ -1513,418 +1248,313 @@ class virtual ['self] base_mapreduce =
     method virtual visit_'p : _
     method virtual visit_'r : _
 
-    method visit_Name env _visitors_c0 =
-      let _visitors_r0, _visitors_s0 =
-        (fun _visitors_this -> (_visitors_this, self#zero)) _visitors_c0
-      in
-      (Name _visitors_r0, _visitors_s0)
+    method visit_Name env c0 =
+      let r0, s0 = (fun this -> (this, self#zero)) c0 in
+      (Name r0, s0)
 
-    method visit_Int env _visitors_c0 =
-      let _visitors_r0, _visitors_s0 =
-        (fun _visitors_this -> (_visitors_this, self#zero)) _visitors_c0
-      in
-      (Int _visitors_r0, _visitors_s0)
+    method visit_Int env c0 =
+      let r0, s0 = (fun this -> (this, self#zero)) c0 in
+      (Int r0, s0)
 
-    method visit_Fixed env _visitors_c0 =
-      let _visitors_r0, _visitors_s0 =
-        (fun _visitors_this -> (_visitors_this, self#zero)) _visitors_c0
-      in
-      (Fixed _visitors_r0, _visitors_s0)
+    method visit_Fixed env c0 =
+      let r0, s0 = (fun this -> (this, self#zero)) c0 in
+      (Fixed r0, s0)
 
-    method visit_Date env _visitors_c0 =
-      let _visitors_r0, _visitors_s0 =
-        (fun _visitors_this -> (_visitors_this, self#zero)) _visitors_c0
-      in
-      (Date _visitors_r0, _visitors_s0)
+    method visit_Date env c0 =
+      let r0, s0 = (fun this -> (this, self#zero)) c0 in
+      (Date r0, s0)
 
-    method visit_Bool env _visitors_c0 =
-      let _visitors_r0, _visitors_s0 =
-        (fun _visitors_this -> (_visitors_this, self#zero)) _visitors_c0
-      in
-      (Bool _visitors_r0, _visitors_s0)
+    method visit_Bool env c0 =
+      let r0, s0 = (fun this -> (this, self#zero)) c0 in
+      (Bool r0, s0)
 
-    method visit_String env _visitors_c0 =
-      let _visitors_r0, _visitors_s0 =
-        (fun _visitors_this -> (_visitors_this, self#zero)) _visitors_c0
-      in
-      (String _visitors_r0, _visitors_s0)
+    method visit_String env c0 =
+      let r0, s0 = (fun this -> (this, self#zero)) c0 in
+      (String r0, s0)
 
-    method visit_Null env _visitors_c0 =
-      let _visitors_r0, _visitors_s0 =
-        (fun _visitors_this -> (_visitors_this, self#zero)) _visitors_c0
-      in
-      (Null _visitors_r0, _visitors_s0)
+    method visit_Null env c0 =
+      let r0, s0 = (fun this -> (this, self#zero)) c0 in
+      (Null r0, s0)
 
-    method visit_Unop env _visitors_c0 _visitors_c1 =
-      let _visitors_r0, _visitors_s0 =
-        (fun _visitors_this -> (_visitors_this, self#zero)) _visitors_c0
-      in
-      let _visitors_r1, _visitors_s1 = self#visit_pred env _visitors_c1 in
-      (Unop (_visitors_r0, _visitors_r1), self#plus _visitors_s0 _visitors_s1)
+    method visit_Unop env c0 c1 =
+      let r0, s0 = (fun this -> (this, self#zero)) c0 in
+      let r1, s1 = self#visit_pred env c1 in
+      (Unop (r0, r1), self#plus s0 s1)
 
-    method visit_Binop env _visitors_c0 _visitors_c1 _visitors_c2 =
-      let _visitors_r0, _visitors_s0 =
-        (fun _visitors_this -> (_visitors_this, self#zero)) _visitors_c0
-      in
-      let _visitors_r1, _visitors_s1 = self#visit_pred env _visitors_c1 in
-      let _visitors_r2, _visitors_s2 = self#visit_pred env _visitors_c2 in
-      ( Binop (_visitors_r0, _visitors_r1, _visitors_r2),
-        self#plus (self#plus _visitors_s0 _visitors_s1) _visitors_s2 )
+    method visit_Binop env c0 c1 c2 =
+      let r0, s0 = (fun this -> (this, self#zero)) c0 in
+      let r1, s1 = self#visit_pred env c1 in
+      let r2, s2 = self#visit_pred env c2 in
+      (Binop (r0, r1, r2), self#plus (self#plus s0 s1) s2)
 
     method visit_Count env = (Count, self#zero)
     method visit_Row_number env = (Row_number, self#zero)
 
-    method visit_Sum env _visitors_c0 =
-      let _visitors_r0, _visitors_s0 = self#visit_pred env _visitors_c0 in
-      (Sum _visitors_r0, _visitors_s0)
+    method visit_Sum env c0 =
+      let r0, s0 = self#visit_pred env c0 in
+      (Sum r0, s0)
 
-    method visit_Avg env _visitors_c0 =
-      let _visitors_r0, _visitors_s0 = self#visit_pred env _visitors_c0 in
-      (Avg _visitors_r0, _visitors_s0)
+    method visit_Avg env c0 =
+      let r0, s0 = self#visit_pred env c0 in
+      (Avg r0, s0)
 
-    method visit_Min env _visitors_c0 =
-      let _visitors_r0, _visitors_s0 = self#visit_pred env _visitors_c0 in
-      (Min _visitors_r0, _visitors_s0)
+    method visit_Min env c0 =
+      let r0, s0 = self#visit_pred env c0 in
+      (Min r0, s0)
 
-    method visit_Max env _visitors_c0 =
-      let _visitors_r0, _visitors_s0 = self#visit_pred env _visitors_c0 in
-      (Max _visitors_r0, _visitors_s0)
+    method visit_Max env c0 =
+      let r0, s0 = self#visit_pred env c0 in
+      (Max r0, s0)
 
-    method visit_If env _visitors_c0 _visitors_c1 _visitors_c2 =
-      let _visitors_r0, _visitors_s0 = self#visit_pred env _visitors_c0 in
-      let _visitors_r1, _visitors_s1 = self#visit_pred env _visitors_c1 in
-      let _visitors_r2, _visitors_s2 = self#visit_pred env _visitors_c2 in
-      ( If (_visitors_r0, _visitors_r1, _visitors_r2),
-        self#plus (self#plus _visitors_s0 _visitors_s1) _visitors_s2 )
+    method visit_If env c0 c1 c2 =
+      let r0, s0 = self#visit_pred env c0 in
+      let r1, s1 = self#visit_pred env c1 in
+      let r2, s2 = self#visit_pred env c2 in
+      (If (r0, r1, r2), self#plus (self#plus s0 s1) s2)
 
-    method visit_First env _visitors_c0 =
-      let _visitors_r0, _visitors_s0 = self#visit_'r env _visitors_c0 in
-      (First _visitors_r0, _visitors_s0)
+    method visit_First env c0 =
+      let r0, s0 = self#visit_'r env c0 in
+      (First r0, s0)
 
-    method visit_Exists env _visitors_c0 =
-      let _visitors_r0, _visitors_s0 = self#visit_'r env _visitors_c0 in
-      (Exists _visitors_r0, _visitors_s0)
+    method visit_Exists env c0 =
+      let r0, s0 = self#visit_'r env c0 in
+      (Exists r0, s0)
 
-    method visit_Substring env _visitors_c0 _visitors_c1 _visitors_c2 =
-      let _visitors_r0, _visitors_s0 = self#visit_pred env _visitors_c0 in
-      let _visitors_r1, _visitors_s1 = self#visit_pred env _visitors_c1 in
-      let _visitors_r2, _visitors_s2 = self#visit_pred env _visitors_c2 in
-      ( Substring (_visitors_r0, _visitors_r1, _visitors_r2),
-        self#plus (self#plus _visitors_s0 _visitors_s1) _visitors_s2 )
+    method visit_Substring env c0 c1 c2 =
+      let r0, s0 = self#visit_pred env c0 in
+      let r1, s1 = self#visit_pred env c1 in
+      let r2, s2 = self#visit_pred env c2 in
+      (Substring (r0, r1, r2), self#plus (self#plus s0 s1) s2)
 
-    method visit_pred env _visitors_this =
-      match _visitors_this with
-      | Name _visitors_c0 -> self#visit_Name env _visitors_c0
-      | Int _visitors_c0 -> self#visit_Int env _visitors_c0
-      | Fixed _visitors_c0 -> self#visit_Fixed env _visitors_c0
-      | Date _visitors_c0 -> self#visit_Date env _visitors_c0
-      | Bool _visitors_c0 -> self#visit_Bool env _visitors_c0
-      | String _visitors_c0 -> self#visit_String env _visitors_c0
-      | Null _visitors_c0 -> self#visit_Null env _visitors_c0
-      | Unop (_visitors_c0, _visitors_c1) ->
-          self#visit_Unop env _visitors_c0 _visitors_c1
-      | Binop (_visitors_c0, _visitors_c1, _visitors_c2) ->
-          self#visit_Binop env _visitors_c0 _visitors_c1 _visitors_c2
+    method visit_pred env this =
+      match this with
+      | Name c0 -> self#visit_Name env c0
+      | Int c0 -> self#visit_Int env c0
+      | Fixed c0 -> self#visit_Fixed env c0
+      | Date c0 -> self#visit_Date env c0
+      | Bool c0 -> self#visit_Bool env c0
+      | String c0 -> self#visit_String env c0
+      | Null c0 -> self#visit_Null env c0
+      | Unop (c0, c1) -> self#visit_Unop env c0 c1
+      | Binop (c0, c1, c2) -> self#visit_Binop env c0 c1 c2
       | Count -> self#visit_Count env
       | Row_number -> self#visit_Row_number env
-      | Sum _visitors_c0 -> self#visit_Sum env _visitors_c0
-      | Avg _visitors_c0 -> self#visit_Avg env _visitors_c0
-      | Min _visitors_c0 -> self#visit_Min env _visitors_c0
-      | Max _visitors_c0 -> self#visit_Max env _visitors_c0
-      | If (_visitors_c0, _visitors_c1, _visitors_c2) ->
-          self#visit_If env _visitors_c0 _visitors_c1 _visitors_c2
-      | First _visitors_c0 -> self#visit_First env _visitors_c0
-      | Exists _visitors_c0 -> self#visit_Exists env _visitors_c0
-      | Substring (_visitors_c0, _visitors_c1, _visitors_c2) ->
-          self#visit_Substring env _visitors_c0 _visitors_c1 _visitors_c2
+      | Sum c0 -> self#visit_Sum env c0
+      | Avg c0 -> self#visit_Avg env c0
+      | Min c0 -> self#visit_Min env c0
+      | Max c0 -> self#visit_Max env c0
+      | If (c0, c1, c2) -> self#visit_If env c0 c1 c2
+      | First c0 -> self#visit_First env c0
+      | Exists c0 -> self#visit_Exists env c0
+      | Substring (c0, c1, c2) -> self#visit_Substring env c0 c1 c2
 
     method visit_scope env = self#visit_string env
 
-    method visit_hash_idx env _visitors_this =
-      let _visitors_r0, _visitors_s0 =
-        self#visit_'r env _visitors_this.hi_keys
-      in
-      let _visitors_r1, _visitors_s1 =
-        self#visit_'r env _visitors_this.hi_values
-      in
-      let _visitors_r2, _visitors_s2 =
-        self#visit_scope env _visitors_this.hi_scope
-      in
-      let _visitors_r3, _visitors_s3 =
-        self#visit_option self#visit_'r env _visitors_this.hi_key_layout
-      in
-      let _visitors_r4, _visitors_s4 =
-        self#visit_list self#visit_'p env _visitors_this.hi_lookup
+    method visit_hash_idx env this =
+      let r0, s0 = self#visit_'r env this.hi_keys in
+      let r1, s1 = self#visit_'r env this.hi_values in
+      let r2, s2 = self#visit_scope env this.hi_scope in
+      let r3, s3 = self#visit_option self#visit_'r env this.hi_key_layout in
+      let r4, s4 = self#visit_list self#visit_'p env this.hi_lookup in
+      ( {
+          hi_keys = r0;
+          hi_values = r1;
+          hi_scope = r2;
+          hi_key_layout = r3;
+          hi_lookup = r4;
+        },
+        self#plus (self#plus (self#plus (self#plus s0 s1) s2) s3) s4 )
+
+    method visit_bound env (c0, c1) =
+      let r0, s0 = self#visit_'p env c0 in
+      let r1, s1 = (fun this -> (this, self#zero)) c1 in
+      ((r0, r1), self#plus s0 s1)
+
+    method visit_ordered_idx env this =
+      let r0, s0 = self#visit_'r env this.oi_keys in
+      let r1, s1 = self#visit_'r env this.oi_values in
+      let r2, s2 = self#visit_scope env this.oi_scope in
+      let r3, s3 = self#visit_option self#visit_'r env this.oi_key_layout in
+      let r4, s4 =
+        self#visit_list
+          (fun env (c0, c1) ->
+            let r0, s0 = self#visit_option self#visit_bound env c0 in
+            let r1, s1 = self#visit_option self#visit_bound env c1 in
+            ((r0, r1), self#plus s0 s1))
+          env this.oi_lookup
       in
       ( {
-          hi_keys = _visitors_r0;
-          hi_values = _visitors_r1;
-          hi_scope = _visitors_r2;
-          hi_key_layout = _visitors_r3;
-          hi_lookup = _visitors_r4;
+          oi_keys = r0;
+          oi_values = r1;
+          oi_scope = r2;
+          oi_key_layout = r3;
+          oi_lookup = r4;
         },
-        self#plus
-          (self#plus
-             (self#plus (self#plus _visitors_s0 _visitors_s1) _visitors_s2)
-             _visitors_s3)
-          _visitors_s4 )
+        self#plus (self#plus (self#plus (self#plus s0 s1) s2) s3) s4 )
 
-    method visit_bound env (_visitors_c0, _visitors_c1) =
-      let _visitors_r0, _visitors_s0 = self#visit_'p env _visitors_c0 in
-      let _visitors_r1, _visitors_s1 =
-        (fun _visitors_this -> (_visitors_this, self#zero)) _visitors_c1
-      in
-      ((_visitors_r0, _visitors_r1), self#plus _visitors_s0 _visitors_s1)
+    method visit_list_ env this =
+      let r0, s0 = self#visit_'r env this.l_keys in
+      let r1, s1 = self#visit_'r env this.l_values in
+      let r2, s2 = self#visit_scope env this.l_scope in
+      ( { l_keys = r0; l_values = r1; l_scope = r2 },
+        self#plus (self#plus s0 s1) s2 )
 
-    method visit_ordered_idx env _visitors_this =
-      let _visitors_r0, _visitors_s0 =
-        self#visit_'r env _visitors_this.oi_keys
-      in
-      let _visitors_r1, _visitors_s1 =
-        self#visit_'r env _visitors_this.oi_values
-      in
-      let _visitors_r2, _visitors_s2 =
-        self#visit_scope env _visitors_this.oi_scope
-      in
-      let _visitors_r3, _visitors_s3 =
-        self#visit_option self#visit_'r env _visitors_this.oi_key_layout
-      in
-      let _visitors_r4, _visitors_s4 =
+    method visit_depjoin env this =
+      let r0, s0 = self#visit_'r env this.d_lhs in
+      let r1, s1 = self#visit_scope env this.d_alias in
+      let r2, s2 = self#visit_'r env this.d_rhs in
+      ({ d_lhs = r0; d_alias = r1; d_rhs = r2 }, self#plus (self#plus s0 s1) s2)
+
+    method visit_join env this =
+      let r0, s0 = self#visit_'p env this.pred in
+      let r1, s1 = self#visit_'r env this.r1 in
+      let r2, s2 = self#visit_'r env this.r2 in
+      ({ pred = r0; r1; r2 }, self#plus (self#plus s0 s1) s2)
+
+    method visit_order_by env this =
+      let r0, s0 =
         self#visit_list
-          (fun env (_visitors_c0, _visitors_c1) ->
-            let _visitors_r0, _visitors_s0 =
-              self#visit_option self#visit_bound env _visitors_c0
-            in
-            let _visitors_r1, _visitors_s1 =
-              self#visit_option self#visit_bound env _visitors_c1
-            in
-            ((_visitors_r0, _visitors_r1), self#plus _visitors_s0 _visitors_s1))
-          env _visitors_this.oi_lookup
+          (fun env (c0, c1) ->
+            let r0, s0 = self#visit_'p env c0 in
+            let r1, s1 = (fun this -> (this, self#zero)) c1 in
+            ((r0, r1), self#plus s0 s1))
+          env this.key
       in
-      ( {
-          oi_keys = _visitors_r0;
-          oi_values = _visitors_r1;
-          oi_scope = _visitors_r2;
-          oi_key_layout = _visitors_r3;
-          oi_lookup = _visitors_r4;
-        },
-        self#plus
-          (self#plus
-             (self#plus (self#plus _visitors_s0 _visitors_s1) _visitors_s2)
-             _visitors_s3)
-          _visitors_s4 )
+      let r1, s1 = self#visit_'r env this.rel in
+      ({ key = r0; rel = r1 }, self#plus s0 s1)
 
-    method visit_list_ env _visitors_this =
-      let _visitors_r0, _visitors_s0 =
-        self#visit_'r env _visitors_this.l_keys
-      in
-      let _visitors_r1, _visitors_s1 =
-        self#visit_'r env _visitors_this.l_values
-      in
-      let _visitors_r2, _visitors_s2 =
-        self#visit_scope env _visitors_this.l_scope
-      in
-      ( {
-          l_keys = _visitors_r0;
-          l_values = _visitors_r1;
-          l_scope = _visitors_r2;
-        },
-        self#plus (self#plus _visitors_s0 _visitors_s1) _visitors_s2 )
+    method visit_scalar env this =
+      let r0, s0 = self#visit_'p env this.s_pred in
+      let r1, s1 = self#visit_string env this.s_name in
+      ({ s_pred = r0; s_name = r1 }, self#plus s0 s1)
 
-    method visit_depjoin env _visitors_this =
-      let _visitors_r0, _visitors_s0 = self#visit_'r env _visitors_this.d_lhs in
-      let _visitors_r1, _visitors_s1 =
-        self#visit_scope env _visitors_this.d_alias
+    method visit_scan_type env this =
+      let r0, s0 = self#visit_select_list self#visit_'p env this.select in
+      let r1, s1 = self#visit_list self#visit_'p env this.filter in
+      let r2, s2 =
+        self#visit_list (fun env this -> (this, self#zero)) env this.tables
       in
-      let _visitors_r2, _visitors_s2 = self#visit_'r env _visitors_this.d_rhs in
-      ( { d_lhs = _visitors_r0; d_alias = _visitors_r1; d_rhs = _visitors_r2 },
-        self#plus (self#plus _visitors_s0 _visitors_s1) _visitors_s2 )
+      ({ select = r0; filter = r1; tables = r2 }, self#plus (self#plus s0 s1) s2)
 
-    method visit_join env _visitors_this =
-      let _visitors_r0, _visitors_s0 = self#visit_'p env _visitors_this.pred in
-      let _visitors_r1, _visitors_s1 = self#visit_'r env _visitors_this.r1 in
-      let _visitors_r2, _visitors_s2 = self#visit_'r env _visitors_this.r2 in
-      ( { pred = _visitors_r0; r1 = _visitors_r1; r2 = _visitors_r2 },
-        self#plus (self#plus _visitors_s0 _visitors_s1) _visitors_s2 )
+    method visit_Select env c0 =
+      let r0, s0 =
+        (fun (c0, c1) ->
+          let r0, s0 = self#visit_select_list self#visit_'p env c0 in
+          let r1, s1 = self#visit_'r env c1 in
+          ((r0, r1), self#plus s0 s1))
+          c0
+      in
+      (Select r0, s0)
 
-    method visit_order_by env _visitors_this =
-      let _visitors_r0, _visitors_s0 =
-        self#visit_list
-          (fun env (_visitors_c0, _visitors_c1) ->
-            let _visitors_r0, _visitors_s0 = self#visit_'p env _visitors_c0 in
-            let _visitors_r1, _visitors_s1 =
-              (fun _visitors_this -> (_visitors_this, self#zero)) _visitors_c1
-            in
-            ((_visitors_r0, _visitors_r1), self#plus _visitors_s0 _visitors_s1))
-          env _visitors_this.key
+    method visit_Filter env c0 =
+      let r0, s0 =
+        (fun (c0, c1) ->
+          let r0, s0 = self#visit_'p env c0 in
+          let r1, s1 = self#visit_'r env c1 in
+          ((r0, r1), self#plus s0 s1))
+          c0
       in
-      let _visitors_r1, _visitors_s1 = self#visit_'r env _visitors_this.rel in
-      ( { key = _visitors_r0; rel = _visitors_r1 },
-        self#plus _visitors_s0 _visitors_s1 )
+      (Filter r0, s0)
 
-    method visit_scalar env _visitors_this =
-      let _visitors_r0, _visitors_s0 =
-        self#visit_'p env _visitors_this.s_pred
-      in
-      let _visitors_r1, _visitors_s1 =
-        self#visit_string env _visitors_this.s_name
-      in
-      ( { s_pred = _visitors_r0; s_name = _visitors_r1 },
-        self#plus _visitors_s0 _visitors_s1 )
+    method visit_Join env c0 =
+      let r0, s0 = self#visit_join env c0 in
+      (Join r0, s0)
 
-    method visit_scan_type env _visitors_this =
-      let _visitors_r0, _visitors_s0 =
-        self#visit_select_list self#visit_'p env _visitors_this.select
-      in
-      let _visitors_r1, _visitors_s1 =
-        self#visit_list self#visit_'p env _visitors_this.filter
-      in
-      let _visitors_r2, _visitors_s2 =
-        self#visit_list
-          (fun env _visitors_this -> (_visitors_this, self#zero))
-          env _visitors_this.tables
-      in
-      ( { select = _visitors_r0; filter = _visitors_r1; tables = _visitors_r2 },
-        self#plus (self#plus _visitors_s0 _visitors_s1) _visitors_s2 )
+    method visit_DepJoin env c0 =
+      let r0, s0 = self#visit_depjoin env c0 in
+      (DepJoin r0, s0)
 
-    method visit_Select env _visitors_c0 =
-      let _visitors_r0, _visitors_s0 =
-        (fun (_visitors_c0, _visitors_c1) ->
-          let _visitors_r0, _visitors_s0 =
-            self#visit_select_list self#visit_'p env _visitors_c0
+    method visit_GroupBy env c0 =
+      let r0, s0 =
+        (fun (c0, c1, c2) ->
+          let r0, s0 = self#visit_select_list self#visit_'p env c0 in
+          let r1, s1 =
+            self#visit_list (fun env this -> (this, self#zero)) env c1
           in
-          let _visitors_r1, _visitors_s1 = self#visit_'r env _visitors_c1 in
-          ((_visitors_r0, _visitors_r1), self#plus _visitors_s0 _visitors_s1))
-          _visitors_c0
+          let r2, s2 = self#visit_'r env c2 in
+          ((r0, r1, r2), self#plus (self#plus s0 s1) s2))
+          c0
       in
-      (Select _visitors_r0, _visitors_s0)
+      (GroupBy r0, s0)
 
-    method visit_Filter env _visitors_c0 =
-      let _visitors_r0, _visitors_s0 =
-        (fun (_visitors_c0, _visitors_c1) ->
-          let _visitors_r0, _visitors_s0 = self#visit_'p env _visitors_c0 in
-          let _visitors_r1, _visitors_s1 = self#visit_'r env _visitors_c1 in
-          ((_visitors_r0, _visitors_r1), self#plus _visitors_s0 _visitors_s1))
-          _visitors_c0
+    method visit_OrderBy env c0 =
+      let r0, s0 = self#visit_order_by env c0 in
+      (OrderBy r0, s0)
+
+    method visit_Dedup env c0 =
+      let r0, s0 = self#visit_'r env c0 in
+      (Dedup r0, s0)
+
+    method visit_Relation env c0 =
+      let r0, s0 = (fun this -> (this, self#zero)) c0 in
+      (Relation r0, s0)
+
+    method visit_Range env c0 =
+      let r0, s0 =
+        (fun (c0, c1) ->
+          let r0, s0 = self#visit_'p env c0 in
+          let r1, s1 = self#visit_'p env c1 in
+          ((r0, r1), self#plus s0 s1))
+          c0
       in
-      (Filter _visitors_r0, _visitors_s0)
-
-    method visit_Join env _visitors_c0 =
-      let _visitors_r0, _visitors_s0 = self#visit_join env _visitors_c0 in
-      (Join _visitors_r0, _visitors_s0)
-
-    method visit_DepJoin env _visitors_c0 =
-      let _visitors_r0, _visitors_s0 = self#visit_depjoin env _visitors_c0 in
-      (DepJoin _visitors_r0, _visitors_s0)
-
-    method visit_GroupBy env _visitors_c0 =
-      let _visitors_r0, _visitors_s0 =
-        (fun (_visitors_c0, _visitors_c1, _visitors_c2) ->
-          let _visitors_r0, _visitors_s0 =
-            self#visit_select_list self#visit_'p env _visitors_c0
-          in
-          let _visitors_r1, _visitors_s1 =
-            self#visit_list
-              (fun env _visitors_this -> (_visitors_this, self#zero))
-              env _visitors_c1
-          in
-          let _visitors_r2, _visitors_s2 = self#visit_'r env _visitors_c2 in
-          ( (_visitors_r0, _visitors_r1, _visitors_r2),
-            self#plus (self#plus _visitors_s0 _visitors_s1) _visitors_s2 ))
-          _visitors_c0
-      in
-      (GroupBy _visitors_r0, _visitors_s0)
-
-    method visit_OrderBy env _visitors_c0 =
-      let _visitors_r0, _visitors_s0 = self#visit_order_by env _visitors_c0 in
-      (OrderBy _visitors_r0, _visitors_s0)
-
-    method visit_Dedup env _visitors_c0 =
-      let _visitors_r0, _visitors_s0 = self#visit_'r env _visitors_c0 in
-      (Dedup _visitors_r0, _visitors_s0)
-
-    method visit_Relation env _visitors_c0 =
-      let _visitors_r0, _visitors_s0 =
-        (fun _visitors_this -> (_visitors_this, self#zero)) _visitors_c0
-      in
-      (Relation _visitors_r0, _visitors_s0)
-
-    method visit_Range env _visitors_c0 =
-      let _visitors_r0, _visitors_s0 =
-        (fun (_visitors_c0, _visitors_c1) ->
-          let _visitors_r0, _visitors_s0 = self#visit_'p env _visitors_c0 in
-          let _visitors_r1, _visitors_s1 = self#visit_'p env _visitors_c1 in
-          ((_visitors_r0, _visitors_r1), self#plus _visitors_s0 _visitors_s1))
-          _visitors_c0
-      in
-      (Range _visitors_r0, _visitors_s0)
+      (Range r0, s0)
 
     method visit_AEmpty env = (AEmpty, self#zero)
 
-    method visit_AScalar env _visitors_c0 =
-      let _visitors_r0, _visitors_s0 = self#visit_scalar env _visitors_c0 in
-      (AScalar _visitors_r0, _visitors_s0)
+    method visit_AScalar env c0 =
+      let r0, s0 = self#visit_scalar env c0 in
+      (AScalar r0, s0)
 
-    method visit_AList env _visitors_c0 =
-      let _visitors_r0, _visitors_s0 = self#visit_list_ env _visitors_c0 in
-      (AList _visitors_r0, _visitors_s0)
+    method visit_AList env c0 =
+      let r0, s0 = self#visit_list_ env c0 in
+      (AList r0, s0)
 
-    method visit_ATuple env _visitors_c0 =
-      let _visitors_r0, _visitors_s0 =
-        (fun (_visitors_c0, _visitors_c1) ->
-          let _visitors_r0, _visitors_s0 =
-            self#visit_list self#visit_'r env _visitors_c0
-          in
-          let _visitors_r1, _visitors_s1 =
-            (fun _visitors_this -> (_visitors_this, self#zero)) _visitors_c1
-          in
-          ((_visitors_r0, _visitors_r1), self#plus _visitors_s0 _visitors_s1))
-          _visitors_c0
+    method visit_ATuple env c0 =
+      let r0, s0 =
+        (fun (c0, c1) ->
+          let r0, s0 = self#visit_list self#visit_'r env c0 in
+          let r1, s1 = (fun this -> (this, self#zero)) c1 in
+          ((r0, r1), self#plus s0 s1))
+          c0
       in
-      (ATuple _visitors_r0, _visitors_s0)
+      (ATuple r0, s0)
 
-    method visit_AHashIdx env _visitors_c0 =
-      let _visitors_r0, _visitors_s0 = self#visit_hash_idx env _visitors_c0 in
-      (AHashIdx _visitors_r0, _visitors_s0)
+    method visit_AHashIdx env c0 =
+      let r0, s0 = self#visit_hash_idx env c0 in
+      (AHashIdx r0, s0)
 
-    method visit_AOrderedIdx env _visitors_c0 =
-      let _visitors_r0, _visitors_s0 =
-        self#visit_ordered_idx env _visitors_c0
-      in
-      (AOrderedIdx _visitors_r0, _visitors_s0)
+    method visit_AOrderedIdx env c0 =
+      let r0, s0 = self#visit_ordered_idx env c0 in
+      (AOrderedIdx r0, s0)
 
-    method visit_Call env _visitors_c0 _visitors_c1 =
-      let _visitors_r0, _visitors_s0 = self#visit_scan_type env _visitors_c0 in
-      let _visitors_r1, _visitors_s1 = self#visit_string env _visitors_c1 in
-      (Call (_visitors_r0, _visitors_r1), self#plus _visitors_s0 _visitors_s1)
+    method visit_Call env c0 c1 =
+      let r0, s0 = self#visit_scan_type env c0 in
+      let r1, s1 = self#visit_string env c1 in
+      (Call (r0, r1), self#plus s0 s1)
 
-    method visit_query env _visitors_this =
-      match _visitors_this with
-      | Select _visitors_c0 -> self#visit_Select env _visitors_c0
-      | Filter _visitors_c0 -> self#visit_Filter env _visitors_c0
-      | Join _visitors_c0 -> self#visit_Join env _visitors_c0
-      | DepJoin _visitors_c0 -> self#visit_DepJoin env _visitors_c0
-      | GroupBy _visitors_c0 -> self#visit_GroupBy env _visitors_c0
-      | OrderBy _visitors_c0 -> self#visit_OrderBy env _visitors_c0
-      | Dedup _visitors_c0 -> self#visit_Dedup env _visitors_c0
-      | Relation _visitors_c0 -> self#visit_Relation env _visitors_c0
-      | Range _visitors_c0 -> self#visit_Range env _visitors_c0
+    method visit_query env this =
+      match this with
+      | Select c0 -> self#visit_Select env c0
+      | Filter c0 -> self#visit_Filter env c0
+      | Join c0 -> self#visit_Join env c0
+      | DepJoin c0 -> self#visit_DepJoin env c0
+      | GroupBy c0 -> self#visit_GroupBy env c0
+      | OrderBy c0 -> self#visit_OrderBy env c0
+      | Dedup c0 -> self#visit_Dedup env c0
+      | Relation c0 -> self#visit_Relation env c0
+      | Range c0 -> self#visit_Range env c0
       | AEmpty -> self#visit_AEmpty env
-      | AScalar _visitors_c0 -> self#visit_AScalar env _visitors_c0
-      | AList _visitors_c0 -> self#visit_AList env _visitors_c0
-      | ATuple _visitors_c0 -> self#visit_ATuple env _visitors_c0
-      | AHashIdx _visitors_c0 -> self#visit_AHashIdx env _visitors_c0
-      | AOrderedIdx _visitors_c0 -> self#visit_AOrderedIdx env _visitors_c0
-      | Call (_visitors_c0, _visitors_c1) ->
-          self#visit_Call env _visitors_c0 _visitors_c1
+      | AScalar c0 -> self#visit_AScalar env c0
+      | AList c0 -> self#visit_AList env c0
+      | ATuple c0 -> self#visit_ATuple env c0
+      | AHashIdx c0 -> self#visit_AHashIdx env c0
+      | AOrderedIdx c0 -> self#visit_AOrderedIdx env c0
+      | Call (c0, c1) -> self#visit_Call env c0 c1
 
-    method visit_annot env _visitors_this =
-      let _visitors_r0, _visitors_s0 =
-        self#visit_query env _visitors_this.node
-      in
-      let _visitors_r1, _visitors_s1 = self#visit_'m env _visitors_this.meta in
-      ( { node = _visitors_r0; meta = _visitors_r1 },
-        self#plus _visitors_s0 _visitors_s1 )
+    method visit_annot env this =
+      let r0, s0 = self#visit_query env this.node in
+      let r1, s1 = self#visit_'m env this.meta in
+      ({ node = r0; meta = r1 }, self#plus s0 s1)
 
     method visit_t env = self#visit_annot env
   end
