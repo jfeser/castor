@@ -1,5 +1,5 @@
+open Ast
 open Core
-open Visitors
 open Collections
 open Match.Query
 module A = Abslayout
