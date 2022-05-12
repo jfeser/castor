@@ -164,7 +164,7 @@ name:
   | RANGE { Name.create "range" }
 
 named_pred:
-  | x = name { (Ast.Name x, Name.name x) }
+  | x = name { (`Name x, Name.name x) }
   | p = e0; AS; id = ID { (p, id) }
   | error { error "Expected a named predicate." $startpos }
 
@@ -173,40 +173,40 @@ e0_unop:
   | x = DAY | x = MONTH | x = YEAR | x = STRLEN | x = EXTRACTY | x = EXTRACTM | x = EXTRACTD { x }
 
 null:
-  | NULL; COLON; t = primtype { Ast.Null (Some t) }
-  | NULL { Ast.Null None }
+  | NULL; COLON; t = primtype { `Null (Some t) }
+  | NULL { `Null None }
 
 value:
-  | x = INT { Ast.Int x }
-  | DATEKW; x = parens(STR); { Ast.Date (Core.Date.of_string x) }
-  | x = FIXED { Ast.Fixed x }
-  | x = BOOL { Ast.Bool x }
-  | x = STR { Ast.String x }
+  | x = INT { `Int x }
+  | DATEKW; x = parens(STR); { `Date (Core.Date.of_string x) }
+  | x = FIXED { `Fixed x }
+  | x = BOOL { `Bool x }
+  | x = STR { `String x }
   | x = null { x }
 
 e0:
   | x = value { x }
-  | n = name { Ast.Name n }
-  | op = e0_unop; x = parens(expr); { Ast.Unop (op, x) }
-  | NOT; x = e0 {Ast.Unop (Not, x)}
-  | MIN; f = parens(expr) { Ast.Min f }
-  | MAX; f = parens(expr) { Ast.Max f }
-  | AVG; f = parens(expr) { Ast.Avg f }
-  | SUM; f = parens(expr) { Ast.Sum f }
-  | COUNT; LPAREN; RPAREN; { Ast.Count }
-  | ROW_NUMBER; LPAREN; RPAREN; { Ast.Row_number }
-  | EXISTS; r = parens(ralgebra); {Ast.Exists (r)}
+  | n = name { `Name n }
+  | op = e0_unop; x = parens(expr); { `Unop (op, x) }
+  | NOT; x = e0 {`Unop (Not, x)}
+  | MIN; f = parens(expr) { `Min f }
+  | MAX; f = parens(expr) { `Max f }
+  | AVG; f = parens(expr) { `Avg f }
+  | SUM; f = parens(expr) { `Sum f }
+  | COUNT; LPAREN; RPAREN; { `Count }
+  | ROW_NUMBER; LPAREN; RPAREN; { `Row_number }
+  | EXISTS; r = parens(ralgebra); {`Exists (r)}
   | SUBSTRING; xs = parens(separated_nonempty_list(COMMA, expr)) {
                             match xs with
-                            | [x1; x2; x3] -> Ast.Substring (x1, x2, x3)
+                            | [x1; x2; x3] -> `Substring (x1, x2, x3)
                             | _ -> error "Unexpected arguments." $startpos
                           }
   | op = e0_binop; xs = parens(separated_nonempty_list(COMMA, expr)) {
                                 match xs with
-                                | [x1; x2] -> Ast.Binop (op, x1, x2)
+                                | [x1; x2] -> `Binop (op, x1, x2)
                                 | _ -> error "Unexpected arguments." $startpos
                               }
-  | r = parens(ralgebra_subquery); {Ast.First (r)}
+  | r = parens(ralgebra_subquery); {`First (r)}
   | x = parens(expr) { x }
   | error { error "Expected an expression." $startpos }
 
@@ -215,31 +215,31 @@ e1: x = e0 { x }
 e2_op: x = MUL | x = DIV | x = MOD { x }
 
 e2:
-  | p1 = e2; op = e2_op; p2 = e1 { Ast.Binop (op, p1, p2) }
+  | p1 = e2; op = e2_op; p2 = e1 { `Binop (op, p1, p2) }
   | x = e1 { x }
 
 e3_op: x = ADD | x = SUB { x }
 
 e3:
-  | p1 = e3; op = e3_op; p2 = e2 { Ast.Binop (op, p1, p2) }
+  | p1 = e3; op = e3_op; p2 = e2 { `Binop (op, p1, p2) }
   | x = e2 { x }
 
 e4_op: x = EQ | x = LT | x = LE | x = GT | x = GE { x }
 
 e4:
-  | p1 = e4; op = e4_op; p2 = e3 { Ast.Binop (op, p1, p2) }
+  | p1 = e4; op = e4_op; p2 = e3 { `Binop (op, p1, p2) }
   | x = e3 { x }
 
 e5:
-  | p1 = e4; op = AND; p2 = e5 { Ast.Binop (op, p1, p2) }
+  | p1 = e4; op = AND; p2 = e5 { `Binop (op, p1, p2) }
   | x = e4 { x }
 
 e6:
-  | p1 = e5; op = OR; p2 = e6 { Ast.Binop (op, p1, p2) }
+  | p1 = e5; op = OR; p2 = e6 { `Binop (op, p1, p2) }
   | x = e5 { x }
 
 e7:
-  | IF; p1 = e6; THEN; p2 = e7; ELSE; p3 = e7 { Ast.If (p1, p2, p3) }
+  | IF; p1 = e6; THEN; p2 = e7; ELSE; p3 = e7 { `If (p1, p2, p3) }
   | x = e6 { x }
 
 expr:

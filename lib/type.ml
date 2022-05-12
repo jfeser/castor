@@ -442,7 +442,7 @@ module Parallel = struct
       Option.value range ~default:I.top
 
     let int_t p =
-      let min = wrap @@ Min p and max = wrap @@ Max p in
+      let min = wrap @@ `Min p and max = wrap @@ `Max p in
       let build ctx _ =
         let range = eval_interval ~to_int:Value.to_int ctx min max in
         IntT { range; nullable = false (* TODO *) }
@@ -453,7 +453,7 @@ module Parallel = struct
       { aggs = []; build = (fun _ _ -> BoolT { nullable = false (* TODO *) }) }
 
     let date_t p =
-      let min = wrap @@ Min p and max = wrap @@ Max p in
+      let min = wrap @@ `Min p and max = wrap @@ `Max p in
       let build ctx _ =
         let range =
           eval_interval
@@ -491,9 +491,9 @@ module Parallel = struct
 
     let count_t q f =
       let agg_name = Fresh.name Global.fresh "ct%d" in
-      let counts = A.group_by [ (Count, agg_name) ] [] q in
-      let count = Name (Name.create agg_name) in
-      let min = wrap @@ Min count and max = wrap @@ Max count in
+      let counts = A.group_by [ (`Count, agg_name) ] [] q in
+      let count = `Name (Name.create agg_name) in
+      let min = wrap @@ `Min count and max = wrap @@ `Max count in
       let build ctx ts =
         let range = eval_interval ~to_int:Value.to_int ctx min max in
         f ts range
@@ -610,10 +610,10 @@ module Parallel = struct
                      (n, unscope n)))
         in
         let select_list =
-          List.map renaming ~f:(fun (n, n') -> (Name n, Name.name n'))
+          List.map renaming ~f:(fun (n, n') -> (`Name n, Name.name n'))
         in
         let bindings =
-          let one = A.scalar (Int 0) (Fresh.name Global.fresh "x%d") in
+          let one = A.scalar (`Int 0) (Fresh.name Global.fresh "x%d") in
           if List.is_empty select_list then one
           else
             let select = A.select select_list one in
@@ -625,7 +625,7 @@ module Parallel = struct
         in
         let aggs =
           let subst =
-            List.map renaming ~f:(fun (n, n') -> (n, Name n'))
+            List.map renaming ~f:(fun (n, n') -> (n, `Name n'))
             |> Map.of_alist_exn (module Name)
           in
           List.map aggs ~f:(fun (p, n) -> (Pred.subst subst p, n))

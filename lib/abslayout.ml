@@ -33,7 +33,7 @@ let alpha_scopes r =
         let name =
           let%bind s = Name.rel n in
           let%map s' = Map.find map s in
-          Name (Name.copy ~scope:(Some s') n)
+          `Name (Name.copy ~scope:(Some s') n)
         in
         Option.value name ~default:p
 
@@ -85,7 +85,7 @@ let relation r = wrap (Relation r)
 let empty = wrap AEmpty
 let scalar p n = wrap (AScalar { s_pred = p; s_name = n })
 let scalar' s = wrap (AScalar s)
-let scalar_name n = scalar (Name n) (Name.name n)
+let scalar_name n = scalar (`Name n) (Name.name n)
 
 let list a b c =
   let a, c = ensure_no_overlap_2 a c [ b ] in
@@ -131,9 +131,9 @@ let ordered_idx' o =
     o.oi_lookup
 
 let rec and_ = function
-  | [] -> Bool true
+  | [] -> `Bool true
   | [ x ] -> x
-  | x :: xs -> Binop (And, x, and_ xs)
+  | x :: xs -> `Binop (Binop.And, x, and_ xs)
 
 let name r =
   match r.node with
@@ -205,25 +205,25 @@ let order_open order r =
   match r.node with
   | OrderBy { key; _ } -> key
   | AOrderedIdx { oi_keys = r; _ } ->
-      schema r |> List.map ~f:(fun n -> (Name n, Asc))
+      schema r |> List.map ~f:(fun n -> (`Name n, Asc))
   | Filter (_, r) | AHashIdx { hi_values = r; _ } -> order r
   | ATuple (rs, Cross) -> List.map ~f:order rs |> List.concat
   | Select (ps, r) ->
       (* perform renaming through select *)
       List.filter_map (order r) ~f:(fun (p, d) ->
           List.find_map ps ~f:(fun (p', n) ->
-              if [%equal: _ pred] p p' then Some (Name (Name.create n), d)
+              if [%equal: _ pred] p p' then Some (`Name (Name.create n), d)
               else None))
   | AList { l_keys = r; l_values = r'; _ } ->
       let open Name.O in
       let s' = schema r' and eq' = r'.meta#eq in
       List.filter_map (order r) ~f:(function
-        | Name n, dir ->
-            if List.mem ~equal:( = ) s' n then Some (Name n, dir)
+        | `Name n, dir ->
+            if List.mem ~equal:( = ) s' n then Some (`Name n, dir)
             else
               Set.find_map eq' ~f:(fun (n', n'') ->
-                  if n = n' then Some (Name n'', dir)
-                  else if n = n'' then Some (Name n', dir)
+                  if n = n' then Some (`Name n'', dir)
+                  else if n = n'' then Some (`Name n', dir)
                   else None)
         | _ -> None)
   | DepJoin _ | Join _ | GroupBy _ | Dedup _ | Relation _ | AEmpty
@@ -309,7 +309,7 @@ let h_key_layout { hi_key_layout; hi_keys; _ } =
   | Some l -> strip_meta l
   | None -> (
       match
-        List.map (schema hi_keys) ~f:(fun n -> scalar (Name n) (Name.name n))
+        List.map (schema hi_keys) ~f:(fun n -> scalar (`Name n) (Name.name n))
       with
       | [] -> failwith "empty schema"
       | [ x ] -> x
@@ -319,7 +319,7 @@ let h_key_layout { hi_key_layout; hi_keys; _ } =
 (*   match oi_key_layout with *)
 (*   | Some l -> strip_meta l *)
 (*   | None -> ( *)
-(*       match List.map (schema oi_keys) ~f:(fun n -> scalar (Name n)) with *)
+(*       match List.map (schema oi_keys) ~f:(fun n -> scalar (`Name n)) with *)
 (*       | [] -> failwith "empty schema" *)
 (*       | [ x ] -> x *)
 (*       | xs -> tuple xs Cross) *)

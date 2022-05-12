@@ -130,7 +130,7 @@ module Make (C : Config.S) = struct
     match (Path.get_exn p r).node with
     | Filter (pred, _) ->
         List.exists (Pred.conjuncts pred) ~f:(function
-          | Binop (Eq, p1, p2) ->
+          | `Binop (Eq, p1, p2) ->
               let x1 = overlaps (Free.pred_free p1) params in
               let x2 = overlaps (Free.pred_free p2) params in
               Bool.(x1 <> x2)
@@ -141,7 +141,7 @@ module Make (C : Config.S) = struct
     match (Path.get_exn p r).node with
     | Filter (pred, _) ->
         List.exists (Pred.conjuncts pred) ~f:(function
-          | Binop ((Lt | Gt | Ge | Le), p1, p2) ->
+          | `Binop ((Lt | Gt | Ge | Le), p1, p2) ->
               let x1 = overlaps (Free.pred_free p1) params in
               let x2 = overlaps (Free.pred_free p2) params in
               Bool.(x1 <> x2)
@@ -488,3 +488,4 @@ module Make (C : Config.S) = struct
       { tf with b_f }
   end
 end
+

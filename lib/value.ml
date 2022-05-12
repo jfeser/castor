@@ -16,15 +16,13 @@ include T
 module C = Comparable.Make (T)
 module O : Comparable.Infix with type t := t = C
 
-let of_pred =
-  let module A = Ast in
-  function
-  | A.Int x -> Int x
-  | A.String x -> String x
-  | A.Bool x -> Bool x
-  | A.Fixed x -> Fixed x
-  | A.Null _ -> Null
-  | A.Date x -> Date x
+let of_pred = function
+  | `Int x -> Int x
+  | `String x -> String x
+  | `Bool x -> Bool x
+  | `Fixed x -> Fixed x
+  | `Null _ -> Null
+  | `Date x -> Date x
   | _ -> failwith "Not a value."
 
 let to_sql = function
@@ -63,12 +61,12 @@ let to_string_exn = function String x -> x | v -> type_error "string" v
 let to_pred =
   let module A = Ast in
   function
-  | Int x -> A.Int x
-  | String x -> A.String x
-  | Bool x -> A.Bool x
-  | Fixed x -> A.Fixed x
-  | Null -> A.Null None
-  | Date x -> A.Date x
+  | Int x -> `Int x
+  | String x -> `String x
+  | Bool x -> `Bool x
+  | Fixed x -> `Fixed x
+  | Null -> `Null None
+  | Date x -> `Date x
 
 let ( + ) x y =
   match (x, y) with

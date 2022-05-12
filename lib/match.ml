@@ -17,5 +17,5 @@ module Query = struct
 end
 
 module Pred = struct
-  let to_name = function Name n -> Some n | _ -> None
+  let to_name = function `Name n -> Some n | _ -> None
 end

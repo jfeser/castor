@@ -30,7 +30,7 @@ end
 
 (** Construct annotated queries. Discards any existing metadata. *)
 module Annot : sig
-  type 'm annot = 'm Ast.annot constraint 'm = < .. >
+  type 'm annot = 'm Ast.annot constraint 'm = < >
   type 'm pred = 'm annot Ast.pred
   type 'm select_list = 'm pred Ast.select_list
   type 'm order_list = ('m pred * Ast.order) list

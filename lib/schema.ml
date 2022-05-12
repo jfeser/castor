@@ -12,25 +12,25 @@ let scoped s = List.map ~f:(Name.scoped s)
 let unscoped = List.map ~f:Name.unscoped
 
 let to_type_open schema to_type = function
-  | Sum p | Min p | Max p -> to_type p
-  | Name n -> Name.type_exn n
-  | Date _ | Unop ((Year | Month | Day), _) -> date_t
-  | Int _ | Row_number
-  | Unop ((Strlen | ExtractY | ExtractM | ExtractD), _)
-  | Count
-  | Binop (Strpos, _, _) ->
+  | `Sum p | `Min p | `Max p -> to_type p
+  | `Name n -> Name.type_exn n
+  | `Date _ | `Unop ((Unop.Year | Month | Day), _) -> date_t
+  | `Int _ | `Row_number
+  | `Unop ((Strlen | ExtractY | ExtractM | ExtractD), _)
+  | `Count
+  | `Binop (Binop.Strpos, _, _) ->
       int_t
-  | Fixed _ | Avg _ -> fixed_t
-  | Bool _ | Exists _
-  | Binop ((Eq | Lt | Le | Gt | Ge | And | Or), _, _)
-  | Unop (Not, _) ->
+  | `Fixed _ | `Avg _ -> fixed_t
+  | `Bool _ | `Exists _
+  | `Binop ((Eq | Lt | Le | Gt | Ge | And | Or), _, _)
+  | `Unop (Not, _) ->
       bool_t
-  | String _ | Substring _ -> string_t
-  | Null None -> failwith "Untyped null."
-  | Null (Some t) -> t
-  | Binop ((Add | Sub | Mul | Div | Mod), p1, p2) | If (_, p1, p2) ->
+  | `String _ | `Substring _ -> string_t
+  | `Null None -> failwith "Untyped null."
+  | `Null (Some t) -> t
+  | `Binop ((Add | Sub | Mul | Div | Mod), p1, p2) | `If (_, p1, p2) ->
       unify (to_type p1) (to_type p2)
-  | First r -> (
+  | `First r -> (
       match schema r with
       | [ n ] -> Name.type_exn n
       | [] -> failwith "Unexpected empty schema."
@@ -146,4 +146,4 @@ let to_type q =
     |> Error.raise
 
 let to_type_opt q = Or_error.try_with (fun () -> to_type q)
-let to_select_list s = List.map s ~f:(fun n -> (Name n, Name.name n))
+let to_select_list s = List.map s ~f:(fun n -> (`Name n, Name.name n))

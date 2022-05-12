@@ -8,19 +8,19 @@ module Map = struct
   let bound pred (p, b) = (pred p, b)
 
   let pred annot pred = function
-    | ( Name _ | Int _ | Fixed _ | Date _ | Bool _ | String _ | Null _ | Count
-      | Row_number ) as p ->
+    | ( `Name _ | `Int _ | `Fixed _ | `Date _ | `Bool _ | `String _ | `Null _
+      | `Count | `Row_number ) as p ->
         p
-    | Unop (o, p) -> Unop (o, pred p)
-    | Binop (o, p, p') -> Binop (o, pred p, pred p')
-    | Sum p -> Sum (pred p)
-    | Avg p -> Avg (pred p)
-    | Max p -> Max (pred p)
-    | Min p -> Min (pred p)
-    | If (p, p', p'') -> If (pred p, pred p', pred p'')
-    | First q -> First (annot q)
-    | Exists q -> Exists (annot q)
-    | Substring (p, p', p'') -> Substring (pred p, pred p', pred p'')
+    | `Unop (o, p) -> `Unop (o, pred p)
+    | `Binop (o, p, p') -> `Binop (o, pred p, pred p')
+    | `Sum p -> `Sum (pred p)
+    | `Avg p -> `Avg (pred p)
+    | `Max p -> `Max (pred p)
+    | `Min p -> `Min (pred p)
+    | `If (p, p', p'') -> `If (pred p, pred p', pred p'')
+    | `First q -> `First (annot q)
+    | `Exists q -> `Exists (annot q)
+    | `Substring (p, p', p'') -> `Substring (pred p, pred p', pred p'')
 
   let ordered_idx query pred
       ({ oi_keys; oi_values; oi_key_layout; oi_lookup; _ } as o) =
@@ -88,13 +88,13 @@ module Reduce = struct
     list zero ( + ) (fun (p, _) -> pred p) (Select_list.to_list ps)
 
   let pred zero ( + ) annot pred = function
-    | Name _ | Int _ | Fixed _ | Date _ | Bool _ | String _ | Null _ | Count
-    | Row_number ->
+    | `Name _ | `Int _ | `Fixed _ | `Date _ | `Bool _ | `String _ | `Null _
+    | `Count | `Row_number ->
         zero
-    | Unop (_, p) | Sum p | Avg p | Max p | Min p -> pred p
-    | Binop (_, p, p') -> pred p + pred p'
-    | If (p, p', p'') | Substring (p, p', p'') -> pred p + pred p' + pred p''
-    | First q | Exists q -> annot q
+    | `Unop (_, p) | `Sum p | `Avg p | `Max p | `Min p -> pred p
+    | `Binop (_, p, p') -> pred p + pred p'
+    | `If (p, p', p'') | `Substring (p, p', p'') -> pred p + pred p' + pred p''
+    | `First q | `Exists q -> annot q
 
   let query zero ( + ) annot pred = function
     | Relation _ | AEmpty -> zero
@@ -158,18 +158,18 @@ end
 
 module Iter = struct
   let pred annot pred = function
-    | Name _ | Int _ | Fixed _ | Date _ | Bool _ | String _ | Null _ | Count
-    | Row_number ->
+    | `Name _ | `Int _ | `Fixed _ | `Date _ | `Bool _ | `String _ | `Null _
+    | `Count | `Row_number ->
         ()
-    | Unop (_, p) | Sum p | Avg p | Max p | Min p -> pred p
-    | Binop (_, p, p') ->
+    | `Unop (_, p) | `Sum p | `Avg p | `Max p | `Min p -> pred p
+    | `Binop (_, p, p') ->
         pred p;
         pred p'
-    | If (p, p', p'') | Substring (p, p', p'') ->
+    | `If (p, p', p'') | `Substring (p, p', p'') ->
         pred p;
         pred p';
         pred p''
-    | First q | Exists q -> annot q
+    | `First q | `Exists q -> annot q
 
   let query annot pred = function
     | Relation _ | AEmpty -> ()
@@ -314,7 +314,7 @@ class ['a] names_visitor =
 
     method! visit_pred () p =
       match p with
-      | Exists _ | First _ -> self#zero
+      | `Exists _ | `First _ -> self#zero
       | _ -> super#visit_pred () p
   end
 
@@ -356,8 +356,8 @@ class virtual ['self] runtime_subquery_map =
       AOrderedIdx { o with oi_values = super#visit_t acc r }
 
     method! visit_Exists acc r =
-      Exists (self#visit_Subquery (super#visit_t acc r))
+      `Exists (self#visit_Subquery (super#visit_t acc r))
 
     method! visit_First acc r =
-      First (self#visit_Subquery (super#visit_t acc r))
+      `First (self#visit_Subquery (super#visit_t acc r))
   end

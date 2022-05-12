@@ -63,32 +63,32 @@ let pp_key pp_pred fmt = function
   | ps -> pp_list ~bracket:("(", ")") pp_pred fmt ps
 
 let pp_pred_open pp_query pp_pred fmt = function
-  | Null None -> Fmt.pf fmt "null"
-  | Null (Some t) -> Fmt.pf fmt "null:%a" Prim_type.pp t
-  | Int x -> if x >= 0 then Fmt.pf fmt "%d" x else Fmt.pf fmt "(0 - %d)" (-x)
-  | Fixed x -> Fmt.pf fmt "%s" (Fixed_point.to_string x)
-  | Date x -> Fmt.pf fmt "date(\"%s\")" (Date.to_string x)
-  | Unop (op, x) -> Fmt.pf fmt "%s(%a)" (unop_to_str op) pp_pred x
-  | Bool x -> Fmt.pf fmt "%B" x
-  | String x -> Fmt.pf fmt "%S" x
-  | Name n -> Name.pp fmt n
-  | Binop (op, p1, p2) -> (
+  | `Null None -> Fmt.pf fmt "null"
+  | `Null (Some t) -> Fmt.pf fmt "null:%a" Prim_type.pp t
+  | `Int x -> if x >= 0 then Fmt.pf fmt "%d" x else Fmt.pf fmt "(0 - %d)" (-x)
+  | `Fixed x -> Fmt.pf fmt "%s" (Fixed_point.to_string x)
+  | `Date x -> Fmt.pf fmt "date(\"%s\")" (Date.to_string x)
+  | `Unop (op, x) -> Fmt.pf fmt "%s(%a)" (unop_to_str op) pp_pred x
+  | `Bool x -> Fmt.pf fmt "%B" x
+  | `String x -> Fmt.pf fmt "%S" x
+  | `Name n -> Name.pp fmt n
+  | `Binop (op, p1, p2) -> (
       match op_to_str op with
       | `Infix str ->
           Fmt.pf fmt "@[<hov>(%a@ %s@ %a)@]" pp_pred p1 str pp_pred p2
       | `Prefix str ->
           Fmt.pf fmt "@[<hov>%s(%a,@ %a)@]" str pp_pred p1 pp_pred p2)
-  | Row_number -> Fmt.pf fmt "row_number()"
-  | Count -> Fmt.pf fmt "count()"
-  | Sum n -> Fmt.pf fmt "sum(%a)" pp_pred n
-  | Avg n -> Fmt.pf fmt "avg(%a)" pp_pred n
-  | Min n -> Fmt.pf fmt "min(%a)" pp_pred n
-  | Max n -> Fmt.pf fmt "max(%a)" pp_pred n
-  | If (p1, p2, p3) ->
+  | `Row_number -> Fmt.pf fmt "row_number()"
+  | `Count -> Fmt.pf fmt "count()"
+  | `Sum n -> Fmt.pf fmt "sum(%a)" pp_pred n
+  | `Avg n -> Fmt.pf fmt "avg(%a)" pp_pred n
+  | `Min n -> Fmt.pf fmt "min(%a)" pp_pred n
+  | `Max n -> Fmt.pf fmt "max(%a)" pp_pred n
+  | `If (p1, p2, p3) ->
       Fmt.pf fmt "(if %a then %a else %a)" pp_pred p1 pp_pred p2 pp_pred p3
-  | First r -> Fmt.pf fmt "(%a)" pp_query r
-  | Exists r -> Fmt.pf fmt "@[<hv 2>exists(%a)@]" pp_query r
-  | Substring (p1, p2, p3) ->
+  | `First r -> Fmt.pf fmt "(%a)" pp_query r
+  | `Exists r -> Fmt.pf fmt "@[<hv 2>exists(%a)@]" pp_query r
+  | `Substring (p1, p2, p3) ->
       Fmt.pf fmt "@[<hov>substring(%a,@ %a,@ %a)@]" pp_pred p1 pp_pred p2
         pp_pred p3
 
@@ -107,7 +107,7 @@ let pp_upper_bound pp_pred fmt (p, b) =
 
 let pp_select_pred pp_pred fmt (p, n) =
   match p with
-  | Name n' when [%equal: string] (Name.name n') n -> pp_pred fmt p
+  | `Name n' when [%equal: string] (Name.name n') n -> pp_pred fmt p
   | _ -> Fmt.pf fmt "%a as %s" pp_pred p n
 
 let pp_select_list pp_pred fmt sl = pp_list (pp_select_pred pp_pred) fmt sl

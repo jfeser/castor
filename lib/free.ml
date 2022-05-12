@@ -14,7 +14,7 @@ let pred_free_open free p =
 
       method! visit_pred () p =
         match p with
-        | Exists r | First r -> self#visit_subquery r
+        | `Exists r | `First r -> self#visit_subquery r
         | _ -> super#visit_pred () p
     end
   in
@@ -99,3 +99,4 @@ let annotate r =
         method free = x
       end)
     free_open r
+

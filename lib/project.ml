@@ -4,8 +4,8 @@ open Collections
 module A = Abslayout
 module P = Pred.Infix
 
-let dummy_select = (Bool false, "dummy")
-let dummy = A.scalar (Bool false) "dummy"
+let dummy_select = (`Bool false, "dummy")
+let dummy = A.scalar (`Bool false) "dummy"
 
 let project_def refcnt (_, n) =
   (* Filter out definitions that are never referenced. *)
@@ -83,7 +83,7 @@ let project_open project no_project project_pred r =
         if card_matters then
           A.join (project_pred pred) (project r1) (project r2)
         else if
-          (* If one side of a join is unused then the join can be dropped. *)
+          (* `If one side of a join is unused then the join can be dropped. *)
           all_unref_at r1 r
         then project r2
         else if all_unref_at r2 r then project r1
@@ -91,7 +91,7 @@ let project_open project no_project project_pred r =
     | DepJoin { d_lhs; d_rhs; d_alias } ->
         if card_matters then A.dep_join (project d_lhs) d_alias (project d_rhs)
         else if
-          (* If one side of a join is unused then the join can be dropped. *)
+          (* `If one side of a join is unused then the join can be dropped. *)
           all_unref d_lhs
         then project d_rhs
         else if all_unref d_rhs then dummy
@@ -101,7 +101,7 @@ let project_open project no_project project_pred r =
 
 let project_pred_open project project_pred p =
   match p with
-  | Exists _ | First _ -> Pred.strip_meta p
+  | `Exists _ | `First _ -> Pred.strip_meta p
   | p -> V.Map.pred project project_pred p
 
 (** Apply no projection until a select is reached, under which projection resumes. *)
@@ -129,3 +129,4 @@ let project ~params ?(max_iters = 100) r =
       if [%equal: _ annot] r r' then r' else loop (ct + 1) r'
   in
   loop 0 (strip_meta r)
+

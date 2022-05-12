@@ -22,7 +22,7 @@ end
 let rec pred_card_matters =
   let open Bool_exp in
   function
-  | Count | Sum _ | Avg _ -> t `Counting_agg
+  | `Count | `Sum _ | `Avg _ -> t `Counting_agg
   | p ->
       V.Reduce.pred (f `No_counting_agg) ( || )
         (fun _ -> f `Meta)

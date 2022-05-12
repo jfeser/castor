@@ -43,7 +43,7 @@ module Flag : sig
   val bool_of : t -> bool
 
   val all : t list -> t
-  (** If `t` is set, then all of `ts` will be set as well. *)
+  (** `If `t` is set, then all of `ts` will be set as well. *)
 
   val set : t -> unit
 end = struct
@@ -134,7 +134,7 @@ module Ctx = struct
              if Set.mem inter_names r.rname then true
              else (
                Log.warn (fun m ->
-                   m "Name does not appear in all concat fields: %a" N.pp
+                   m "`Name does not appear in all concat fields: %a" N.pp
                      r.rname);
                false)))
     |> List.map ~f:(List.sort ~compare:[%compare: row])
@@ -208,12 +208,12 @@ let rec resolve_pred resolve stage ctx =
     q'
   in
   function
-  | Name n -> Name (resolve_name ctx n)
-  | Exists r -> Exists (resolve_noctx r)
-  | First r ->
+  | `Name n -> `Name (resolve_name ctx n)
+  | `Exists r -> `Exists (resolve_noctx r)
+  | `First r ->
       let r', ctx = resolve stage ctx r in
       Ctx.incr_refs stage ctx;
-      First r'
+      `First r'
   | p -> V.Map.pred resolve_noctx (resolve_pred resolve stage ctx) p
 
 let resolve_hash_idx resolve stage outer_ctx h =
@@ -395,3 +395,4 @@ let resolve_exn ~params r =
 
 let resolve ~params r =
   try Ok (resolve_exn ~params r) with Resolve_error (#error as x) -> Error x
+

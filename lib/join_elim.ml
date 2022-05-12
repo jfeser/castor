@@ -39,7 +39,7 @@ let translate eqs ~from ~to_ =
 let extension eqs schema_lhs schema_rhs =
   let open Option.Let_syntax in
   let%map ext = translate eqs ~from:schema_lhs ~to_:schema_rhs in
-  List.map ext ~f:(fun (n, n') -> (Name n', Name.name n))
+  List.map ext ~f:(fun (n, n') -> (`Name n', Name.name n))
 
 let try_extend eqs pred lhs rhs =
   let schema_lhs =
@@ -87,3 +87,4 @@ let remove_dedup r =
     | q -> V.Map.query annot pred q
   and pred p = V.Map.pred annot pred p in
   annot r
+

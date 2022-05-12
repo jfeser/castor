@@ -29,27 +29,29 @@ type scope = string [@@deriving compare, equal, hash, sexp]
 type tuple = Cross | Zip | Concat [@@deriving compare, equal, hash, sexp]
 type order = Asc | Desc [@@deriving compare, equal, hash, sexp]
 
-type 'r pred =
-  | Name of Name.t
-  | Int of int
-  | Fixed of Fixed_point.t
-  | Date of Date.t
-  | Bool of bool
-  | String of string
-  | Null of Prim_type.t option
-  | Unop of Unop.t * 'r pred
-  | Binop of Binop.t * 'r pred * 'r pred
-  | Count
-  | Row_number
-  | Sum of 'r pred
-  | Avg of 'r pred
-  | Min of 'r pred
-  | Max of 'r pred
-  | If of 'r pred * 'r pred * 'r pred
-  | First of 'r
-  | Exists of 'r
-  | Substring of 'r pred * 'r pred * 'r pred
+type ('p, 'r) ppred =
+  [ `Name of Name.t
+  | `Int of int
+  | `Fixed of Fixed_point.t
+  | `Date of Date.t
+  | `Bool of bool
+  | `String of string
+  | `Null of Prim_type.t option
+  | `Unop of Unop.t * 'p
+  | `Binop of Binop.t * 'p * 'p
+  | `Count
+  | `Row_number
+  | `Sum of 'p
+  | `Avg of 'p
+  | `Min of 'p
+  | `Max of 'p
+  | `If of 'p * 'p * 'p
+  | `First of 'r
+  | `Exists of 'r
+  | `Substring of 'p * 'p * 'p ]
 [@@deriving compare, equal, hash, sexp, variants]
+
+type 'r pred = ('r pred, 'r) ppred [@@deriving compare, equal, hash, sexp]
 
 type ('p, 'r) hash_idx = {
   hi_keys : 'r;

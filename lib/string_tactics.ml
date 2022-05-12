@@ -49,7 +49,7 @@ module Make (C : Config.S) = struct
     in
     preds_v#visit_t () r
     |> List.filter_map ~f:(function
-         | Name n1, Name n2 -> (
+         | `Name n1, `Name n2 -> (
              match
                ( Db.relation_has_field conn (Name.name n1),
                  Db.relation_has_field conn (Name.name n2) )
@@ -68,44 +68,44 @@ module Make (C : Config.S) = struct
            let mapping =
              select
                [
-                 (Row_number, encoded_name);
-                 (Name (Name.create map_name), map_name);
+                 (`Row_number, encoded_name);
+                 (`Name (Name.create map_name), map_name);
                ]
                (order_by
-                  [ (Name (Name.create encoded_name), Desc) ]
-                  (dedup (select [ (Name key, map_name) ] (relation rel))))
+                  [ (`Name (Name.create encoded_name), Desc) ]
+                  (dedup (select [ (`Name key, map_name) ] (relation rel))))
            in
            let encoded_rel =
              join
-               (Binop (Eq, Name key, Name (Name.create map_name)))
+               (`Binop (Eq, `Name key, `Name (Name.create map_name)))
                (relation rel) mapping
            in
            let encoded_lookup =
              let scope = Fresh.name Global.fresh "s%d" in
              select
                [
-                 ( If
-                     ( Binop (Gt, Name (Name.create count_name), Int 0),
-                       Name (Name.create encoded_name),
-                       Int (-1) ),
+                 ( `If
+                     ( `Binop (Gt, `Name (Name.create count_name), `Int 0),
+                       `Name (Name.create encoded_name),
+                       `Int (-1) ),
                    encoded_lookup_name );
                ]
                (select
                   [
-                    (Count, count_name);
-                    (Name (Name.create encoded_name), encoded_name);
+                    (`Count, count_name);
+                    (`Name (Name.create encoded_name), encoded_name);
                   ]
                   (hash_idx
-                     (dedup (select [ (Name key, map_name) ] (relation rel)))
+                     (dedup (select [ (`Name key, map_name) ] (relation rel)))
                      scope
                      (select
-                        [ (Name (Name.create encoded_name), encoded_name) ]
+                        [ (`Name (Name.create encoded_name), encoded_name) ]
                         (A.filter
                            P.(
-                             Name (Name.create ~scope map_name)
-                             = Name (Name.create map_name))
+                             `Name (Name.create ~scope map_name)
+                             = `Name (Name.create map_name))
                            mapping))
-                     [ Name lookup ]))
+                     [ `Name lookup ]))
            in
            let scope = Fresh.name Global.fresh "s%d" in
            dep_join encoded_lookup scope

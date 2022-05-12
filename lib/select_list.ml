@@ -1,5 +1,4 @@
 open Core
-open Ast
 
 type 'p t = ('p * string) list [@@deriving compare, equal, hash, sexp]
 
@@ -24,9 +23,9 @@ let fold_map ps ~f ~init =
 
 let preds ps = Iter.of_list ps |> Iter.map Tuple.T2.get1
 let names ps = Iter.of_list ps |> Iter.map Tuple.T2.get2
-let of_names = List.map ~f:(fun n -> (Name n, Name.name n))
+let of_names = List.map ~f:(fun n -> (`Name n, Name.name n))
 
 let of_preds_exn =
   List.map ~f:(function
-    | Name n -> (Name n, Name.name n)
+    | `Name n -> (`Name n, Name.name n)
     | _ -> failwith "expected a name")

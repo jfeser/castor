@@ -78,7 +78,7 @@ let create_subquery ?(extra_select = []) q =
   let alias = Fresh.name Global.fresh "t%d" in
   let select_list =
     to_schema q @ extra_select
-    |> List.map ~f:(fun n -> create_entry (Name (Name.create n)) n)
+    |> List.map ~f:(fun n -> create_entry (`Name (Name.create n)) n)
   in
   create_query ~relations:[ (`Subquery (q, alias), `Left) ] select_list
 
@@ -131,7 +131,8 @@ let order_by of_ralgebra key r =
   in
   (* Remove constant integer predicates (sql interprets these specially). *)
   let key =
-    List.filter key ~f:(fun (p, _) -> match p with Int _ -> false | _ -> true)
+    List.filter key ~f:(fun (p, _) ->
+        match p with `Int _ -> false | _ -> true)
   in
   Query { spj with order = key }
 
@@ -163,13 +164,13 @@ let select ?groupby of_ralgebra ps r =
          We conservatively create a subquery whenever this selection list has
          aggregates.
 
-         If the inner query is distinct then it must be wrapped. *)
+         `If the inner query is distinct then it must be wrapped. *)
       has_aggs || preds_has_windows preds || to_distinct sql
     in
     if needs_subquery then create_subquery sql else to_spj sql
   in
-  (* If this select has aggregates and uses names from a containing scope, then
-     those names must be selected first by the subquery. If there are extra
+  (* `If this select has aggregates and uses names from a containing scope, then
+     those names must be selected first by the subquery. `If there are extra
      fields to select, add them then wrap them in a subquery. *)
   let spj =
     (* Names that must have come from an outer scope because they are not in the
@@ -183,7 +184,7 @@ let select ?groupby of_ralgebra ps r =
       let extra_fields =
         Set.to_list scoped
         |> List.map ~f:(fun n ->
-               create_entry ~alias:(Name.name n) (Name n) (Name.name n))
+               create_entry ~alias:(Name.name n) (`Name n) (Name.name n))
       in
       create_subquery (Query { spj with select = spj.select @ extra_fields })
     else spj
@@ -204,7 +205,7 @@ let select ?groupby of_ralgebra ps r =
 
 let filter of_ralgebra pred r =
   let sql = of_ralgebra r in
-  (* If the inner query
+  (* `If the inner query
      contains aggregates, then it must be put in a subquery. *)
   let needs_subquery = has_aggregates sql || has_windows sql in
   let spj = if needs_subquery then create_subquery sql else to_spj sql in
@@ -233,7 +234,7 @@ let dep_join of_ralgebra q1 scope q2 =
   let sql2 = Query { (of_ralgebra q2 |> to_spj) with order = [] } in
   let sql2_names = to_schema sql2 in
   let select_list =
-    List.map sql2_names ~f:(fun n -> create_entry (Name (Name.create n)) n)
+    List.map sql2_names ~f:(fun n -> create_entry (`Name (Name.create n)) n)
   in
   Query
     (create_query
@@ -252,7 +253,7 @@ let of_ralgebra r =
         Query
           (create_query
              ~relations:[ (`Series (p, p', alias), `Left) ]
-             [ create_entry (Name (Name.create "range")) "range" ])
+             [ create_entry (`Name (Name.create "range")) "range" ])
     | Dedup r -> Query { (to_spj (f r)) with distinct = true }
     | Relation ({ r_name = tbl; _ } as rel) ->
         let tbl_alias = tbl ^ Fresh.name Global.fresh "_%d" in
@@ -260,7 +261,7 @@ let of_ralgebra r =
         let select_list =
           List.map (schema r) ~f:(fun n ->
               create_entry
-                (Name (Name.copy n ~scope:(Some tbl_alias)))
+                (`Name (Name.copy n ~scope:(Some tbl_alias)))
                 (Name.name n))
         in
         let relations = [ (`Table (rel, tbl_alias), `Left) ] in
@@ -277,7 +278,7 @@ let of_ralgebra r =
     | ATuple (r :: rs, Cross) ->
         let q1 = r in
         let q2 = tuple rs Cross in
-        join (schema q1) (schema q2) (f q1) (f q2) (Bool true)
+        join (schema q1) (schema q2) (f q1) (f q2) (`Bool true)
     | ATuple (rs, Concat) -> Union_all (List.map ~f:(fun r -> to_spj (f r)) rs)
     | ATuple ([], _) | AEmpty -> Query (create_query ~limit:0 [])
     | AScalar p -> Query (create_query [ create_entry p.s_pred p.s_name ])
@@ -293,19 +294,19 @@ let of_ralgebra r =
 let rec pred_to_sql p =
   let p2s = pred_to_sql in
   match p with
-  | Name n -> sprintf "%s" (Name.to_sql n)
-  | Int x -> Int.to_string x
-  | Fixed x -> Fixed_point.to_string x
-  | Date x -> sprintf "date('%s')" (Date.to_string x)
-  | Bool true -> "true"
-  | Bool false -> "false"
-  | String s -> sprintf "'%s'" s
-  | Null None -> "null"
-  | Null (Some t) -> sprintf "(null::%s)" (Prim_type.to_sql t)
-  | Unop (op, p) -> (
+  | `Name n -> sprintf "%s" (Name.to_sql n)
+  | `Int x -> Int.to_string x
+  | `Fixed x -> Fixed_point.to_string x
+  | `Date x -> sprintf "date('%s')" (Date.to_string x)
+  | `Bool true -> "true"
+  | `Bool false -> "false"
+  | `String s -> sprintf "'%s'" s
+  | `Null None -> "null"
+  | `Null (Some t) -> sprintf "(null::%s)" (Prim_type.to_sql t)
+  | `Unop (op, p) -> (
       let s = sprintf "(%s)" (p2s p) in
       match op with
-      | Not -> sprintf "not (%s)" s
+      | Unop.Not -> sprintf "not (%s)" s
       | Year -> sprintf "%s * interval '1 year'" s
       | Month -> sprintf "%s * interval '1 month'" s
       | Day -> sprintf "%s * interval '1 day'" s
@@ -313,9 +314,10 @@ let rec pred_to_sql p =
       | ExtractY -> sprintf "cast(date_part('year', %s) as integer)" s
       | ExtractM -> sprintf "cast(date_part('month', %s) as integer)" s
       | ExtractD -> sprintf "cast(date_part('day', %s) as integer)" s)
-  | Binop (Add, p, Unop (Month, p')) when !Global.enable_redshift_dates ->
+  | `Binop (Binop.Add, p, `Unop (Unop.Month, p'))
+    when !Global.enable_redshift_dates ->
       sprintf "dateadd(month, %s, %s)" (p2s p') (p2s p)
-  | Binop (op, p1, p2) -> (
+  | `Binop (op, p1, p2) -> (
       let s1 = sprintf "(%s)" (p2s p1) in
       let s2 = sprintf "(%s)" (p2s p2) in
       match op with
@@ -332,30 +334,30 @@ let rec pred_to_sql p =
       | Div -> sprintf "%s / %s" s1 s2
       | Mod -> sprintf "%s %% %s" s1 s2
       | Strpos -> sprintf "strpos(%s, %s)" s1 s2)
-  | If (p1, p2, p3) ->
+  | `If (p1, p2, p3) ->
       sprintf "case when %s then %s else %s end" (p2s p1) (p2s p2) (p2s p3)
-  | Exists r ->
+  | `Exists r ->
       let sql = of_ralgebra r |> to_string in
       sprintf "exists (%s)" sql
-  | First r ->
+  | `First r ->
       let sql = of_ralgebra r |> to_string in
       sprintf "(%s)" sql
-  | Substring (p1, p2, p3) ->
+  | `Substring (p1, p2, p3) ->
       sprintf "substring(%s from %s for %s)" (p2s p1) (p2s p2) (p2s p3)
-  | Count -> "count(*)"
-  | Sum n -> sprintf "sum(%s)" (p2s n)
-  | Avg n -> sprintf "avg(%s)" (p2s n)
-  | Min n -> sprintf "min(%s)" (p2s n)
-  | Max n -> sprintf "max(%s)" (p2s n)
-  | Row_number -> "row_number() over ()"
+  | `Count -> "count(*)"
+  | `Sum n -> sprintf "sum(%s)" (p2s n)
+  | `Avg n -> sprintf "avg(%s)" (p2s n)
+  | `Min n -> sprintf "min(%s)" (p2s n)
+  | `Max n -> sprintf "max(%s)" (p2s n)
+  | `Row_number -> "row_number() over ()"
 
 and spj_to_sql { select; distinct; order; group; relations; conds; limit } =
   let select =
-    (* If there is no grouping key and there are aggregates in the select list,
+    (* `If there is no grouping key and there are aggregates in the select list,
        then we need to deal with any non-aggregates in the select. *)
     if List.is_empty group && select_has_aggregates select then
       List.map select ~f:(fun ({ pred = p; _ } as entry) ->
-          let pred = match Pred.kind p with `Scalar -> Min p | _ -> p in
+          let pred = match Pred.kind p with `Scalar -> `Min p | _ -> p in
           { entry with pred })
     else select
   in
@@ -364,7 +366,7 @@ and spj_to_sql { select; distinct; order; group; relations; conds; limit } =
       List.map select ~f:(fun { pred = p; alias = n; cast = t } ->
           let alias_sql =
             match p with
-            | Name n' when Name.O.(Name.create n = n') -> ""
+            | `Name n' when Name.O.(Name.create n = n') -> ""
             | _ -> sprintf "as \"%s\"" n
           in
           match Option.map t ~f:Prim_type.to_sql with

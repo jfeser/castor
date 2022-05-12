@@ -9,7 +9,7 @@ module V = Visitors
 type tuple = Value.t list [@@deriving compare, equal, sexp]
 
 let normal_order r =
-  A.order_by (List.map (schema r) ~f:(fun n -> (Name n, Desc))) r
+  A.order_by (List.map (schema r) ~f:(fun n -> (`Name n, Desc))) r
 
 let to_err = Result.map_error ~f:Db.Async.to_error
 
@@ -99,3 +99,4 @@ let schema q q' =
 let resolve ~params q q' =
   let does_resolve q = Resolve.resolve ~params q |> Result.is_ok in
   if Bool.(does_resolve q <> does_resolve q') then err "resolution" q q'
+

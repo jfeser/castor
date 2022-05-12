@@ -124,7 +124,7 @@ let to_width q =
 
 let total_order_key q =
   let native_order = A.order_of q in
-  let total_order = List.map (schema q) ~f:(fun n -> (Name n, Asc)) in
+  let total_order = List.map (schema q) ~f:(fun n -> (`Name n, Asc)) in
   native_order @ total_order
 
 let to_scalars rs =
@@ -205,7 +205,7 @@ let unwrap q = map_meta ~f:(fun m -> Option.value_exn m) q
    fold acts on. *)
 let rec to_ralgebra q =
   match q.node with
-  | Var _ -> A.scalar (Int 0) (Fresh.name Global.fresh "var%d")
+  | Var _ -> A.scalar (`Int 0) (Fresh.name Global.fresh "var%d")
   | Let (binds, q) -> to_ralgebra (to_concat binds q)
   | For (q1, scope, q2, distinct) ->
       (* Extend the lhs query with a row number. Even if this query emits
@@ -265,7 +265,7 @@ let rec to_ralgebra q =
                        (* Take the names from this query's schema. *)
                        if i = j then (P.name n, Name.name n)
                          (* Otherwise emit null. *)
-                       else (Null (Some (Name.type_exn n)), Name.name n)
+                       else (`Null (Some (Name.type_exn n)), Name.name n)
                      in
                      List.map (schema q') ~f)
             in
@@ -300,3 +300,4 @@ let rec width' q =
   | Let (binds, q) -> width' (to_concat binds q)
 
 let width q = wrap q |> width'
+

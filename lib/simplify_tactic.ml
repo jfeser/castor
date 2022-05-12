@@ -16,8 +16,8 @@ module Make (C : Config.S) = struct
 
   let filter_const r =
     match r.node with
-    | Filter (Bool true, r') -> Some r'
-    | Filter (Bool false, _) -> Some empty
+    | Filter (`Bool true, r') -> Some r'
+    | Filter (`Bool false, _) -> Some empty
     | Filter (p, r') -> Some (A.filter (Pred.simplify p) r')
     | _ -> None
 
@@ -84,7 +84,7 @@ module Make (C : Config.S) = struct
             (schema d_lhs |> to_select_list)
         in
         return (select (mk_unscoped_select d_alias ps) (select ps' d_lhs))
-    | Select (ps, { node = AScalar { s_pred = Null None; _ }; _ }) ->
+    | Select (ps, { node = AScalar { s_pred = `Null None; _ }; _ }) ->
         return (select (mk_unscoped_select d_alias ps) d_lhs)
     | _ -> None
 
@@ -190,3 +190,4 @@ let simplify ?(params = Set.empty (module Name)) conn r =
   let module O = Ops.Make (C) in
   let module S = Make (C) in
   Option.value_exn (O.apply S.unnest_and_simplify Path.root r)
+

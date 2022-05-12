@@ -28,7 +28,7 @@ module Query = struct
 
   let scalar_s s =
     let n = Name.of_string_exn s in
-    scalar (Name n) (Name.name n)
+    scalar (`Name n) (Name.name n)
 
   let tuple a b = atuple (a, b)
   let call = call
@@ -58,7 +58,7 @@ end
 
 (** Construct annotated queries. Discards any existing metadata. *)
 module Annot = struct
-  type 'm annot = 'm Ast.annot constraint 'm = < .. >
+  type 'm annot = 'm Ast.annot constraint 'm = < >
   type 'm pred = 'm annot Ast.pred
   type 'm select_list = 'm pred Ast.select_list
   type 'm order_list = ('m pred * Ast.order) list
@@ -68,7 +68,13 @@ module Annot = struct
   type order_list' = (pred' * Ast.order) list
 
   let wrap node = Ast.{ node; meta = object end }
-  let select a b = wrap @@ Query.select (a :> select_list') (b :> annot')
+
+  let select a b =
+    wrap
+    @@ Query.select
+         (a :> (_, < > Ast.annot) Ast.ppred Ast.select_list)
+         (b :> annot')
+
   let select_ns a b = wrap @@ Query.select_ns a (b :> annot')
   let range a b = wrap @@ Query.range (a :> pred') (b :> pred')
   let dep_join a b c = wrap @@ Query.dep_join (a :> annot') b (c :> annot')

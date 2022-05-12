@@ -27,6 +27,8 @@ module Infix = struct
   let bool = bool
   let string = string
   let null = null
+  let unop op p = `Unop (op, p)
+  let binop op p p' = `Binop (op, p, p')
   let not p = unop Not p
   let day p = unop Day p
   let month p = unop Month p
@@ -48,8 +50,8 @@ module Infix = struct
   let ( || ) p p' = binop Or p p'
   let ( mod ) p p' = binop Mod p p'
   let strpos p p' = binop Strpos p p'
-  let exists r = Exists r
-  let count = Count
+  let exists r = `Exists r
+  let count = `Count
 end
 
 let to_type p = Schema.to_type p
@@ -58,14 +60,14 @@ let pp fmt p = Abslayout_pp.pp_pred fmt p
 let names r = (new V.names_visitor)#visit_pred () r
 
 let rec conjoin = function
-  | [] -> Bool true
+  | [] -> `Bool true
   | [ p ] -> p
-  | p :: ps -> Binop (And, p, conjoin ps)
+  | p :: ps -> `Binop (Binop.And, p, conjoin ps)
 
 let rec disjoin = function
-  | [] -> Bool false
+  | [] -> `Bool false
   | [ p ] -> p
-  | p :: ps -> Binop (Or, p, disjoin ps)
+  | p :: ps -> `Binop (Binop.Or, p, disjoin ps)
 
 let collect_aggs p =
   let visitor =

@@ -158,12 +158,12 @@ let of_pred_open scan of_pred ctx pred b =
   let open Pred.Unop in
   let gen p b = of_pred ctx p b in
   match pred with
-  | Ast.Null _ -> Implang.Null
-  | Int x -> Int x
-  | String x -> String x
-  | Fixed x -> Fixed x
-  | Date x -> Date x
-  | Unop (op, p) as pred -> (
+  | `Null _ -> Implang.Null
+  | `Int x -> Int x
+  | `String x -> String x
+  | `Fixed x -> Fixed x
+  | `Date x -> Date x
+  | `Unop (op, p) as pred -> (
       let x = gen p b in
       match op with
       | Not -> Infix.(not x)
@@ -175,30 +175,30 @@ let of_pred_open scan of_pred ctx pred b =
       | ExtractY -> Unop { op = `ExtractY; arg = x }
       | ExtractM -> Unop { op = `ExtractM; arg = x }
       | ExtractD -> Unop { op = `ExtractD; arg = x })
-  | Bool x -> Bool x
-  | Name n -> (
+  | `Bool x -> Bool x
+  | `Name n -> (
       match Ctx.find ctx n b with
       | Some e -> e
       | None ->
           Error.create "Unbound variable." (n, ctx) [%sexp_of: Name.t * Ctx.t]
           |> Error.raise)
   (* Special cases for date intervals. *)
-  | Binop (Add, arg1, Unop (Year, arg2)) ->
+  | `Binop (Add, arg1, `Unop (Year, arg2)) ->
       Binop { op = `AddY; arg1 = gen arg1 b; arg2 = gen arg2 b }
-  | Binop (Add, arg1, Unop (Month, arg2)) ->
+  | `Binop (Add, arg1, `Unop (Month, arg2)) ->
       Binop { op = `AddM; arg1 = gen arg1 b; arg2 = gen arg2 b }
-  | Binop (Add, arg1, Unop (Day, arg2)) ->
+  | `Binop (Add, arg1, `Unop (Day, arg2)) ->
       Binop { op = `AddD; arg1 = gen arg1 b; arg2 = gen arg2 b }
-  | Binop (Sub, arg1, Unop (Year, arg2)) ->
-      let e2 = gen (Binop (Sub, Int 0, arg2)) b in
+  | `Binop (Sub, arg1, `Unop (Year, arg2)) ->
+      let e2 = gen (`Binop (Sub, `Int 0, arg2)) b in
       Binop { op = `AddY; arg1 = gen arg1 b; arg2 = e2 }
-  | Binop (Sub, arg1, Unop (Month, arg2)) ->
-      let e2 = gen (Binop (Sub, Int 0, arg2)) b in
+  | `Binop (Sub, arg1, `Unop (Month, arg2)) ->
+      let e2 = gen (`Binop (Sub, `Int 0, arg2)) b in
       Binop { op = `AddM; arg1 = gen arg1 b; arg2 = e2 }
-  | Binop (Sub, arg1, Unop (Day, arg2)) ->
-      let e2 = gen (Binop (Sub, Int 0, arg2)) b in
+  | `Binop (Sub, arg1, `Unop (Day, arg2)) ->
+      let e2 = gen (`Binop (Sub, `Int 0, arg2)) b in
       Binop { op = `AddD; arg1 = gen arg1 b; arg2 = e2 }
-  | Binop (op, arg1, arg2) -> (
+  | `Binop (op, arg1, arg2) -> (
       let e1 = gen arg1 b in
       let e2 = gen arg2 b in
       match op with
@@ -215,9 +215,9 @@ let of_pred_open scan of_pred ctx pred b =
       | Div -> build_div e1 e2 b
       | Mod -> Infix.(e1 % e2)
       | Strpos -> Binop { op = `StrPos; arg1 = e1; arg2 = e2 })
-  | (Count | Min _ | Max _ | Sum _ | Avg _ | Row_number) as p ->
+  | (`Count | `Min _ | `Max _ | `Sum _ | `Avg _ | `Row_number) as p ->
       Error.create "Not a scalar predicate." p [%sexp_of: _ pred] |> Error.raise
-  | If (p1, p2, p3) ->
+  | `If (p1, p2, p3) ->
       let ret_var =
         build_var "ret"
           (Prim_type.unify
@@ -231,7 +231,7 @@ let of_pred_open scan of_pred ctx pred b =
         b;
       ret_var
       (* Ternary (gen p1 b, gen p2 b, gen p3 b) *)
-  | First r ->
+  | `First r ->
       (* Don't use the passed in start value. Subquery layouts are not stored
          inline. *)
       let ctx = Map.remove ctx (Name.create "start") in
@@ -239,12 +239,12 @@ let of_pred_open scan of_pred ctx pred b =
       scan ctx b r r.meta#type_ (fun b tup ->
           build_assign (List.hd_exn tup) ret_var b);
       ret_var
-  | Exists r ->
+  | `Exists r ->
       let ctx = Map.remove ctx (Name.create "start") in
       let ret_var = build_defn "exists" (Bool false) b in
       scan ctx b r r.meta#type_ (fun b _ -> build_assign (Bool true) ret_var b);
       ret_var
-  | Substring (e1, e2, e3) -> Substr (gen e1 b, gen e2 b, gen e3 b)
+  | `Substring (e1, e2, e3) -> Substr (gen e1 b, gen e2 b, gen e3 b)
 
 let scan_null b (cb : callback) = cb b [ Null ]
 
@@ -536,19 +536,19 @@ let scan_filter ~debug scan of_pred ctx b r t cb =
 let agg_init of_pred ctx p b =
   let open Builder in
   match p with
-  | Count ->
+  | `Count ->
       `Count
         (build_defn ~persistent:false "count" (const_int Prim_type.int_t 0) b)
-  | Sum f ->
+  | `Sum f ->
       let t = type_of_pred of_pred ctx f b in
       `Sum (f, build_defn ~persistent:false "sum" (const_int t 0) b)
-  | Min f ->
+  | `Min f ->
       let t = type_of_pred of_pred ctx f b in
       `Min (f, build_defn ~persistent:false "min" (const_int t Int.max_value) b)
-  | Max f ->
+  | `Max f ->
       let t = type_of_pred of_pred ctx f b in
       `Max (f, build_defn ~persistent:false "max" (const_int t Int.min_value) b)
-  | Avg f ->
+  | `Avg f ->
       let t = type_of_pred of_pred ctx f b in
       `Avg
         ( f,

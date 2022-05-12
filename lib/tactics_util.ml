@@ -90,7 +90,7 @@ module Make (Config : Config.S) = struct
   let all_values_attr n =
     let open Option.Let_syntax in
     let%bind rel = Db.relation_has_field cost_conn (Name.name n) in
-    return @@ A.select [ (Name n, Name.name n) ] @@ A.relation rel
+    return @@ A.select [ (`Name n, Name.name n) ] @@ A.relation rel
 
   (** Approximate selection of all valuations of a list of predicates from a
    relation. Works if the relation is parameterized, but only when the
@@ -102,7 +102,7 @@ module Make (Config : Config.S) = struct
     let alias_map = aliases r in
 
     (* Find the definition of each key and collect all the names in that
-       definition. If they all come from base relations, then we can enumerate
+       definition. `If they all come from base relations, then we can enumerate
        the keys. *)
     let preds = Select_list.map preds ~f:(fun p _ -> Pred.subst alias_map p) in
 
@@ -132,7 +132,7 @@ module Make (Config : Config.S) = struct
               match Db.relation_has_field cost_conn (Name.name n) with
               | Some r -> Ok (r, n)
               | None ->
-                  Or_error.error "Name does not come from base relation." n
+                  Or_error.error "`Name does not come from base relation." n
                     [%sexp_of: Name.t])
           |> Or_error.all)
       |> Or_error.all
@@ -147,7 +147,7 @@ module Make (Config : Config.S) = struct
              dedup
              @@ select (Select_list.of_names ns)
              @@ relation (Db.relation cost_conn r))
-      |> List.reduce ~f:(join (Bool true))
+      |> List.reduce ~f:(join (`Bool true))
     in
 
     match joined_rels with
@@ -207,7 +207,9 @@ module Make (Config : Config.S) = struct
   let rec disjoin =
     let open Ast in
     function
-    | [] -> Bool false | [ p ] -> p | p :: ps -> Binop (Or, p, disjoin ps)
+    | [] -> `Bool false
+    | [ p ] -> p
+    | p :: ps -> `Binop (Binop.Or, p, disjoin ps)
 
   (** For a set of predicates, check whether more than one predicate is true at
      any time. *)
@@ -269,13 +271,13 @@ module Make (Config : Config.S) = struct
       method! visit_Exists () r =
         if self#can_hoist r then
           let name = self#fresh_name () in
-          (Name name, [ (name, Ast.Exists r) ])
-        else (Exists r, [])
+          (`Name name, [ (name, `Exists r) ])
+        else (`Exists r, [])
 
       method! visit_First () r =
         if self#can_hoist r then
           let name = self#fresh_name () in
-          (Name name, [ (name, First r) ])
-        else (First r, [])
+          (`Name name, [ (name, `First r) ])
+        else (`First r, [])
     end
 end

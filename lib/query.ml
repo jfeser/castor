@@ -47,7 +47,7 @@ let of_many conn qs =
         let args, ctx =
           List.map q.args ~f:(fun (n, t) ->
               let n' = Fresh.name Global.fresh "arg%d" in
-              ((n', t), (Name.create n, Name (Name.create n'))))
+              ((n', t), (Name.create n, `Name (Name.create n'))))
           |> List.unzip
         in
         let ctx = Map.of_alist_exn (module Name) ctx in
@@ -70,14 +70,14 @@ let of_many conn qs =
     let s = Schema.schema r in
     List.map all_attrs ~f:(fun (n, t) ->
         let nn = Name.create n in
-        if List.mem s nn ~equal:[%equal: Name.t] then (Name nn, n)
+        if List.mem s nn ~equal:[%equal: Name.t] then (`Name nn, n)
         else
           let dummy =
             match t with
-            | IntT _ -> Int 0
-            | FixedT _ -> Fixed (Fixed_point.of_int 0)
-            | DateT _ -> Date (Date.of_string "0000-01-01")
-            | StringT _ -> String ""
+            | IntT _ -> `Int 0
+            | FixedT _ -> `Fixed (Fixed_point.of_int 0)
+            | DateT _ -> `Date (Date.of_string "0000-01-01")
+            | StringT _ -> `String ""
             | _ -> failwith "Unexpected type"
           in
           (dummy, n))
@@ -89,10 +89,11 @@ let of_many conn qs =
         @@ tuple
              [
                filter P.(name (Name.create "query_id") = int i)
-               @@ scalar (Int i) "unit";
+               @@ scalar (`Int i) "unit";
                strip_meta r;
              ]
              Cross)
   in
   let body = A.tuple bodies Concat in
   { name; args; body }
+

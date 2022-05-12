@@ -152,11 +152,11 @@ class to_cozy ?fresh ?(subst = Map.empty (module Name)) args =
                   | [ n ] ->
                       let lit =
                         match Name.type_exn n with
-                        | IntT _ -> Ast.Int 0
-                        | FixedT _ -> Fixed (Fixed_point.of_int 0)
-                        | StringT _ -> String ""
-                        | BoolT _ -> Bool false
-                        | DateT _ -> Int 0
+                        | IntT _ -> `Int 0
+                        | FixedT _ -> `Fixed (Fixed_point.of_int 0)
+                        | StringT _ -> `String ""
+                        | BoolT _ -> `Bool false
+                        | DateT _ -> `Int 0
                         | _ -> assert false
                       in
                       self#pred (Map.empty (module Name)) lit
@@ -174,11 +174,11 @@ class to_cozy ?fresh ?(subst = Map.empty (module Name)) args =
                       in
                       let queries, expr =
                         match agg with
-                        | Sum p -> mk_simple_agg "sum" p
-                        | Min p -> mk_simple_agg "min" p
-                        | Max p -> mk_simple_agg "max" p
-                        | Count -> (empty, "sum [1 | t <- q]")
-                        | Avg p ->
+                        | `Sum p -> mk_simple_agg "sum" p
+                        | `Min p -> mk_simple_agg "min" p
+                        | `Max p -> mk_simple_agg "max" p
+                        | `Count -> (empty, "sum [1 | t <- q]")
+                        | `Avg p ->
                             let q, s = self#pred subst p in
                             let e =
                               match Pred.to_type p with
@@ -340,16 +340,16 @@ class to_cozy ?fresh ?(subst = Map.empty (module Name)) args =
     method pred s (p : Pred.t) : t * _ =
       let subst = Map.merge_exn subst s in
       match p with
-      | Name n ->
+      | `Name n ->
           (empty, Map.find subst n |> Option.value ~default:(Name.name n))
-      | Int x -> (empty, Int.to_string x)
-      | Fixed x -> (empty, sprintf "%sf" (Fixed_point.to_string x))
-      | Date x -> (empty, Date.to_int x |> sprintf "%d")
-      | Bool true -> (empty, "true")
-      | Bool false -> (empty, "false")
-      | String s -> (empty, sprintf "\"%s\"" s)
-      | Null _ -> failwith "Null literal not supported"
-      | Unop (op, p) ->
+      | `Int x -> (empty, Int.to_string x)
+      | `Fixed x -> (empty, sprintf "%sf" (Fixed_point.to_string x))
+      | `Date x -> (empty, Date.to_int x |> sprintf "%d")
+      | `Bool true -> (empty, "true")
+      | `Bool false -> (empty, "false")
+      | `String s -> (empty, sprintf "\"%s\"" s)
+      | `Null _ -> failwith "`Null literal not supported"
+      | `Unop (op, p) ->
           let queries, pred = self#pred s p in
           let pred =
             match op with
@@ -364,7 +364,7 @@ class to_cozy ?fresh ?(subst = Map.empty (module Name)) args =
                 |> Error.raise
           in
           (queries, pred)
-      | Binop (op, p1, p2) ->
+      | `Binop (op, p1, p2) ->
           let q1, s1 = self#pred s p1 in
           let s1 = sprintf "(%s)" s1 in
           let q2, s2 = self#pred s p2 in
@@ -388,17 +388,17 @@ class to_cozy ?fresh ?(subst = Map.empty (module Name)) args =
             | Strpos -> sprintf "strpos(%s, %s)" s1 s2
           in
           (extend q1 q2, s)
-      | If (p1, p2, p3) ->
+      | `If (p1, p2, p3) ->
           let q1, s1 = self#pred s p1 in
           let q2, s2 = self#pred s p2 in
           let q3, s3 = self#pred s p3 in
           (extend q1 @@ extend q2 q3, sprintf "(%s) ? (%s) : (%s)" s1 s2 s3)
-      | Exists q -> self#subquery subst "exists %s" q
-      | First q -> self#subquery subst "%s" q
-      | Substring _ -> failwith "Substring unsupported"
-      | Count | Sum _ | Avg _ | Min _ | Max _ ->
+      | `Exists q -> self#subquery subst "exists %s" q
+      | `First q -> self#subquery subst "%s" q
+      | `Substring _ -> failwith "`Substring unsupported"
+      | `Count | `Sum _ | `Avg _ | `Min _ | `Max _ ->
           failwith "Unexpected aggregates"
-      | Row_number -> failwith "Row_number not supported"
+      | `Row_number -> failwith "`Row_number not supported"
   end
 
 let to_string bench_name params q =
@@ -420,19 +420,19 @@ let to_string bench_name params q =
   let lib =
     {|
 
-    extern imul(x : Int, y : Int) : Int = "{x} * {y}"
-    extern idiv(x : Int, y : Int) : Int = "{x} / {y}"
-    extern imod(x : Int, y : Int) : Int = "{x} % {y}"
+    extern imul(x : Int, y : Int) : `Int = "{x} * {y}"
+    extern idiv(x : Int, y : Int) : `Int = "{x} / {y}"
+    extern imod(x : Int, y : Int) : `Int = "{x} % {y}"
     extern fmul(x : Float, y : Float) : Float = "{x} * {y}"
     extern fdiv(x : Float, y : Float) : Float = "{x} / {y}"
-    extern strpos(x : String, y : String) : Int = "strpos({x}, {y})"
-    extern day(x : Int) : Int = "of_day({x})"
-    extern year(x : Int) : Int = "of_year({x})"
-    extern month(x : Int) : Int = "to_month({x})"
-    extern extracty(x : Int) : Int = "to_year({x})"
+    extern strpos(x : String, y : String) : `Int = "strpos({x}, {y})"
+    extern day(x : Int) : `Int = "of_day({x})"
+    extern year(x : Int) : `Int = "of_year({x})"
+    extern month(x : Int) : `Int = "to_month({x})"
+    extern extracty(x : Int) : `Int = "to_year({x})"
     extern i2f(x : Int) : Float = "int_to_float({x})"
-    extern strlen(x : String) : Int = "strlen({x})"
-    extern streq(x : String, y : String) : Bool = "streq({x}, {y})"
+    extern strlen(x : String) : `Int = "strlen({x})"
+    extern streq(x : String, y : String) : `Bool = "streq({x}, {y})"
 |}
     |> String.strip
   in

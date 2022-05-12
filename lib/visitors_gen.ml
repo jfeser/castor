@@ -1248,81 +1248,81 @@ class virtual ['self] base_mapreduce =
 
     method visit_Name env c0 =
       let r0, s0 = (fun this -> (this, self#zero)) c0 in
-      (Name r0, s0)
+      (`Name r0, s0)
 
     method visit_Int env c0 =
       let r0, s0 = (fun this -> (this, self#zero)) c0 in
-      (Int r0, s0)
+      (`Int r0, s0)
 
     method visit_Fixed env c0 =
       let r0, s0 = (fun this -> (this, self#zero)) c0 in
-      (Fixed r0, s0)
+      (`Fixed r0, s0)
 
     method visit_Date env c0 =
       let r0, s0 = (fun this -> (this, self#zero)) c0 in
-      (Date r0, s0)
+      (`Date r0, s0)
 
     method visit_Bool env c0 =
       let r0, s0 = (fun this -> (this, self#zero)) c0 in
-      (Bool r0, s0)
+      (`Bool r0, s0)
 
     method visit_String env c0 =
       let r0, s0 = (fun this -> (this, self#zero)) c0 in
-      (String r0, s0)
+      (`String r0, s0)
 
     method visit_Null env c0 =
       let r0, s0 = (fun this -> (this, self#zero)) c0 in
-      (Null r0, s0)
+      (`Null r0, s0)
 
     method visit_Unop env c0 c1 =
       let r0, s0 = (fun this -> (this, self#zero)) c0 in
       let r1, s1 = self#visit_pred env c1 in
-      (Unop (r0, r1), self#plus s0 s1)
+      (`Unop (r0, r1), self#plus s0 s1)
 
     method visit_Binop env c0 c1 c2 =
       let r0, s0 = (fun this -> (this, self#zero)) c0 in
       let r1, s1 = self#visit_pred env c1 in
       let r2, s2 = self#visit_pred env c2 in
-      (Binop (r0, r1, r2), self#plus (self#plus s0 s1) s2)
+      (`Binop (r0, r1, r2), self#plus (self#plus s0 s1) s2)
 
-    method visit_Count env = (Count, self#zero)
-    method visit_Row_number env = (Row_number, self#zero)
+    method visit_Count env = (`Count, self#zero)
+    method visit_Row_number env = (`Row_number, self#zero)
 
     method visit_Sum env c0 =
       let r0, s0 = self#visit_pred env c0 in
-      (Sum r0, s0)
+      (`Sum r0, s0)
 
     method visit_Avg env c0 =
       let r0, s0 = self#visit_pred env c0 in
-      (Avg r0, s0)
+      (`Avg r0, s0)
 
     method visit_Min env c0 =
       let r0, s0 = self#visit_pred env c0 in
-      (Min r0, s0)
+      (`Min r0, s0)
 
     method visit_Max env c0 =
       let r0, s0 = self#visit_pred env c0 in
-      (Max r0, s0)
+      (`Max r0, s0)
 
     method visit_If env c0 c1 c2 =
       let r0, s0 = self#visit_pred env c0 in
       let r1, s1 = self#visit_pred env c1 in
       let r2, s2 = self#visit_pred env c2 in
-      (If (r0, r1, r2), self#plus (self#plus s0 s1) s2)
+      (`If (r0, r1, r2), self#plus (self#plus s0 s1) s2)
 
     method visit_First env c0 =
       let r0, s0 = self#visit_'r env c0 in
-      (First r0, s0)
+      (`First r0, s0)
 
     method visit_Exists env c0 =
       let r0, s0 = self#visit_'r env c0 in
-      (Exists r0, s0)
+      (`Exists r0, s0)
 
     method visit_Substring env c0 c1 c2 =
       let r0, s0 = self#visit_pred env c0 in
       let r1, s1 = self#visit_pred env c1 in
       let r2, s2 = self#visit_pred env c2 in
-      (Substring (r0, r1, r2), self#plus (self#plus s0 s1) s2)
+      (`Substring (r0, r1, r2), self#plus (self#plus s0 s1) s2)
 
     method visit_pred env this =
       match this with
@@ -1556,4 +1556,5 @@ class virtual ['self] base_mapreduce =
 
     method visit_t env = self#visit_annot env
   end
+
 

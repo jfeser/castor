@@ -55,13 +55,13 @@ let eqs_open (eqs : 'a annot -> Set.M(Eq).t) r : Set.M(Eq).t =
   | Select (ps, r) | GroupBy (ps, _, r) ->
       eqs r
       || List.filter_map ps ~f:(function
-           | Name n, s when String.(Name.name n <> s) -> Some (n, Name.create s)
+           | `Name n, s when String.(Name.name n <> s) -> Some (n, Name.create s)
            | _ -> None)
          |> of_list
   | Join { pred = p; r1; r2 } ->
       let e1 = eqs r1 and e2 = eqs r2 in
       let peqs = Pred.eqs p |> of_list in
-      (* If the equalities don't overlap, both sets continue to hold after the join. *)
+      (* `If the equalities don't overlap, both sets continue to hold after the join. *)
       let jeqs =
         if Set.inter (names e1) (names e2) |> Set.is_empty then e1 || e2
         else e1 && e2
@@ -73,7 +73,7 @@ let eqs_open (eqs : 'a annot -> Set.M(Eq).t) r : Set.M(Eq).t =
       match List.zip (Schema.schema h.hi_keys) h.hi_lookup with
       | Ok ls ->
           List.filter_map ls ~f:(fun (n, p) ->
-              match p with Name n' -> Some (n, n') | _ -> None)
+              match p with `Name n' -> Some (n, n') | _ -> None)
           |> of_list
       | Unequal_lengths -> empty)
   | ATuple (ts, Cross) ->
@@ -122,3 +122,4 @@ module Context = struct
 
   let annotate r = annot empty r
 end
+

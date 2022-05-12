@@ -60,7 +60,7 @@ let unscope n =
 class to_lhs_visible_depjoin =
   object
     inherit [_] V.map as super
-    method! visit_Name () n = Name (unscope n)
+    method! visit_Name () n = `Name (unscope n)
 
     method! visit_DepJoin () d =
       (* Ensure that the output attributes are the same under the modified
@@ -104,7 +104,7 @@ let dep_join lhs rhs =
 
 let simple_join lhs rhs =
   {
-    (C.join (Bool true) lhs rhs) with
+    (C.join (`Bool true) lhs rhs) with
     meta =
       object
         method was_depjoin = true
@@ -227,7 +227,7 @@ let push_select d (preds, q) =
                 let n = Name.create n in
                 if List.mem ~equal:[%equal: Name.t] d_schema_names n then
                   P.name n
-                else Min p
+                else `Min p
             | `Window -> p)
       in
       C.group_by preds d_schema_names (dep_join d q)
@@ -264,10 +264,10 @@ let push_range d (lo, hi) =
   let fresh_name f = Fresh.name Global.fresh f in
   let rhs =
     C.range
-      (First (C.group_by [ (Min lo, fresh_name "min%d") ] [] d))
-      (First (C.group_by [ (Max hi, fresh_name "max%d") ] [] d))
+      (`First (C.group_by [ (`Min lo, fresh_name "min%d") ] [] d))
+      (`First (C.group_by [ (`Max hi, fresh_name "max%d") ] [] d))
   and join_pred =
-    let v = Name (Name.create "range") in
+    let v = `Name (Name.create "range") in
     P.(lo <= v && v <= hi)
   in
   C.join join_pred d rhs
@@ -279,7 +279,7 @@ let rec push_depjoin r =
       let d_lhs = push_depjoin d_lhs in
       let d_rhs = push_depjoin d_rhs in
 
-      (* If the join is not really dependent, then replace with a regular join.
+      (* `If the join is not really dependent, then replace with a regular join.
          *)
       if Set.inter (free d_rhs) (attrs d_lhs) |> Set.is_empty then
         simple_join d_lhs d_rhs
@@ -340,3 +340,4 @@ module Private = struct
   let to_nice_depjoin = to_nice_depjoin
   let to_visible_depjoin = to_visible_depjoin
 end
+
