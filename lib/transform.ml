@@ -360,8 +360,8 @@ and optimize_subqueries (module C : Config.S) r =
         end in
         optimize_exn (module C) r
 
-      method! visit_Exists () r = Exists (self#visit_subquery r)
-      method! visit_First () r = First (self#visit_subquery r)
+      method! visit_Exists () r = `Exists (self#visit_subquery r)
+      method! visit_First () r = `First (self#visit_subquery r)
 
       method! visit_AList () l =
         AList { l with l_values = self#visit_t () l.l_values }

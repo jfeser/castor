@@ -2,7 +2,7 @@ open Core
 open Printf
 open Collections
 open Ast
-module A = Abslayout
+module A = Constructors.Annot
 module P = Pred.Infix
 module V = Visitors
 include (val Log.make ~level:(Some Warning) "castor-opt.join-opt")
@@ -53,7 +53,7 @@ module Join_graph = struct
     include T
     include Comparator.Make (T)
 
-    let default = Bool true
+    let default = `Bool true
   end
 
   module G = Graph.Persistent.Graph.ConcreteLabeled (Vertex) (Edge)
@@ -81,7 +81,7 @@ module Join_graph = struct
   let add_or_update_edge g ((v1, l, v2) as e) =
     try
       let _, l', _ = find_edge g v1 v2 in
-      add_edge_e g (v1, Binop (And, l, l'), v2)
+      add_edge_e g (v1, `Binop (And, l, l'), v2)
     with Caml.Not_found -> add_edge_e g e
 
   let vertices g = fold_vertex (fun v l -> v :: l) g []
@@ -214,7 +214,7 @@ module Join_graph = struct
         end
 
   let of_abslayout r =
-    debug (fun m -> m "Planning join for %a." A.pp r);
+    debug (fun m -> m "Planning join for %a." Abslayout.pp r);
     let leaves =
       to_leaves r |> Set.to_list
       |> List.map ~f:(fun r ->
@@ -327,7 +327,7 @@ module Make (Config : Config.S) = struct
     | Flat r | Id r -> r
     | Nest { lhs; rhs; pred } -> join pred (to_ralgebra lhs) (to_ralgebra rhs)
     | Hash { lkey; rkey; lhs; rhs } ->
-        join (Binop (Eq, lkey, rkey)) (to_ralgebra lhs) (to_ralgebra rhs)
+        join (`Binop (Eq, lkey, rkey)) (to_ralgebra lhs) (to_ralgebra rhs)
 
   module Cost = struct
     let read = function
@@ -373,8 +373,8 @@ module Make (Config : Config.S) = struct
     let parted_r =
       let c = P.name (Name.create "c") in
       A.(
-        select [ (Min c, "min"); (Max c, "max"); (Avg c, "avg") ]
-        @@ group_by [ (Count, "c") ] (Set.to_list parts) static_r)
+        select [ (`Min c, "min"); (`Max c, "max"); (`Avg c, "avg") ]
+        @@ group_by [ (`Count, "c") ] (Set.to_list parts) static_r)
       |> Simplify_tactic.simplify cost_conn
     in
     let sql = Sql.of_ralgebra parted_r |> Sql.to_string
@@ -457,7 +457,7 @@ module Make (Config : Config.S) = struct
     in
     let%bind k1, k2 =
       match pred with
-      | Binop (Eq, k1, k2) -> return (k1, k2)
+      | `Binop (Binop.Eq, k1, k2) -> return (k1, k2)
       | _ ->
           debug (fun m -> m "Adding hash join failed.");
           []
@@ -570,9 +570,7 @@ module Make (Config : Config.S) = struct
     end
 
   let reshape top_filters j _ =
-    Some
-      (A.filter (Pred.conjoin (top_filters :> Pred.t list))
-      @@ (to_ralgebra j :> Ast.t))
+    Some (A.filter (Pred.conjoin top_filters) @@ (to_ralgebra j :> Ast.t))
 
   let rec emit_joins =
     let open Join_elim_tactics.Make (Config) in

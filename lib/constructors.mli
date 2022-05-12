@@ -30,7 +30,7 @@ end
 
 (** Construct annotated queries. Discards any existing metadata. *)
 module Annot : sig
-  type 'm annot = 'm Ast.annot constraint 'm = < >
+  type 'm annot = 'm Ast.annot constraint 'm = < .. >
   type 'm pred = 'm annot Ast.pred
   type 'm select_list = 'm pred Ast.select_list
   type 'm order_list = ('m pred * Ast.order) list
@@ -47,10 +47,13 @@ module Annot : sig
   val relation : Relation.t -> < > annot
   val empty : < > annot
   val scalar : _ pred -> string -> < > annot
+  val scalar' : _ pred Ast.scalar -> < > annot
   val scalar_s : string -> < > annot
+  val scalar_n : Name.t -> < > annot
   val list : _ annot -> string -> _ annot -> < > annot
+  val list' : (_ pred, _ annot) Ast.list_ -> < > annot
   val tuple : _ annot list -> Ast.tuple -> < > annot
-  val call : _ pred Ast.scan_type -> string -> < > annot
+  val call : string -> < > annot
 
   val hash_idx :
     ?key_layout:_ annot ->
@@ -60,6 +63,8 @@ module Annot : sig
     _ pred list ->
     < > annot
 
+  val hash_idx' : (_ pred, _ annot) Ast.hash_idx -> < > annot
+
   val ordered_idx :
     ?key_layout:_ annot ->
     _ annot ->
@@ -67,6 +72,8 @@ module Annot : sig
     _ annot ->
     (_ pred Ast.bound option * _ pred Ast.bound option) list ->
     < > annot
+
+  val ordered_idx' : (_ pred, _ annot) Ast.ordered_idx -> < > annot
 end
 
 (** Construct annotated queries. Existing metadata is cast into the new metadata type. *)

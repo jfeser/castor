@@ -1,10 +1,10 @@
 open Core
 open Ast
 open Collections
-module A = Abslayout
 module P = Pred.Infix
 module V = Visitors
 open Match.Query
+module A = Constructors.Annot
 
 (** Enable partitioning when a parameter is used in a range predicate. *)
 let enable_partition_cmp = ref false
@@ -60,10 +60,10 @@ module Make (C : Config.S) = struct
         else None
     | Filter (p', r) ->
         let%map p, r = to_filter r in
-        A.filter (Binop (And, p, p')) r
+        A.filter (`Binop (And, p, p')) r
     | Select (ps, r) -> (
         let%bind p, r = to_filter r in
-        match A.select_kind ps with
+        match Abslayout.select_kind ps with
         | `Scalar ->
             if Tactics_util.select_contains (Free.pred_free p) ps r then
               Some (A.filter p (A.select ps r))
@@ -103,7 +103,7 @@ module Make (C : Config.S) = struct
     match r.node with
     | Select (ps, r) -> (
         let%bind p, r = to_filter r in
-        match A.select_kind ps with
+        match Abslayout.select_kind ps with
         | `Scalar -> None
         | `Agg ->
             if
@@ -129,7 +129,7 @@ module Make (C : Config.S) = struct
     match r.node with
     | Select (ps, r) -> (
         let%bind p, r = to_filter r in
-        match A.select_kind ps with
+        match Abslayout.select_kind ps with
         | `Scalar ->
             let ext =
               Free.pred_free p |> Set.to_list
@@ -164,7 +164,7 @@ module Make (C : Config.S) = struct
 
   let split_filter r =
     match r.node with
-    | Filter (Binop (And, p, p'), r) -> Some (A.filter p (A.filter p' r))
+    | Filter (`Binop (And, p, p'), r) -> Some (A.filter p (A.filter p' r))
     | _ -> None
 
   let split_filter = of_func split_filter ~name:"split-filter"
@@ -196,7 +196,7 @@ module Make (C : Config.S) = struct
     let visitor =
       object
         inherit [_] V.endo
-        method! visit_Name () _ n = Name (Name.copy ~scope:(Some rn) n)
+        method! visit_Name () _ n = `Name (Name.copy ~scope:(Some rn) n)
       end
     in
     visitor#visit_pred () p
@@ -207,7 +207,7 @@ module Make (C : Config.S) = struct
     A.ordered_idx
       (A.dedup (A.select [ (p, n) ] rk))
       k
-      (A.filter (Binop (Eq, Name (Name.create ~scope:k n), p)) rv)
+      (A.filter (`Binop (Eq, `Name (Name.create ~scope:k n), p)) rv)
       [ (lb, ub) ]
 
   (** A predicate `p` is a candidate lookup key into a partitioning of `r` if it
@@ -233,13 +233,13 @@ module Make (C : Config.S) = struct
         let cmps, rest =
           Pred.conjuncts p
           |> List.partition_map ~f:(function
-               | (Binop (Gt, p1, p2) | Binop (Lt, p2, p1)) as p ->
+               | (`Binop (Binop.Gt, p1, p2) | `Binop (Lt, p2, p1)) as p ->
                    if is_candidate_key p1 r' && is_candidate_match p2 r' then
                      First (p2, (`Lt, p1))
                    else if is_candidate_key p2 r' && is_candidate_match p1 r'
                    then First (p1, (`Gt, p2))
                    else Second p
-               | (Binop (Ge, p1, p2) | Binop (Le, p2, p1)) as p ->
+               | (`Binop (Ge, p1, p2) | `Binop (Le, p2, p1)) as p ->
                    if is_candidate_key p1 r' && is_candidate_match p2 r' then
                      First (p2, (`Le, p1))
                    else if is_candidate_key p2 r' && is_candidate_match p1 r'
@@ -309,7 +309,7 @@ module Make (C : Config.S) = struct
           else
             let key =
               List.map key ~f:(function
-                | Name n -> n
+                | `Name n -> n
                 | _ -> failwith "expected a name")
             in
             let%map all_keys =
@@ -339,7 +339,6 @@ module Make (C : Config.S) = struct
     let open Option.Let_syntax in
     let%bind p, r = to_filter r in
     let%bind r = if Is_serializable.is_static ~params r then Some r else None in
-    let p = (p :> Pred.t) and r = (r :> Ast.t) in
     let names = Pred.names p |> Set.to_list in
 
     let is_param = Set.mem params in
@@ -363,8 +362,8 @@ module Make (C : Config.S) = struct
     @@ A.list (A.dedup @@ A.select (Select_list.of_names [ attr ]) r) scope
     @@ A.tuple
          [
-           A.filter p @@ A.scalar_name sattr;
-           A.select select_list @@ A.filter P.(Name attr = Name sattr) r;
+           A.filter p @@ A.scalar_n sattr;
+           A.select select_list @@ A.filter P.(`Name attr = `Name sattr) r;
          ]
          Cross
 
@@ -406,7 +405,7 @@ module Make (C : Config.S) = struct
       (filter_many pushed_val l.l_values)
 
   let push_filter_select stage p ps r =
-    match A.select_kind ps with
+    match Abslayout.select_kind ps with
     | `Scalar ->
         let ctx =
           List.map ps ~f:(fun (p, n) -> (Name.create n, p))
@@ -437,7 +436,7 @@ module Make (C : Config.S) = struct
     let r = strip_meta r in
     let%bind p, r = to_filter r in
     match r.node with
-    | Filter (p', r') -> Some (A.filter (Binop (And, p, p')) r')
+    | Filter (p', r') -> Some (A.filter (`Binop (And, p, p')) r')
     | Dedup r' -> Some (A.dedup (A.filter p r'))
     | Select (ps, r') -> Some (push_filter_select stage p ps r')
     | ATuple (rs, Concat) -> Some (A.tuple (List.map rs ~f:(A.filter p)) Concat)
@@ -556,18 +555,18 @@ module Make (C : Config.S) = struct
           in
           Some ret)
 
-    let rec of_pred r =
+    let rec of_pred r : _ pred -> _ =
       let open Or_error.Let_syntax in
       function
-      | Binop (And, p1, p2) ->
+      | `Binop (And, p1, p2) ->
           let%bind ds1 = of_pred r p1 in
           let%map ds2 = of_pred r p2 in
           intersect ds1 ds2
-      | Binop (Or, p1, p2) ->
+      | `Binop (Or, p1, p2) ->
           let%bind ds1 = of_pred r p1 in
           let%map ds2 = of_pred r p2 in
           union ds1 ds2
-      | Binop (Eq, p1, p2) -> (
+      | `Binop (Eq, p1, p2) -> (
           match
             ( Tactics_util.all_values [ (p1, "p1") ] r,
               Tactics_util.all_values [ (p2, "p2") ] r )
@@ -592,17 +591,19 @@ module Make (C : Config.S) = struct
             let n1 = schema e1 and n2 = schema e2 in
             A.dedup
             @@ A.select (Select_list.of_names [ n1 ])
-            @@ A.join (Binop (Eq, Name n1, Name n2)) e1 e2
+            @@ A.join (`Binop (Eq, `Name n1, `Name n2)) e1 e2
         | Or (d1, d2) ->
             let e1 = extract d1 and e2 = extract d2 in
             let n1 = schema e1 and n2 = schema e2 and n = fresh_name "x%d" in
             A.dedup
             @@ A.tuple
-                 [ A.select [ (Name n1, n) ] e1; A.select [ (Name n2, n) ] e2 ]
+                 [
+                   A.select [ (`Name n1, n) ] e1; A.select [ (`Name n2, n) ] e2;
+                 ]
                  Concat
         | Domain d ->
             let n = schema d and n' = fresh_name "x%d" in
-            A.select [ (Name n, n') ] d
+            A.select [ (`Name n, n') ] d
       in
       Map.map d ~f:extract
   end
@@ -679,54 +680,54 @@ module Make (C : Config.S) = struct
 
   let elim_disjunct = of_func elim_disjunct ~name:"elim-disjunct"
 
-  let eq_bound n ps =
+  let eq_bound n (ps : _ pred list) =
     List.find_map
       ~f:(function
-        | Binop (Eq, Name n', p) when Name.O.(n' = n) -> Some p
-        | Binop (Eq, p, Name n') when Name.O.(n' = n) -> Some p
+        | `Binop (Eq, `Name n', p) when Name.O.(n' = n) -> Some p
+        | `Binop (Eq, p, `Name n') when Name.O.(n' = n) -> Some p
         | _ -> None)
       ps
 
-  let to_lower_bound n ps =
+  let to_lower_bound n (ps : _ pred list) =
     let cmp =
       if !enable_partition_cmp then
         List.find_map
           ~f:(function
-            | Binop (Lt, Name n', p) when Name.O.(n' = n) -> Some p
-            | Binop (Le, Name n', p) when Name.O.(n' = n) -> Some p
-            | Binop (Gt, p, Name n') when Name.O.(n' = n) -> Some p
-            | Binop (Ge, p, Name n') when Name.O.(n' = n) -> Some p
-            | Binop (Lt, Binop (Add, Name n', p'), p) when Name.O.(n' = n) ->
-                Some (Binop (Sub, p, p'))
-            | Binop (Le, Binop (Add, Name n', p'), p) when Name.O.(n' = n) ->
-                Some (Binop (Sub, p, p'))
-            | Binop (Gt, p, Binop (Add, Name n', p')) when Name.O.(n' = n) ->
-                Some (Binop (Sub, p, p'))
-            | Binop (Ge, p, Binop (Add, Name n', p')) when Name.O.(n' = n) ->
-                Some (Binop (Sub, p, p'))
+            | `Binop (Lt, `Name n', p) when Name.O.(n' = n) -> Some p
+            | `Binop (Le, `Name n', p) when Name.O.(n' = n) -> Some p
+            | `Binop (Gt, p, `Name n') when Name.O.(n' = n) -> Some p
+            | `Binop (Ge, p, `Name n') when Name.O.(n' = n) -> Some p
+            | `Binop (Lt, `Binop (Add, `Name n', p'), p) when Name.O.(n' = n) ->
+                Some (`Binop (Sub, p, p'))
+            | `Binop (Le, `Binop (Add, `Name n', p'), p) when Name.O.(n' = n) ->
+                Some (`Binop (Sub, p, p'))
+            | `Binop (Gt, p, `Binop (Add, `Name n', p')) when Name.O.(n' = n) ->
+                Some (`Binop (Sub, p, p'))
+            | `Binop (Ge, p, `Binop (Add, `Name n', p')) when Name.O.(n' = n) ->
+                Some (`Binop (Sub, p, p'))
             | _ -> None)
           ps
       else None
     in
     Option.first_some (eq_bound n ps) cmp
 
-  let to_upper_bound n ps =
+  let to_upper_bound n (ps : _ pred list) =
     let cmp =
       if !enable_partition_cmp then
         List.find_map
           ~f:(function
-            | Binop (Lt, p, Name n') when Name.O.(n' = n) -> Some p
-            | Binop (Le, p, Name n') when Name.O.(n' = n) -> Some p
-            | Binop (Gt, Name n', p) when Name.O.(n' = n) -> Some p
-            | Binop (Ge, Name n', p) when Name.O.(n' = n) -> Some p
-            | Binop (Lt, p, Binop (Add, Name n', p')) when Name.O.(n' = n) ->
-                Some (Binop (Add, p, p'))
-            | Binop (Le, p, Binop (Add, Name n', p')) when Name.O.(n' = n) ->
-                Some (Binop (Add, p, p'))
-            | Binop (Gt, Binop (Add, Name n', p'), p) when Name.O.(n' = n) ->
-                Some (Binop (Add, p, p'))
-            | Binop (Ge, Binop (Add, Name n', p'), p) when Name.O.(n' = n) ->
-                Some (Binop (Add, p, p'))
+            | `Binop (Lt, p, `Name n') when Name.O.(n' = n) -> Some p
+            | `Binop (Le, p, `Name n') when Name.O.(n' = n) -> Some p
+            | `Binop (Gt, `Name n', p) when Name.O.(n' = n) -> Some p
+            | `Binop (Ge, `Name n', p) when Name.O.(n' = n) -> Some p
+            | `Binop (Lt, p, `Binop (Add, `Name n', p')) when Name.O.(n' = n) ->
+                Some (`Binop (Add, p, p'))
+            | `Binop (Le, p, `Binop (Add, `Name n', p')) when Name.O.(n' = n) ->
+                Some (`Binop (Add, p, p'))
+            | `Binop (Gt, `Binop (Add, `Name n', p'), p) when Name.O.(n' = n) ->
+                Some (`Binop (Add, p, p'))
+            | `Binop (Ge, `Binop (Add, `Name n', p'), p) when Name.O.(n' = n) ->
+                Some (`Binop (Add, p, p'))
             | _ -> None)
           ps
       else None
@@ -783,7 +784,7 @@ module Make (C : Config.S) = struct
           and scope = fresh_name "k%d" in
 
           let open P in
-          A.dep_join (A.select [ (Min lo, "lo"); (Max hi, "hi") ] vals) scope
+          A.dep_join (A.select [ (`Min lo, "lo"); (`Max hi, "hi") ] vals) scope
           @@ A.select [ (name (Name.create "range"), key_name) ]
           @@ A.range
                (name (Name.create ~scope "lo"))
@@ -805,11 +806,11 @@ module Make (C : Config.S) = struct
       in
       subst_no_subquery ctx r
     in
-    if Set.mem (A.names r') n then None
+    if Set.mem (Abslayout.names r') n then None
     else
       return
       @@ A.select Schema.(schema r' |> to_select_list)
-      @@ A.hash_idx keys scope r' [ Name n ]
+      @@ A.hash_idx keys scope r' [ `Name n ]
 
   let exists_correlated_subquery r n =
     let zero = false and plus = ( || ) in
@@ -817,8 +818,8 @@ module Make (C : Config.S) = struct
       V.Reduce.annot zero plus (query in_subquery) meta r
     and meta _ = zero
     and pred in_subquery = function
-      | Name n' -> in_subquery && [%compare.equal: Name.t] n n'
-      | Exists r | First r -> annot true r
+      | `Name n' -> in_subquery && [%compare.equal: Name.t] n n'
+      | `Exists r | `First r -> annot true r
       | p -> V.Reduce.pred zero plus (annot in_subquery) (pred in_subquery) p
     and query in_subquery q =
       V.Reduce.query zero plus (annot in_subquery) (pred in_subquery) q
@@ -837,11 +838,11 @@ module Make (C : Config.S) = struct
     let fields =
       let m = Tactics_util.alias_map r in
       List.map fields ~f:(fun n ->
-          (* If n is an alias for a field in a base relation, find the name of
+          (* `If n is an alias for a field in a base relation, find the name of
              that field. *)
           match Map.find m n with
           | Some n' -> (n', Some n)
-          | None -> (Name n, None))
+          | None -> (`Name n, None))
       |> Map.of_alist_multi (module Pred)
       |> Map.to_alist
     in
@@ -903,7 +904,7 @@ module Make (C : Config.S) = struct
     in
 
     let open A in
-    let name = A.name_of_string_exn n in
+    let name = Abslayout.name_of_string_exn n in
     let fresh_name =
       Caml.Format.sprintf "%s_%s" (Name.to_var name)
         (Fresh.name Global.fresh "%d")
@@ -916,22 +917,22 @@ module Make (C : Config.S) = struct
         let keys =
           List.filter_map eqs ~f:(fun (p1, p2) ->
               match (p1, p2) with
-              | Name n, _ when String.(Name.name n = Name.name name) -> Some p2
-              | _, Name n when String.(Name.name n = Name.name name) -> Some p1
+              | `Name n, _ when String.(Name.name n = Name.name name) -> Some p2
+              | _, `Name n when String.(Name.name n = Name.name name) -> Some p1
               | _ -> None)
         in
         let lhs =
           dedup
             (select
-               [ (Name (Name.copy ~scope:None name), fresh_name) ]
+               [ (`Name (Name.copy ~scope:None name), fresh_name) ]
                (db_relation rel))
         in
         let scope = Fresh.name Global.fresh "s%d" in
         let pred =
-          Binop
+          `Binop
             ( Eq,
-              Name (Name.copy ~scope:None name),
-              Name (Name.create fresh_name) )
+              `Name (Name.copy ~scope:None name),
+              `Name (Name.create fresh_name) )
           |> Pred.scoped (Schema.schema lhs) scope
         in
         let filtered_rel = filter pred (db_relation rel) in
@@ -943,12 +944,12 @@ module Make (C : Config.S) = struct
                  (replace_pred
                     (Tactics_util.replace_rel rel filtered_rel r)
                     k
-                    (Name (Name.create ~scope fresh_name)))
+                    (`Name (Name.create ~scope fresh_name)))
                  [ k ])
         |> Seq.of_list)
 
   let partition_domain n_subst n_domain =
-    let open A in
+    let open Abslayout in
     let n_subst, n_domain =
       (name_of_string_exn n_subst, name_of_string_exn n_domain)
     in
@@ -956,7 +957,7 @@ module Make (C : Config.S) = struct
     let lhs =
       dedup
         (select
-           [ (Name (Name.unscoped n_domain), Name.name n_domain) ]
+           [ (`Name (Name.unscoped n_domain), Name.name n_domain) ]
            (db_relation rel))
     in
     let scope = Fresh.name Global.fresh "s%d" in
@@ -976,9 +977,9 @@ module Make (C : Config.S) = struct
                (Map.singleton
                   (module Name)
                   n_subst
-                  (Name (Name.scoped scope n_domain)))
+                  (`Name (Name.scoped scope n_domain)))
                r))
-         [ Name n_subst ]
+         [ `Name n_subst ]
 
   (** Hoist subqueries out of the filter predicate and make them available by a
      depjoin. Allows expensive subqueries to be computed once instead of many
@@ -995,7 +996,7 @@ module Make (C : Config.S) = struct
     let scope = fresh_name "s%d" in
     let visitor =
       object
-        inherit Tactics_util.extract_subquery_visitor
+        inherit [_] Tactics_util.extract_subquery_visitor
         method can_hoist = can_hoist
 
         method fresh_name () =
@@ -1005,7 +1006,7 @@ module Make (C : Config.S) = struct
     let rhs, subqueries = visitor#visit_t () @@ Path.get_exn p r in
     let subqueries =
       List.map subqueries ~f:(fun (n, p) ->
-          A.select [ (p, Name.name n) ] @@ A.scalar (Int 0) "dummy")
+          A.select [ (p, Name.name n) ] @@ A.scalar (`Int 0) "dummy")
     in
     let%map lhs =
       match subqueries with
@@ -1030,7 +1031,7 @@ module Make (C : Config.S) = struct
     in
     let visitor =
       object
-        inherit Tactics_util.extract_subquery_visitor
+        inherit [_] Tactics_util.extract_subquery_visitor
         method can_hoist = can_hoist
         method fresh_name () = Name.create @@ Fresh.name Global.fresh "q%d"
       end
@@ -1040,9 +1041,9 @@ module Make (C : Config.S) = struct
     let pred', subqueries = visitor#visit_pred () pred in
     let subqueries =
       List.filter_map subqueries ~f:(function
-        | n, First r -> (
+        | n, `First r -> (
             match Schema.schema r with
-            | [ n' ] -> return @@ A.select [ (Name n', Name.name n) ] r
+            | [ n' ] -> return @@ A.select [ (`Name n', Name.name n) ] r
             | _ -> None)
         | _ -> None)
     in
@@ -1060,7 +1061,7 @@ module Make (C : Config.S) = struct
     let open Option.Let_syntax in
     let visitor =
       object
-        inherit Tactics_util.extract_subquery_visitor
+        inherit [_] Tactics_util.extract_subquery_visitor
         val mutable is_first = true
 
         method can_hoist _ =
@@ -1083,16 +1084,16 @@ module Make (C : Config.S) = struct
     let scope = Fresh.name Global.fresh "s%d" in
     let schema = Schema.schema r' in
     let ctx =
-      List.map schema ~f:(fun n -> (n, Name (Name.scoped scope n)))
+      List.map schema ~f:(fun n -> (n, `Name (Name.scoped scope n)))
       |> Map.of_alist_exn (module Name)
     in
     let schema = Schema.scoped scope schema in
     match subquery with
-    | Exists _ -> None
-    | First r ->
+    | `Exists _ -> None
+    | `First r ->
         return @@ A.dep_join r' scope
         @@ A.select (Schema.to_select_list schema)
-        @@ A.subst ctx @@ A.filter p'
+        @@ Abslayout.subst ctx @@ A.filter p'
         @@ A.select
              [
                ( P.name @@ List.hd_exn @@ Schema.schema r,
@@ -1110,7 +1111,7 @@ module Make (C : Config.S) = struct
     let%bind p, r' = to_filter r in
     let p, subqueries =
       Pred.conjuncts p
-      |> List.partition_map ~f:(function Exists r -> Second r | p -> First p)
+      |> List.partition_map ~f:(function `Exists r -> Second r | p -> First p)
     in
     let%bind p, subquery =
       match subqueries with
@@ -1120,7 +1121,7 @@ module Make (C : Config.S) = struct
     let scope = Fresh.name Global.fresh "s%d" in
     let schema = Schema.schema r' in
     let ctx =
-      List.map schema ~f:(fun n -> (n, Name (Name.scoped scope n)))
+      List.map schema ~f:(fun n -> (n, `Name (Name.scoped scope n)))
       |> Map.of_alist_exn (module Name)
     in
     let schema = Schema.scoped scope schema in
@@ -1128,7 +1129,7 @@ module Make (C : Config.S) = struct
     return @@ A.dep_join r' scope @@ A.dedup @@ A.filter p
     @@ A.group_by (Schema.to_select_list unscoped_schema) unscoped_schema
     @@ A.select (Schema.to_select_list schema)
-    @@ A.subst ctx subquery
+    @@ Abslayout.subst ctx subquery
 
   let elim_correlated_exists_subquery =
     of_func elim_correlated_exists_subquery
@@ -1184,9 +1185,9 @@ module Make (C : Config.S) = struct
           in
           let filter_pred =
             List.foldi values ~init:p ~f:(fun i else_ v ->
-                If
-                  ( Binop (Eq, Name free_var, v),
-                    Name (Name.create (sprintf "%s_%d" witness_name i)),
+                `If
+                  ( `Binop (Eq, `Name free_var, v),
+                    `Name (Name.create (sprintf "%s_%d" witness_name i)),
                     else_ ))
           in
           let select_list = witnesses @ Select_list.of_names schema in
@@ -1197,12 +1198,12 @@ module Make (C : Config.S) = struct
     try run_exn r with Failed _ -> None
 
   (** Given a restricted parameter range, precompute a filter that depends on a
-     single table field. If the parameter is outside the range, then run the
+     single table field. `If the parameter is outside the range, then run the
      original filter. Otherwise, check the precomputed evidence. *)
   let precompute_filter field values =
     let open A in
     let field, values =
-      (A.name_of_string_exn field, List.map values ~f:Pred.of_string_exn)
+      (Abslayout.name_of_string_exn field, List.map values ~f:Pred.of_string_exn)
     in
     let exception Failed of Error.t in
     let run_exn r =
@@ -1224,15 +1225,15 @@ module Make (C : Config.S) = struct
                 raise (Failed err)
           in
           let encoder =
-            List.foldi values ~init:(Int 0) ~f:(fun i else_ v ->
+            List.foldi values ~init:(`Int 0) ~f:(fun i else_ v ->
                 let witness =
                   Pred.subst (Map.singleton (module Name) free_var v) p
                 in
-                If (witness, Int (i + 1), else_))
+                `If (witness, `Int (i + 1), else_))
           in
           let decoder =
-            List.foldi values ~init:(Int 0) ~f:(fun i else_ v ->
-                If (Binop (Eq, Name free_var, v), Int (i + 1), else_))
+            List.foldi values ~init:(`Int 0) ~f:(fun i else_ v ->
+                `If (`Binop (Binop.Eq, `Name free_var, v), `Int (i + 1), else_))
           in
           let fresh_name = Fresh.name Global.fresh "p%d_" ^ Name.name field in
           let select_list =
@@ -1240,10 +1241,10 @@ module Make (C : Config.S) = struct
           in
           Option.return
           @@ filter
-               (If
-                  ( Binop (Eq, decoder, Int 0),
-                    p,
-                    Binop (Eq, decoder, Name (Name.create fresh_name)) ))
+               (`If
+                 ( `Binop (Eq, decoder, `Int 0),
+                   p,
+                   `Binop (Eq, decoder, `Name (Name.create fresh_name)) ))
           @@ select select_list r'
       | _ -> None
     in
@@ -1295,11 +1296,11 @@ module Make (C : Config.S) = struct
    *         let filter_pred =
    *           List.foldi values ~init:p ~f:(fun i else_ v ->
    *               If
-   *                 ( Binop (Eq, Name free_var, v),
-   *                   Name (Name.create (sprintf "%s_%d" witness_name i)),
+   *                 ( `Binop (Eq, `Name free_var, v),
+   *                   `Name (Name.create (sprintf "%s_%d" witness_name i)),
    *                   else_ ))
    *         in
-   *         let select_list = witnesses @ List.map schema ~f:(fun n -> Name n) in
+   *         let select_list = witnesses @ List.map schema ~f:(fun n -> `Name n) in
    *         Some (filter filter_pred (select select_list r'))
    *     | _ -> None
    *   in

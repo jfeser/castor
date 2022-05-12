@@ -247,7 +247,7 @@ module Make (Config : Config.S) = struct
 
       can_hoist should be overwritten to determine whether the subquery can be
      removed *)
-  class virtual extract_subquery_visitor =
+  class virtual ['self] extract_subquery_visitor =
     object (self : 'self)
       inherit [_] Visitors.mapreduce
       inherit [_] Util.list_monoid

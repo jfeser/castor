@@ -49,7 +49,7 @@ type ('p, 'r) ppred =
   | `First of 'r
   | `Exists of 'r
   | `Substring of 'p * 'p * 'p ]
-[@@deriving compare, equal, hash, sexp, variants]
+[@@deriving compare, equal, hash, sexp]
 
 type 'r pred = ('r pred, 'r) ppred [@@deriving compare, equal, hash, sexp]
 
@@ -113,7 +113,7 @@ type ('p, 'r) query =
   | ATuple of ('r list * tuple)
   | AHashIdx of ('p, 'r) hash_idx
   | AOrderedIdx of ('p, 'r) ordered_idx
-  | Call of 'p scan_type * string
+  | Call of string
 [@@deriving compare, equal, hash, sexp, variants]
 
 type 'm annot = { node : ('m annot pred, 'm annot) query; meta : 'm }

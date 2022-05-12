@@ -36,7 +36,7 @@ module Make (C : Config.S) = struct
             let scalars, rest =
               List.partition_map ps ~f:(fun ((p, _) as s) ->
                   match p with
-                  | Name n
+                  | `Name n
                     when List.mem schema n ~equal:[%compare.equal: Name.t] ->
                       First n
                   | _ -> Second s)
@@ -94,19 +94,19 @@ module Make (C : Config.S) = struct
                      .r_name
                  in
                  let lhs =
-                   dedup (select [ (Name k, key_name) ] (db_relation rel))
+                   dedup (select [ (`Name k, key_name) ] (db_relation rel))
                  in
                  let new_key =
                    List.filter key ~f:(fun k' -> Name.O.(k <> k'))
                  in
                  let new_ps =
                    List.filter ps ~f:(fun (p, _) ->
-                       not ([%compare.equal: Pred.t] p (Name k)))
+                       not ([%compare.equal: Pred.t] p (`Name k)))
                    |> Select_list.map ~f:(fun p _ ->
                           Pred.scoped (Schema.schema lhs) scope p)
                  in
                  let filter_pred =
-                   Binop (Eq, Name k, Name (Name.create key_name))
+                   `Binop (Eq, `Name k, `Name (Name.create key_name))
                    |> Pred.scoped (Schema.schema lhs) scope
                  in
                  let new_r =
@@ -119,7 +119,7 @@ module Make (C : Config.S) = struct
                  let key_scalar =
                    let p =
                      Pred.scoped (Schema.schema lhs) scope
-                       (Name (Name.create key_name))
+                       (`Name (Name.create key_name))
                    in
                    scalar p (Name.name k)
                  in

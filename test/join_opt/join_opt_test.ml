@@ -62,7 +62,7 @@ let%expect_test "cost" =
     (Flat
        C.(
          join
-           (Binop (Eq, Name c_custkey, Name o_custkey))
+           (`Binop (Eq, `Name c_custkey, `Name o_custkey))
            (relation orders) (relation customer)))
   |> [%sexp_of: float array] |> print_s;
   [%expect {| (68000) |}]
@@ -73,7 +73,7 @@ let%expect_test "cost" =
     C.(
       Nest
         {
-          pred = Binop (Eq, Name c_custkey, Name o_custkey);
+          pred = `Binop (Eq, `Name c_custkey, `Name o_custkey);
           lhs = Flat (relation customer);
           rhs = Flat (relation orders);
         })
@@ -86,7 +86,7 @@ let%expect_test "cost" =
     C.(
       Flat
         (join
-           (Binop (Eq, Name c_nationkey, Name n_nationkey))
+           (`Binop (Eq, `Name c_nationkey, `Name n_nationkey))
            (relation nation) (relation customer)))
   |> [%sexp_of: float array] |> print_s;
   estimate_cost
@@ -94,7 +94,7 @@ let%expect_test "cost" =
     C.(
       Nest
         {
-          pred = Binop (Eq, Name c_nationkey, Name n_nationkey);
+          pred = `Binop (Eq, `Name c_nationkey, `Name n_nationkey);
           lhs = Flat (relation nation);
           rhs = Flat (relation customer);
         })
@@ -104,8 +104,8 @@ let%expect_test "cost" =
     C.(
       Hash
         {
-          lkey = Name c_nationkey;
-          rkey = Name n_nationkey;
+          lkey = `Name c_nationkey;
+          rkey = `Name n_nationkey;
           lhs = Flat (relation nation);
           rhs = Flat (relation customer);
         })
@@ -119,7 +119,7 @@ let%expect_test "to-from-ralgebra" =
   let r =
     C.(
       join
-        (Binop (Eq, Name c_nationkey, Name n_nationkey))
+        (`Binop (Eq, `Name c_nationkey, `Name n_nationkey))
         (relation nation) (relation customer))
   in
   let s = G.of_abslayout r in
@@ -131,10 +131,10 @@ let%expect_test "to-from-ralgebra" =
   let r =
     C.(
       join
-        (Binop (Eq, Name c_custkey, Name o_custkey))
+        (`Binop (Eq, `Name c_custkey, `Name o_custkey))
         (relation orders)
         (join
-           (Binop (Eq, Name c_nationkey, Name n_nationkey))
+           (`Binop (Eq, `Name c_nationkey, `Name n_nationkey))
            (relation nation) (relation customer)))
   in
   let s = G.of_abslayout r in
@@ -149,10 +149,10 @@ let%expect_test "part-fold" =
   let r =
     C.(
       join
-        (Binop (Eq, Name c_custkey, Name o_custkey))
+        (`Binop (Eq, `Name c_custkey, `Name o_custkey))
         (relation orders)
         (join
-           (Binop (Eq, Name c_nationkey, Name n_nationkey))
+           (`Binop (Eq, `Name c_nationkey, `Name n_nationkey))
            (relation nation) (relation customer)))
   in
   let s = G.of_abslayout r in
@@ -179,7 +179,7 @@ let opt_test r = (opt r)#joins |> [%sexp_of: (float array * t) list] |> print_s
 let%expect_test "join-opt" =
   opt_test
   @@ C.join
-       (Binop (Eq, Name c_nationkey, Name n_nationkey))
+       (`Binop (Eq, `Name c_nationkey, `Name n_nationkey))
        (C.relation nation) (C.relation customer);
   [%expect
     {|
@@ -208,13 +208,16 @@ let%expect_test "join-opt" =
                 (((name c_phone)) (StringT (padded)))))))))
           (meta <opaque>))))
        (pred
-        (Binop Eq (Name ((name c_nationkey) (type_ (IntT))))
-         (Name ((name n_nationkey) (type_ (IntT))))))))) |}]
+        (Binop
+         (Eq (Name ((name c_nationkey) (type_ (IntT))))
+          (Name ((name n_nationkey) (type_ (IntT)))))))))) |}]
 
 let%expect_test "join-opt" =
   opt_test
-  @@ C.join (Binop (Eq, Name c_custkey, Name o_custkey)) (C.relation orders)
-  @@ C.join (Binop (Eq, Name c_nationkey, Name n_nationkey)) (C.relation nation)
+  @@ C.join (`Binop (Eq, `Name c_custkey, `Name o_custkey)) (C.relation orders)
+  @@ C.join
+       (`Binop (Eq, `Name c_nationkey, `Name n_nationkey))
+       (C.relation nation)
   @@ C.relation customer;
   [%expect
     {|
@@ -260,8 +263,9 @@ let%expect_test "join-opt" =
                   (((name o_totalprice)) (FixedT))))))))
             (meta <opaque>))))
          (pred
-          (Binop Eq (Name ((name c_custkey) (type_ (IntT))))
-           (Name ((name o_custkey) (type_ (IntT))))))))))) |}]
+          (Binop
+           (Eq (Name ((name c_custkey) (type_ (IntT))))
+            (Name ((name o_custkey) (type_ (IntT)))))))))))) |}]
 
 let%expect_test "" =
   let params =

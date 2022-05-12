@@ -189,7 +189,7 @@ let push_join d { pred = p; r1 = t1; r2 = t2 } =
              Option.map n ~f:(fun n -> (n, Fresh.name Global.fresh "d%d")))
     in
     let rhs_select =
-      List.map d_rhs ~f:(fun (x, x') -> (name @@ Name.create x, x'))
+      List.map d_rhs ~f:(fun (x, x') -> (`Name (Name.create x), x'))
       @ (schema t2 |> to_select_list)
     in
 
@@ -340,4 +340,3 @@ module Private = struct
   let to_nice_depjoin = to_nice_depjoin
   let to_visible_depjoin = to_visible_depjoin
 end
-

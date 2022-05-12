@@ -24,17 +24,16 @@ module Query = struct
   let order_by a b = orderby { key = a; rel = b }
   let relation r = relation r
   let empty = aempty
-  let scalar s_pred s_name = ascalar { s_pred; s_name }
-
-  let scalar_s s =
-    let n = Name.of_string_exn s in
-    scalar (`Name n) (Name.name n)
-
+  let scalar' = ascalar
+  let scalar s_pred s_name = scalar' { s_pred; s_name }
+  let scalar_n n = scalar (`Name n) (Name.name n)
+  let scalar_s s = scalar_n (Name.of_string_exn s)
   let tuple a b = atuple (a, b)
   let call = call
+  let hash_idx' = ahashidx
 
   let hash_idx ?key_layout a b c d =
-    ahashidx
+    hash_idx'
       {
         hi_keys = a;
         hi_values = c;
@@ -43,8 +42,10 @@ module Query = struct
         hi_key_layout = key_layout;
       }
 
+  let ordered_idx' = aorderedidx
+
   let ordered_idx ?key_layout a b c d =
-    aorderedidx
+    ordered_idx'
       {
         oi_keys = a;
         oi_values = c;
@@ -53,64 +54,87 @@ module Query = struct
         oi_key_layout = key_layout;
       }
 
-  let list a b c = alist { l_keys = a; l_scope = b; l_values = c }
+  let list' = alist
+  let list a b c = list' { l_keys = a; l_scope = b; l_values = c }
 end
 
 (** Construct annotated queries. Discards any existing metadata. *)
 module Annot = struct
-  type 'm annot = 'm Ast.annot constraint 'm = < >
+  type 'm annot = 'm Ast.annot constraint 'm = < .. >
   type 'm pred = 'm annot Ast.pred
   type 'm select_list = 'm pred Ast.select_list
   type 'm order_list = ('m pred * Ast.order) list
-  type annot' = < > Ast.annot
-  type pred' = < > Ast.annot Ast.pred
-  type select_list' = pred' Ast.select_list
-  type order_list' = (pred' * Ast.order) list
+
+  let strip_meta x = V.map_meta (fun m -> (m :> < >)) x
+  let strip_meta_alist x = V.Map.list strip_meta x
+  let strip_meta_list x = List.map x ~f:strip_meta
+  let strip_meta_option x = Option.map x ~f:strip_meta
+  let strip_meta_pred x = V.map_meta_pred (fun m -> (m :> < >)) x
+  let strip_meta_pred_list x = List.map ~f:strip_meta_pred x
+  let strip_meta_hash_idx x = V.Map.hash_idx strip_meta strip_meta_pred x
+  let strip_meta_ordered_idx x = V.Map.ordered_idx strip_meta strip_meta_pred x
+  let strip_meta_scalar x = V.Map.scalar strip_meta_pred x
+
+  let strip_meta_select_list x =
+    Select_list.map ~f:(fun p _ -> strip_meta_pred p) x
+
+  let strip_meta_order_list x =
+    List.map ~f:(fun (p, o) -> (strip_meta_pred p, o)) x
+
+  let strip_meta_bounds x =
+    let strip_meta_bound =
+      Option.map ~f:(fun (p, b) -> (strip_meta_pred p, b))
+    in
+    List.map ~f:(fun (b, b') -> (strip_meta_bound b, strip_meta_bound b')) x
 
   let wrap node = Ast.{ node; meta = object end }
 
   let select a b =
-    wrap
-    @@ Query.select
-         (a :> (_, < > Ast.annot) Ast.ppred Ast.select_list)
-         (b :> annot')
+    wrap @@ Query.select (strip_meta_select_list a) (strip_meta b)
 
-  let select_ns a b = wrap @@ Query.select_ns a (b :> annot')
-  let range a b = wrap @@ Query.range (a :> pred') (b :> pred')
-  let dep_join a b c = wrap @@ Query.dep_join (a :> annot') b (c :> annot')
-  let join a b c = wrap @@ Query.join (a :> pred') (b :> annot') (c :> annot')
-  let filter a b = wrap @@ Query.filter (a :> pred') (b :> annot')
+  let select_ns a b = wrap @@ Query.select_ns a (strip_meta b)
+  let range a b = wrap @@ Query.range (strip_meta_pred a) (strip_meta_pred b)
+  let dep_join a b c = wrap @@ Query.dep_join (strip_meta a) b (strip_meta c)
+
+  let join a b c =
+    wrap @@ Query.join (strip_meta_pred a) (strip_meta b) (strip_meta c)
+
+  let filter a b = wrap @@ Query.filter (strip_meta_pred a) (strip_meta b)
 
   let group_by a b c =
-    wrap @@ Query.group_by (a :> select_list') b (c :> annot')
+    wrap @@ Query.group_by (strip_meta_select_list a) b (strip_meta c)
 
-  let dedup a = wrap @@ Query.dedup (a :> annot')
-  let order_by a b = wrap @@ Query.order_by (a :> order_list') (b :> annot')
+  let dedup a = wrap @@ Query.dedup (strip_meta a)
+
+  let order_by a b =
+    wrap @@ Query.order_by (strip_meta_order_list a) (strip_meta b)
+
   let relation r = wrap @@ Query.relation r
   let empty = wrap @@ Query.empty
-  let scalar a b = wrap @@ Query.scalar (a :> pred') b
+  let scalar a b = wrap @@ Query.scalar (strip_meta_pred a) b
+  let scalar' x = wrap @@ Query.scalar' (strip_meta_scalar x)
   let scalar_s a = wrap @@ Query.scalar_s a
-  let list a b c = wrap @@ Query.list (a :> annot') b (c :> annot')
-  let tuple a b = wrap @@ Query.tuple (a :> annot' list) b
-  let call a b = wrap @@ Query.call (a :> pred' Ast.scan_type) b
+  let scalar_n a = wrap @@ Query.scalar_n a
+  let list a b c = wrap @@ Query.list (strip_meta a) b (strip_meta c)
+  let list' x = wrap @@ Query.list' (strip_meta_alist x)
+  let tuple a b = wrap @@ Query.tuple (strip_meta_list a) b
+  let call a = wrap @@ Query.call a
 
   let hash_idx ?key_layout a b c d =
     wrap
     @@ Query.hash_idx
-         ?key_layout:(key_layout :> annot' option)
-         (a :> annot')
-         b
-         (c :> annot')
-         (d :> pred' list)
+         ?key_layout:(strip_meta_option key_layout)
+         (strip_meta a) b (strip_meta c) (strip_meta_pred_list d)
+
+  let hash_idx' x = wrap @@ Query.hash_idx' (strip_meta_hash_idx x)
 
   let ordered_idx ?key_layout a b c d =
     wrap
     @@ Query.ordered_idx
-         ?key_layout:(key_layout :> annot' option)
-         (a :> annot')
-         b
-         (c :> annot')
-         (d :> (pred' Ast.bound option * pred' Ast.bound option) list)
+         ?key_layout:(strip_meta_option key_layout)
+         (strip_meta a) b (strip_meta c) (strip_meta_bounds d)
+
+  let ordered_idx' x = wrap @@ Query.ordered_idx' (strip_meta_ordered_idx x)
 end
 
 (** Construct annotated queries. Existing metadata is cast into the new metadata type. *)

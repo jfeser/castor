@@ -19,14 +19,14 @@ module Infix = struct
   open Ast.Unop
   open Ast.Binop
 
-  let name = name
+  let name n = `Name n
   let name_s n = name (Name.create n)
-  let int = int
-  let fixed = fixed
-  let date = date
-  let bool = bool
-  let string = string
-  let null = null
+  let int x = `Int x
+  let fixed x = `Fixed x
+  let date x = `Date x
+  let bool x = `Bool x
+  let string x = `String x
+  let null x = `Null x
   let unop op p = `Unop (op, p)
   let binop op p p' = `Binop (op, p, p')
   let not p = unop Not p
@@ -52,6 +52,7 @@ module Infix = struct
   let strpos p p' = binop Strpos p p'
   let exists r = `Exists r
   let count = `Count
+  let if_ x y z = `If (x, y, z)
 end
 
 let to_type p = Schema.to_type p
@@ -81,28 +82,28 @@ let collect_aggs p =
           if String.(kind = "avg") then Some Prim_type.fixed_t
           else to_type_opt p |> Or_error.ok
         in
-        (Name (Name.create ?type_ n), [ (p, n) ])
+        (`Name (Name.create ?type_ n), [ (p, n) ])
 
-      method! visit_Sum () p = self#visit_Agg "sum" (Sum p)
-      method! visit_Count () = self#visit_Agg "count" Count
-      method! visit_Min () p = self#visit_Agg "min" (Min p)
-      method! visit_Max () p = self#visit_Agg "max" (Max p)
-      method! visit_Avg () p = self#visit_Agg "avg" (Avg p)
+      method! visit_Sum () p = self#visit_Agg "sum" (`Sum p)
+      method! visit_Count () = self#visit_Agg "count" `Count
+      method! visit_Min () p = self#visit_Agg "min" (`Min p)
+      method! visit_Max () p = self#visit_Agg "max" (`Max p)
+      method! visit_Avg () p = self#visit_Agg "avg" (`Avg p)
     end
   in
   visitor#visit_pred () p
 
 let rec conjuncts = function
-  | Binop (And, p1, p2) -> conjuncts p1 @ conjuncts p2
+  | `Binop (Binop.And, p1, p2) -> conjuncts p1 @ conjuncts p2
   | p -> [ p ]
 
 let rec disjuncts = function
-  | Binop (Or, p1, p2) -> disjuncts p1 @ disjuncts p2
+  | `Binop (Binop.Or, p1, p2) -> disjuncts p1 @ disjuncts p2
   | p -> [ p ]
 
 let%expect_test "" =
-  conjuncts (Binop (Eq, Int 0, Int 1)) |> [%sexp_of: t list] |> print_s;
-  [%expect {| ((Binop Eq (Int 0) (Int 1))) |}]
+  conjuncts (`Binop (Eq, `Int 0, `Int 1)) |> [%sexp_of: t list] |> print_s;
+  [%expect {| ((Binop (Eq (Int 0) (Int 1)))) |}]
 
 let dedup_pairs = List.dedup_and_sort ~compare:[%compare: Name.t * Name.t]
 
@@ -115,7 +116,7 @@ let eqs p =
 
       method! visit_Binop () op p1 p2 =
         match (op, p1, p2) with
-        | Eq, Name n1, Name n2 -> [ (n1, n2) ]
+        | Eq, `Name n1, `Name n2 -> [ (n1, n2) ]
         | And, p1, p2 ->
             self#plus (self#visit_pred () p1) (self#visit_pred () p2)
         | _ -> self#zero
@@ -138,10 +139,10 @@ let kind p =
     end
   in
   match p with
-  | Row_number -> `Window
+  | `Row_number -> `Window
   | _ -> if visitor#visit_pred () p then `Agg else `Scalar
 
-let%test "" = Poly.(kind Row_number = `Window)
+let%test "" = Poly.(kind `Row_number = `Window)
 
 let of_lexbuf_exn lexbuf =
   try Ralgebra_parser.expr_eof Ralgebra_lexer.token lexbuf
@@ -178,7 +179,7 @@ let subst_tree ctx p =
 
 let scoped names scope p =
   let ctx =
-    List.map names ~f:(fun n -> (n, Name (Name.scoped scope n)))
+    List.map names ~f:(fun n -> (n, `Name (Name.scoped scope n)))
     |> Map.of_alist_exn (module Name)
   in
   (new subst_visitor ctx)#visit_pred () p
@@ -191,7 +192,7 @@ let unscoped scope p =
       method! visit_Name _ this n =
         match Name.rel n with
         | Some s ->
-            if String.(s = scope) then Name (Name.copy ~scope:None n) else this
+            if String.(s = scope) then `Name (Name.copy ~scope:None n) else this
         | None -> this
     end
   in
@@ -205,19 +206,20 @@ let to_nnf p =
       method! visit_Unop () op arg =
         if Poly.(op = Not) then
           match arg with
-          | Binop (Or, p1, p2) ->
-              self#visit_pred () (Binop (And, Unop (Not, p1), Unop (Not, p2)))
-          | Binop (And, p1, p2) ->
-              Binop
+          | `Binop (Or, p1, p2) ->
+              self#visit_pred ()
+                (`Binop (And, `Unop (Not, p1), `Unop (Not, p2)))
+          | `Binop (And, p1, p2) ->
+              `Binop
                 ( Or,
-                  self#visit_pred () (Unop (Not, p1)),
-                  self#visit_pred () (Unop (Not, p2)) )
-          | Binop (Gt, p1, p2) -> self#visit_Binop () Le p1 p2
-          | Binop (Ge, p1, p2) -> self#visit_Binop () Lt p1 p2
-          | Binop (Lt, p1, p2) -> self#visit_Binop () Ge p1 p2
-          | Binop (Le, p1, p2) -> self#visit_Binop () Gt p1 p2
-          | Unop (Not, p) -> self#visit_pred () p
-          | p -> Unop (op, self#visit_pred () p)
+                  self#visit_pred () (`Unop (Not, p1)),
+                  self#visit_pred () (`Unop (Not, p2)) )
+          | `Binop (Gt, p1, p2) -> self#visit_Binop () Le p1 p2
+          | `Binop (Ge, p1, p2) -> self#visit_Binop () Lt p1 p2
+          | `Binop (Lt, p1, p2) -> self#visit_Binop () Ge p1 p2
+          | `Binop (Le, p1, p2) -> self#visit_Binop () Gt p1 p2
+          | `Unop (Not, p) -> self#visit_pred () p
+          | p -> `Unop (op, self#visit_pred () p)
         else super#visit_Unop () op arg
     end
   in
@@ -243,11 +245,11 @@ let simplify p =
               ~f:(List.filter ~f:(fun p -> not (Set.mem common p)))
               clauses
           in
-          Binop
+          `Binop
             ( And,
               conjoin @@ Set.to_list common,
               disjoin @@ List.map ~f:conjoin distinct )
-        else Binop (op, p1, p2)
+        else `Binop (op, p1, p2)
     end
   in
   (* Remove duplicate clauses from conjunctions and disjunctions. *)
@@ -257,12 +259,12 @@ let simplify p =
 
       method! visit_Binop () op p1 p2 =
         if Poly.(op = Or) then
-          disjuncts (binop op p1 p2)
+          disjuncts (Infix.binop op p1 p2)
           |> List.dedup_and_sort ~compare:[%compare: _ annot pred]
           |> List.map ~f:(self#visit_pred ())
           |> disjoin
         else if Poly.(op = And) then
-          conjuncts (binop op p1 p2)
+          conjuncts (Infix.binop op p1 p2)
           |> List.dedup_and_sort ~compare:[%compare: _ annot pred]
           |> List.map ~f:(self#visit_pred ())
           |> conjoin
@@ -277,13 +279,13 @@ let simplify p =
       method! visit_Binop () op p1 p2 =
         match op with
         | Or ->
-            disjuncts (binop op p1 p2)
-            |> List.filter ~f:(function Bool true -> false | _ -> true)
+            disjuncts (Infix.binop op p1 p2)
+            |> List.filter ~f:(function `Bool true -> false | _ -> true)
             |> List.map ~f:(self#visit_pred ())
             |> disjoin
         | And ->
-            conjuncts (binop op p1 p2)
-            |> List.filter ~f:(function Bool false -> false | _ -> true)
+            conjuncts (Infix.binop op p1 p2)
+            |> List.filter ~f:(function `Bool false -> false | _ -> true)
             |> List.map ~f:(self#visit_pred ())
             |> conjoin
         | _ -> super#visit_Binop () op p1 p2
@@ -293,19 +295,19 @@ let simplify p =
 
 let max_of p1 p2 = Infix.(if_ (p1 < p2) p2 p1)
 let min_of p1 p2 = Infix.(if_ (p1 < p2) p1 p2)
-let pseudo_bool p = if_ p (Int 1) (Int 0)
+let pseudo_bool p = Infix.(if_ p (int 1) (int 0))
 let sum_exn ps = List.reduce_exn ~f:Infix.( + ) ps
 
 type a = [ `Leaf of t | `And of b list ]
 and b = [ `Leaf of t | `Or of a list ]
 
 let rec to_and_or : t -> [ a | b ] = function
-  | Binop (And, p1, p2) -> (
+  | `Binop (And, p1, p2) -> (
       match (to_and_or p1, to_and_or p2) with
       | `And p1, `And p2 -> `And (p1 @ p2)
       | `And p1, (#b as p2) | (#b as p2), `And p1 -> `And (p2 :: p1)
       | (#b as p1), (#b as p2) -> `And [ p1; p2 ])
-  | Binop (Or, p1, p2) -> (
+  | `Binop (Or, p1, p2) -> (
       match (to_and_or p1, to_and_or p2) with
       | `Or p1, `Or p2 -> `Or (p1 @ p2)
       | `Or p1, (#a as p2) | (#a as p2), `Or p1 -> `Or (p2 :: p1)
@@ -327,18 +329,18 @@ let to_static ~params p =
         |> conjoin
     | `Or ps ->
         List.filter_map ps ~f:(function
-          | `Leaf p -> if is_static ~params p then Some p else Some (Bool true)
+          | `Leaf p -> if is_static ~params p then Some p else Some (`Bool true)
           | `And _ as p -> Some (to_static p))
         |> disjoin
-    | `Leaf p -> if is_static ~params p then p else Bool true
+    | `Leaf p -> if is_static ~params p then p else `Bool true
   in
   to_static p
 
-let strip_meta (p : < .. > annot pred) = (p :> t)
+let strip_meta p = V.map_meta_pred (fun m -> (m :> < >)) p
 
 let is_expensive p =
-  let rec pred = function
-    | Binop (Strpos, _, _) -> true
+  let rec pred : _ pred -> _ = function
+    | `Binop (Strpos, _, _) -> true
     | p -> V.Reduce.pred false ( || ) (fun _ -> false) pred p
   in
   pred p
@@ -368,5 +370,5 @@ let cse ?(min_uses = 3) p =
   |> List.fold_left ~init:(p, []) ~f:(fun ((p_old, m) as acc) (p_k, _) ->
          let name = Name.create @@ Fresh.name Global.fresh "x%d" in
 
-         let p_new = subst p_old p_k (Name name) in
+         let p_new = subst p_old p_k (`Name name) in
          if [%equal: t] p_new p_old then acc else (p_new, (name, p_k) :: m))

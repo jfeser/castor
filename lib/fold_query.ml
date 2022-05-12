@@ -219,7 +219,7 @@ let rec to_ralgebra q =
           else
             ( o1,
               A.group_by
-                ((Count, count) :: (schema q1 |> Schema.to_select_list))
+                ((`Count, count) :: (schema q1 |> Schema.to_select_list))
                 (schema q1) q1 )
         in
         (o1, q1)
@@ -300,4 +300,3 @@ let rec width' q =
   | Let (binds, q) -> width' (to_concat binds q)
 
 let width q = wrap q |> width'
-

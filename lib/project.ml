@@ -1,7 +1,7 @@
 open Ast
 module V = Visitors
 open Collections
-module A = Abslayout
+module A = Constructors.Annot
 module P = Pred.Infix
 
 let dummy_select = (`Bool false, "dummy")
@@ -107,7 +107,7 @@ let project_pred_open project project_pred p =
 (** Apply no projection until a select is reached, under which projection resumes. *)
 let no_project_open project no_project project_pred r =
   match r.node with
-  | Select (ps, r) -> A.select (ps :> Pred.t Select_list.t) (project r)
+  | Select (ps, r) -> A.select ps (project r)
   | AList l -> project_list no_project no_project l
   | _ ->
       { node = V.Map.query no_project project_pred r.node; meta = object end }
@@ -129,4 +129,3 @@ let project ~params ?(max_iters = 100) r =
       if [%equal: _ annot] r r' then r' else loop (ct + 1) r'
   in
   loop 0 (strip_meta r)
-

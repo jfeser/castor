@@ -39,7 +39,7 @@ module Make (C : Config.S) = struct
     let open Option.Let_syntax in
     let%bind pred, r1, r2 = to_join r in
     match pred with
-    | Binop (Eq, kl, kr) ->
+    | `Binop (Eq, kl, kr) ->
         let join_scope = Fresh.name Global.fresh "s%d"
         and hash_scope = Fresh.name Global.fresh "s%d"
         and r1_schema = schema r1 in
@@ -54,7 +54,7 @@ module Make (C : Config.S) = struct
                (A.dedup @@ A.select [ (kr, key_name) ] r2)
                hash_scope
                (A.filter
-                  (Binop (Eq, Name (Name.create ~scope:hash_scope key_name), kr))
+                  (`Binop (Eq, `Name (Name.create ~scope:hash_scope key_name), kr))
                   r2)
                [ Pred.scoped r1_schema join_scope kl ]
         in
@@ -66,7 +66,7 @@ module Make (C : Config.S) = struct
   let elim_join_filter r =
     let open Option.Let_syntax in
     let%map pred, r1, r2 = to_join r in
-    A.filter pred (A.join (Bool true) r1 r2)
+    A.filter pred (A.join (`Bool true) r1 r2)
 
   let elim_join_filter = of_func elim_join_filter ~name:"elim-join-filter"
 
@@ -89,7 +89,7 @@ module Make (C : Config.S) = struct
   let hoist_join_filter r =
     let open Option.Let_syntax in
     let%bind pred, r1, r2 = to_join r in
-    return @@ A.filter pred @@ A.join (Bool true) r1 r2
+    return @@ A.filter pred @@ A.join (`Bool true) r1 r2
 
   let hoist_join_filter = of_func hoist_join_filter ~name:"hoist-join-filter"
 
@@ -153,14 +153,14 @@ module Make (C : Config.S) = struct
            (select (Schema.to_select_list fst_sel_list) r)
            scope2
            (hash_idx
-              (dedup (select [ (Name pk, Name.name alias) ] rel))
+              (dedup (select [ (`Name pk, Name.name alias) ] rel))
               scope
               (select
                  (Select_list.of_names
                     (List.map fst_sel_list ~f:(fun n -> Name.scoped scope2 n)
                     @ snd_sel_list))
-                 (filter (Binop (Eq, Name pk, Name alias)) rel))
-              [ Name (Name.scoped scope2 pk) ])
+                 (filter (`Binop (Eq, `Name pk, `Name alias)) rel))
+              [ `Name (Name.scoped scope2 pk) ])
     else None
 
   (* let hoist_join_left r =
@@ -178,3 +178,4 @@ module Make (C : Config.S) = struct
    *     @@ A.filter (Pred.conjoin hoist)
    *     @@ A.join (Pred.conjoin keep) r1 r2 *)
 end
+

@@ -196,31 +196,31 @@ alist(filter((0 = g),
                                atuple([select([x0 as x2],
                                          select([p1 as x0],
                                            dedup(
-                                             select([fresh1 as p1],
+                                             select([fresh2 as p1],
                                                select([f as fresh1, g as fresh2], r))))),
                                        select([x1 as x2],
                                          select([p1 as x1],
                                            dedup(
-                                             select([fresh2 as p1],
+                                             select([fresh1 as p1],
                                                select([f as fresh1, g as fresh2], r)))))],
                                  concat)),
                              dedup(
                                atuple([select([x3 as x5],
                                          select([p1 as x3],
                                            dedup(
-                                             select([fresh2 as p1],
+                                             select([fresh1 as p1],
                                                select([f as fresh1, g as fresh2], r))))),
                                        select([x4 as x5],
                                          select([p1 as x4],
                                            dedup(
-                                             select([fresh1 as p1],
+                                             select([fresh2 as p1],
                                                select([f as fresh1, g as fresh2], r)))))],
                                  concat))],
                        cross)) as s0,
-            filter((((fresh1 = s0.x2) && (fresh2 = s0.x5)) ||
-                   ((fresh2 = s0.x2) && (fresh1 = s0.x5))),
+            filter((((fresh1 = s0.x5) && (fresh2 = s0.x2)) ||
+                   ((fresh2 = s0.x5) && (fresh1 = s0.x2))),
               select([f as fresh1, g as fresh2], r)),
-            (param, (param + 1)))) |}]
+            ((param + 1), param))) |}]
 end
 
 module Tpch = struct

@@ -48,18 +48,18 @@ module Make (C : Config.S) = struct
             |> Name.create ~type_:(Pred.to_type a)
           in
           aggs := (n, a) :: !aggs;
-          Name n
+          `Name n
     in
     let visitor =
       object
         inherit [_] V.map
-        method! visit_Sum () p = Sum (add_agg (Sum p))
-        method! visit_Count () = Sum (add_agg Count)
-        method! visit_Min () p = Min (add_agg (Min p))
-        method! visit_Max () p = Max (add_agg (Max p))
+        method! visit_Sum () p = `Sum (add_agg (`Sum p))
+        method! visit_Count () = `Sum (add_agg `Count)
+        method! visit_Min () p = `Min (add_agg (`Min p))
+        method! visit_Max () p = `Max (add_agg (`Max p))
 
         method! visit_Avg () p =
-          Binop (Div, Sum (add_agg (Sum p)), Sum (add_agg Count))
+          `Binop (Div, `Sum (add_agg (`Sum p)), `Sum (add_agg `Count))
       end
     in
     let p' = visitor#visit_pred () p in
@@ -106,7 +106,7 @@ module Make (C : Config.S) = struct
                  and lateral joins. *)
               let kschema = schema h.hi_keys |> scoped h.hi_scope in
               List.filter ps ~f:(function
-                | Name n, _ -> not (List.mem ~equal:Name.O.( = ) kschema n)
+                | `Name n, _ -> not (List.mem ~equal:Name.O.( = ) kschema n)
                 | _ -> true)
             in
             return (o, i)
@@ -180,7 +180,7 @@ module Make (C : Config.S) = struct
     let%bind ps, r = to_select r in
     let visitor =
       object
-        inherit extract_subquery_visitor
+        inherit [_] extract_subquery_visitor
         method can_hoist _ = true
         method fresh_name () = Name.create @@ Fresh.name Global.fresh "q%d"
       end
@@ -204,9 +204,9 @@ module Make (C : Config.S) = struct
     let%bind ps, r = to_select r in
     let name = Name.fresh "x%d" in
     match ps with
-    | [ (Binop (op, p, p'), n) ] ->
+    | [ (`Binop (op, p, p'), n) ] ->
         return
-        @@ A.select [ (Binop (op, Name name, p'), n) ]
+        @@ A.select [ (`Binop (op, `Name name, p'), n) ]
         @@ A.select [ (p, Name.name name) ]
         @@ r
     | _ -> None
@@ -219,11 +219,12 @@ module Make (C : Config.S) = struct
     let f r =
       let%bind ps, r = to_select r in
       match ps with
-      | [ (First { node = Select ([ (Binop (op, p1, p2), _) ], r'); _ }, n) ] ->
+      | [ (`First { node = Select ([ (`Binop (op, p1, p2), _) ], r'); _ }, n) ]
+        ->
           let fresh_id = Fresh.name Global.fresh "const%d" in
           return
-          @@ select [ (Binop (op, Name (Name.create fresh_id), p2), n) ]
-          @@ select [ (First (select [ (p1, "x") ] r'), fresh_id) ] r
+          @@ select [ (`Binop (op, `Name (Name.create fresh_id), p2), n) ]
+          @@ select [ (`First (select [ (p1, "x") ] r'), fresh_id) ] r
       | _ -> None
     in
     of_func ~name:"hoist-param" f

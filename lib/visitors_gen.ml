@@ -107,7 +107,8 @@ class virtual ['self] base_endo =
       | `If (c0, c1, c2) as this -> self#visit_If env this c0 c1 c2
       | `First c0 as this -> self#visit_First env this c0
       | `Exists c0 as this -> self#visit_Exists env this c0
-      | `Substring (c0, c1, c2) as this -> self#visit_Substring env this c0 c1 c2
+      | `Substring (c0, c1, c2) as this ->
+          self#visit_Substring env this c0 c1 c2
 
     method visit_scope env = self#visit_string env
 
@@ -297,10 +298,9 @@ class virtual ['self] base_endo =
       let r0 = self#visit_ordered_idx env c0 in
       if c0 == r0 then this else AOrderedIdx r0
 
-    method visit_Call env this c0 c1 =
-      let r0 = self#visit_scan_type env c0 in
-      let r1 = self#visit_string env c1 in
-      if c0 == r0 && c1 == r1 then this else Call (r0, r1)
+    method visit_Call env this c0 =
+      let r0 = self#visit_string env c0 in
+      if c0 == r0 then this else Call r0
 
     method visit_query env this =
       match this with
@@ -319,7 +319,7 @@ class virtual ['self] base_endo =
       | ATuple c0 as this -> self#visit_ATuple env this c0
       | AHashIdx c0 as this -> self#visit_AHashIdx env this c0
       | AOrderedIdx c0 as this -> self#visit_AOrderedIdx env this c0
-      | Call (c0, c1) as this -> self#visit_Call env this c0 c1
+      | Call c0 as this -> self#visit_Call env this c0
 
     method visit_annot env this =
       let r0 = self#visit_query env this.node in
@@ -609,10 +609,9 @@ class virtual ['self] base_map =
       let r0 = self#visit_ordered_idx env c0 in
       AOrderedIdx r0
 
-    method visit_Call env c0 c1 =
-      let r0 = self#visit_scan_type env c0 in
-      let r1 = self#visit_string env c1 in
-      Call (r0, r1)
+    method visit_Call env c0 =
+      let r0 = self#visit_string env c0 in
+      Call r0
 
     method visit_query env this =
       match this with
@@ -631,7 +630,7 @@ class virtual ['self] base_map =
       | ATuple c0 -> self#visit_ATuple env c0
       | AHashIdx c0 -> self#visit_AHashIdx env c0
       | AOrderedIdx c0 -> self#visit_AOrderedIdx env c0
-      | Call (c0, c1) -> self#visit_Call env c0 c1
+      | Call c0 -> self#visit_Call env c0
 
     method visit_annot env this =
       let r0 = self#visit_query env this.node in
@@ -908,10 +907,7 @@ class virtual ['self] base_iter =
       let r0 = self#visit_ordered_idx env c0 in
       ()
 
-    method visit_Call env c0 c1 =
-      let r0 = self#visit_scan_type env c0 in
-      let r1 = self#visit_string env c1 in
-      ()
+    method visit_Call env c0 = self#visit_string env c0
 
     method visit_query env this =
       match this with
@@ -930,7 +926,7 @@ class virtual ['self] base_iter =
       | ATuple c0 -> self#visit_ATuple env c0
       | AHashIdx c0 -> self#visit_AHashIdx env c0
       | AOrderedIdx c0 -> self#visit_AOrderedIdx env c0
-      | Call (c0, c1) -> self#visit_Call env c0 c1
+      | Call c0 -> self#visit_Call env c0
 
     method visit_annot env this =
       let r0 = self#visit_query env this.node in
@@ -1207,10 +1203,7 @@ class virtual ['self] base_reduce =
       let s0 = self#visit_ordered_idx env c0 in
       s0
 
-    method visit_Call env c0 c1 =
-      let s0 = self#visit_scan_type env c0 in
-      let s1 = self#visit_string env c1 in
-      self#plus s0 s1
+    method visit_Call env c0 = self#visit_string env c0
 
     method visit_query env this =
       match this with
@@ -1229,7 +1222,7 @@ class virtual ['self] base_reduce =
       | ATuple c0 -> self#visit_ATuple env c0
       | AHashIdx c0 -> self#visit_AHashIdx env c0
       | AOrderedIdx c0 -> self#visit_AOrderedIdx env c0
-      | Call (c0, c1) -> self#visit_Call env c0 c1
+      | Call c0 -> self#visit_Call env c0
 
     method visit_annot env this =
       let s0 = self#visit_query env this.node in
@@ -1525,10 +1518,9 @@ class virtual ['self] base_mapreduce =
       let r0, s0 = self#visit_ordered_idx env c0 in
       (AOrderedIdx r0, s0)
 
-    method visit_Call env c0 c1 =
-      let r0, s0 = self#visit_scan_type env c0 in
-      let r1, s1 = self#visit_string env c1 in
-      (Call (r0, r1), self#plus s0 s1)
+    method visit_Call env c0 =
+      let r0, s0 = self#visit_string env c0 in
+      (Call r0, s0)
 
     method visit_query env this =
       match this with
@@ -1547,7 +1539,7 @@ class virtual ['self] base_mapreduce =
       | ATuple c0 -> self#visit_ATuple env c0
       | AHashIdx c0 -> self#visit_AHashIdx env c0
       | AOrderedIdx c0 -> self#visit_AOrderedIdx env c0
-      | Call (c0, c1) -> self#visit_Call env c0 c1
+      | Call c0 -> self#visit_Call env c0
 
     method visit_annot env this =
       let r0, s0 = self#visit_query env this.node in
@@ -1556,5 +1548,3 @@ class virtual ['self] base_mapreduce =
 
     method visit_t env = self#visit_annot env
   end
-
-

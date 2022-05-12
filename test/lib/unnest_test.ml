@@ -6,7 +6,7 @@ open Unnest.Private
 open Test_util
 
 let run r = unnest ~params:(Set.empty (module Name)) r
-let n n = Name (Name.create n)
+let n n = `Name (Name.create n)
 
 let%expect_test "" =
   let conn = Lazy.force Test_util.test_db_conn in
@@ -84,18 +84,18 @@ let%test_unit "" =
 depjoin(select([row_number() as rn2, agg5, agg4, agg3, agg2, agg1, agg0, l_returnflag, l_linestatus],
                     select([sum(l_discount) as agg5, count() as agg4,
                             sum(((l_extendedprice * (1 - l_discount)) * (1 + l_tax))) as agg3,
-                            sum((l_extendedprice * (1 - l_discount))) as agg2, 
-                            sum(l_extendedprice) as agg1, sum(l_quantity) as agg0, 
+                            sum((l_extendedprice * (1 - l_discount))) as agg2,
+                            sum(l_extendedprice) as agg1, sum(l_quantity) as agg0,
                             l_returnflag as l_returnflag, l_linestatus as l_linestatus],
                       filter(true, filter(true, lineitem)))) as s3,
-            select([s3.rn2 as x0, s3.agg5 as x1, s3.agg4 as x2, s3.agg3 as x3, 
-                    s3.agg2 as x4, s3.agg1 as x5, s3.agg0 as x6, s3.l_returnflag as x7, 
-                    s3.l_linestatus as x8, agg5 as x9, agg4 as x10, agg3 as x11, 
-                    agg2 as x12, agg1 as x13, agg0 as x14, l_returnflag as x15, 
+            select([s3.rn2 as x0, s3.agg5 as x1, s3.agg4 as x2, s3.agg3 as x3,
+                    s3.agg2 as x4, s3.agg1 as x5, s3.agg0 as x6, s3.l_returnflag as x7,
+                    s3.l_linestatus as x8, agg5 as x9, agg4 as x10, agg3 as x11,
+                    agg2 as x12, agg1 as x13, agg0 as x14, l_returnflag as x15,
                     l_linestatus as x16],
-              atuple([ascalar(s3.agg5 as agg5), ascalar(s3.agg4 as agg4), 
-                      ascalar(s3.agg3 as agg3), ascalar(s3.agg2 as agg2), 
-                      ascalar(s3.agg1 as agg1), ascalar(s3.agg0 as agg0), 
+              atuple([ascalar(s3.agg5 as agg5), ascalar(s3.agg4 as agg4),
+                      ascalar(s3.agg3 as agg3), ascalar(s3.agg2 as agg2),
+                      ascalar(s3.agg1 as agg1), ascalar(s3.agg0 as agg0),
                       ascalar(s3.l_returnflag as l_returnflag), ascalar(s3.l_linestatus as l_linestatus)],
                 cross)))
     |}

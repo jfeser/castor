@@ -44,7 +44,7 @@ module Make (Config : Config.S) = struct
       Join_elim.translate eqs ~from:used_names ~to_:(Schema.schema lhs)
     in
     let ctx =
-      List.map ctx ~f:(fun (n, n') -> (n, Name n'))
+      List.map ctx ~f:(fun (n, n') -> (n, `Name n'))
       |> Map.of_alist_exn (module Name)
     in
     let key = List.map key ~f:(fun (p, o) -> (Pred.subst ctx p, o)) in
@@ -82,3 +82,4 @@ module Make (Config : Config.S) = struct
     of_func_pre push_orderby ~name:"push-orderby" ~pre:(fun r ->
         r |> Equiv.annotate |> Resolve.resolve_exn ~params:Config.params)
 end
+
