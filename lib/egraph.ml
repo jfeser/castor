@@ -1,30 +1,33 @@
 open Core
+module V = Visitors
 module H = Hashtbl
 
 (** Nearly direct port of https://github.com/egraphs-good/egg/blob/main/src/eclass.rs *)
 
+module Id = struct
+  type t = { id : int; canon : int Union_find.t [@ignore] }
+  [@@deriving compare, equal, hash]
+
+  let sexp_of_t { id; canon } =
+    let canon = Union_find.get canon in
+    if id = canon then [%sexp_of: int] id
+    else [%message (id : int) (canon : int)]
+end
+
 module Make (L : sig
-  type t [@@deriving compare, hash, sexp]
+  type 'a t [@@deriving compare, hash, sexp_of]
+
+  val match_func : 'a t -> 'b t -> bool
+  val args : 'a t -> 'a list
+  val map_args : ('a -> 'b) -> 'a t -> 'b t
 end) =
 struct
-  module Id = struct
-    type t = { id : int; canon : int Union_find.t [@ignore] }
-    [@@deriving compare, equal, hash]
-
-    let sexp_of_t { id; canon } =
-      let canon = Union_find.get canon in
-      if id = canon then [%sexp_of: int] id
-      else [%message (id : int) (canon : int)]
+  module Pattern = struct
+    type t = Apply of t L.t | Var of int
   end
 
   module ENode = struct
-    module T = struct
-      type t = { func : L.t; args : Id.t list }
-      [@@deriving compare, hash, sexp_of]
-    end
-
-    include T
-    include Comparator.Make (T)
+    type t = Id.t L.t [@@deriving compare, hash, sexp_of]
   end
 
   module EClass = struct
@@ -67,7 +70,7 @@ struct
   let enode_equiv g n1 n2 =
     [%equal: Id.t option] (H.find g.memo n1) (H.find g.memo n2)
 
-  let lookup n = ENode.{ n with args = List.map n.args ~f:find }
+  let lookup = L.map_args find
 
   let add g n =
     let n = lookup n in
@@ -82,9 +85,10 @@ struct
 
         H.add_exn g.classes ~key:eclass_id ~data:(EClass.create_singleton n);
 
-        List.iter n.args ~f:(fun arg_eclass_id ->
-            let arg_eclass = H.find_exn g.classes arg_eclass_id in
-            H.add_exn arg_eclass.parents ~key:n ~data:eclass_id);
+        L.args n
+        |> List.iter ~f:(fun arg_eclass_id ->
+               let arg_eclass = H.find_exn g.classes arg_eclass_id in
+               H.add_exn arg_eclass.parents ~key:n ~data:eclass_id);
 
         H.set g.memo ~key:n ~data:eclass_id;
         eclass_id
@@ -134,7 +138,7 @@ struct
     | worklist ->
         g.worklist <- [];
         List.iter worklist ~f:(fun (enode, eclass_id) ->
-            let enode' = { enode with args = List.map enode.args ~f:find } in
+            let enode' = lookup enode in
             H.remove g.memo enode;
             H.update g.memo enode' ~f:(function
               | Some eclass_id' -> merge g eclass_id eclass_id'
@@ -145,25 +149,74 @@ struct
     H.iter g.classes ~f:(fun eclass ->
         let enodes = H.keys eclass.nodes in
         H.clear eclass.nodes;
-        List.iter enodes ~f:(fun (enode : ENode.t) ->
-            ignore
-              (H.add eclass.nodes
-                 ~key:{ enode with ENode.args = List.map enode.args ~f:find }
-                 ~data:())))
+        List.iter enodes ~f:(fun enode ->
+            ignore (H.add eclass.nodes ~key:(lookup enode) ~data:())))
 
   let rebuild g =
     process_unions g;
     rebuild_classes g
+
+  let search_eclass g p id f =
+    match p with
+    | Pattern.Var v -> f (Map.singleton (module Int) v id)
+    |
+    let eclass = H.find_exn g.classes i in
+    H.iter_keys eclass.nodes ~f:(fun enode -> )
+
+  let search g p f =
+    match p with
+    | Pattern.Var v ->
+        H.iter_keys g.classes ~f:(fun id -> f (Map.singleton (module Int) v id))
+    | Apply enode ->
+        H.iter_keys g.memo ~f:(fun enode' ->
+            if L.match_func enode enode' then
+              List.iter2_exn (L.args enode) (L.args enode') ~f:(fun p i ->
+                  search_eclass g p i f))
 end
 
+module SymbolLang (S : sig
+  type t [@@deriving compare, hash, sexp_of]
+end) =
+struct
+  type 'a t = { func : S.t; args : 'a list } [@@deriving compare, hash, sexp_of]
+
+  let map_args f x = { x with args = List.map x.args ~f }
+  let args x = Iter.of_list x.args
+end
+
+module AstLang = struct
+  type 'a t = Query of ('a, 'a) Ast.query | Pred of ('a, 'a) Ast.ppred
+  [@@deriving compare, hash, sexp_of]
+
+  let map_args f = function
+    | Query q -> Query (V.Map.query f f q)
+    | Pred p -> Pred (V.Map.pred f f p)
+
+  let args x f =
+    match x with Query q -> V.Iter.query f f q | Pred p -> V.Iter.pred f f p
+end
+
+module AstEGraph = struct
+  open Ast
+  open AstLang
+  include Make (AstLang)
+
+  let rec add_annot g q =
+    add g (Query (V.Map.query (add_annot g) (add_pred g) q.node))
+
+  and add_pred g p = add g (Pred (V.Map.pred (add_annot g) (add_pred g) p))
+end
+
+module _ = Make (AstLang)
+
 let%expect_test "" =
-  let module E = Make (String) in
+  let module E = Make (SymbolLang (String)) in
   let g = E.create () in
   let x = E.add g { func = "x"; args = [] } in
   let y = E.add g { func = "y"; args = [] } in
   let add = E.add g { func = "+"; args = [ x; y ] } in
   assert (not (E.eclass_id_equiv x y));
-  assert ([%equal: E.Id.t] (E.add g { func = "+"; args = [ x; y ] }) add);
+  assert ([%equal: Id.t] (E.add g { func = "+"; args = [ x; y ] }) add);
   print_s [%message (g : E.t)];
   [%expect
     {|

@@ -172,7 +172,7 @@ module Iter = struct
     | `First q | `Exists q -> annot q
 
   let query annot pred = function
-    | Relation _ | AEmpty -> ()
+    | Relation _ | AEmpty | Call _ -> ()
     | Select (ps, q) | GroupBy (ps, _, q) ->
         List.iter ~f:(fun (p, _) -> pred p) (Select_list.to_list ps);
         annot q
@@ -210,7 +210,6 @@ module Iter = struct
             Option.iter ~f:(fun (p, _) -> pred p) b;
             Option.iter ~f:(fun (p, _) -> pred p) b')
           oi_lookup
-    | _ -> failwith "unsupported"
 
   let annot query meta { node; meta = m } =
     query node;
