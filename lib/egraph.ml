@@ -14,6 +14,48 @@ module Id = struct
     else [%message (id : int) (canon : int)]
 end
 
+module type LANG = sig
+  type 'a t [@@deriving compare, hash, sexp_of]
+
+  val match_func : 'a t -> 'b t -> bool
+  val args : 'a t -> 'a list
+  val map_args : ('a -> 'b) -> 'a t -> 'b t
+end
+
+module type ANALYSIS = sig
+  type 'a lang
+  type t [@@deriving equal, sexp_of]
+
+  val of_enode : 'a lang -> t
+  val merge : t -> t -> t
+end
+
+module type EGRAPH = sig
+  type 'a lang
+
+  module ENode : sig
+    type t = Id.t lang [@@deriving compare, hash, sexp_of]
+  end
+
+  module EClass : sig
+    type t
+  end
+
+  type t [@@deriving sexp_of]
+
+  val create : unit -> t
+  val eclass_id_equiv : Id.t -> Id.t -> bool
+  val enode_equiv : t -> ENode.t -> ENode.t -> bool
+  val add : t -> Id.t lang -> Id.t
+  val merge : t -> Id.t -> Id.t -> Id.t
+  val rebuild : t -> unit
+
+  type pat = [ `Apply of pat lang | `Var of int ]
+
+  val search : t -> pat -> (Id.t * Id.t Map.M(Int).t list) list
+  val rewrite : t -> pat -> pat -> unit
+end
+
 module Make (L : sig
   type 'a t [@@deriving compare, hash, sexp_of]
 
@@ -205,7 +247,26 @@ struct
                         Map.merge_skewed acc m ~combine:(fun ~key:_ ->
                             failwith "patterns must be linear"))))
 
-  let search g p = H.keys g.classes |> List.concat_map ~f:(search_eclass g p)
+  type pat = [ `Apply of pat L.t | `Var of int ]
+
+  let search g p =
+    H.keys g.classes
+    |> List.filter_map ~f:(fun id ->
+           let matches = search_eclass g p id in
+           if List.is_empty matches then None else Some (id, matches))
+
+  let rewrite g lhs rhs =
+    let rec add_pat ctx = function
+      | `Var v -> Map.find_exn ctx v
+      | `Apply app ->
+          let app = L.map_args (add_pat ctx) app in
+          add g app
+    in
+    search g lhs
+    |> List.iter ~f:(fun (id, ctxs) ->
+           List.iter ctxs ~f:(fun ctx ->
+               let id' = add_pat ctx rhs in
+               ignore (merge g id id')))
 end
 
 module SymbolLang (S : sig
@@ -256,17 +317,8 @@ module UnitAnalysis = struct
 end
 
 module AstEGraph = struct
-  open Ast
-  open AstLang
   include Make (AstLang) (UnitAnalysis)
-
-  let rec add_annot g q =
-    add g (Query (V.Map.query (add_annot g) (add_pred g) q.node))
-
-  and add_pred g p = add g (Pred (V.Map.pred (add_annot g) (add_pred g) p))
 end
-
-module _ = Make (AstLang)
 
 let%expect_test "" =
   let module E = Make (SymbolLang (String)) (UnitAnalysis) in
@@ -338,8 +390,16 @@ let%expect_test "" =
   let ( + ) x y = L.{ func = "+"; args = [ x; y ] } in
   let x_y = E.add g (x + y) and y_z = E.add g (y + z) in
   assert (not (E.eclass_id_equiv x_y y_z));
-  let matches = E.search g (`Apply (`Var 0 + `Var 1)) in
-  print_s [%message (matches : Id.t Map.M(Int).t list)];
-  [%expect
-    {|
-    (matches (((0 0) (1 1)) ((0 1) (1 2)))) |}]
+
+  ignore (E.merge g x z);
+  E.rebuild g;
+  assert (not (E.eclass_id_equiv x_y y_z));
+
+  let lhs = `Apply (`Var 0 + `Var 1) and rhs = `Apply (`Var 1 + `Var 0) in
+  let matches = E.search g lhs in
+  print_s [%message (matches : (Id.t * Id.t Map.M(Int).t list) list)];
+  [%expect {|
+    (matches ((3 (((0 0) (1 1)))) (4 (((0 1) (1 0)))))) |}];
+  E.rewrite g lhs rhs;
+  E.rebuild g;
+  assert (E.eclass_id_equiv x_y y_z)
