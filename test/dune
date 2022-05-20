@@ -1,6 +1,6 @@
 (env
  (_ (env-vars
-     (CASTOR_TPCH_TEST_DB postgresql:///tpch_1k))))
+     (CASTOR_TPCH_TEST_DB postgresql://localhost:6432/tpch_1k))))
 
 (rule
  (alias test_db)
