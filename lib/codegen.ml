@@ -1014,7 +1014,7 @@ let c_template fn args =
   Util.command_out_exn ([ "clang"; "-E" ] @ args_strs @ [ fn ])
 
 let from_fn fn n i =
-  let template = Global.build_root () ^ "/etc/" ^ fn in
+  let template = Global.find_file fn in
   let func =
     c_template template [ ("PARAM_NAME", n); ("PARAM_IDX", Int.to_string i) ]
   in
@@ -1028,8 +1028,8 @@ let compile ?out_dir ?layout_log ?(debug = false) ~gprof ~params layout =
   (match Sys_unix.is_directory out_dir with
   | `No -> Core_unix.mkdir out_dir
   | _ -> ());
-  let stdlib_fn = Global.build_root () ^ "/etc/castorlib.c" in
-  let date_fn = Global.build_root () ^ "/etc/date.c" in
+  let stdlib_fn = Global.find_file "castorlib.c" in
+  let date_fn = Global.find_file "date.c" in
   let main_fn = out_dir ^ "/main.c" in
   let ir_fn = out_dir ^ "/scanner.ir" in
   let module_fn = out_dir ^ "/scanner.ll" in
@@ -1093,7 +1093,7 @@ let compile ?out_dir ?layout_log ?(debug = false) ~gprof ~params layout =
     let header_str = "#include \"scanner.h\"" in
     let funcs_str = String.concat (header_str :: funcs) ~sep:"\n" in
     let calls_str = String.concat calls ~sep:"\n" in
-    let perf_template = Global.build_root () ^ "/etc/perf.c" in
+    let perf_template = Global.find_file "perf.c" in
     let perf_c =
       let open In_channel in
       with_file perf_template ~f:(fun ch ->

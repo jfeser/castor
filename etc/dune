@@ -1,6 +1,6 @@
 (install
  (package castor)
- (section etc)
+ (section (site (castor code)))
  (files date.c date.h castorlib.c castorlib.h load_bool.c load_date.c
    load_float.c load_int.c load_string.c perf.c))
 

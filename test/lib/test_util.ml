@@ -49,7 +49,7 @@ ahashidx(dedup(
   alist(select([p_counter, c_counter],
     join(p_counter < c_counter && c_counter < p_succ,
       filter(p_id = k.p_id,
-        select([id as p_id, counter as p_counter, succ as p_succ], %s)), 
+        select([id as p_id, counter as p_counter, succ as p_succ], %s)),
       filter(c_id = k.c_id,
         select([id as c_id, counter as c_counter], %s)))) as lk,
     atuple([ascalar(lk.p_counter), ascalar(lk.c_counter)], cross)),
@@ -63,14 +63,14 @@ ahashidx(dedup(
 select([p_counter, c_counter],
   depjoin(
     ahashidx(dedup(select([id as p_id], %s)) as hk,
-    alist(select([counter, succ], filter(hk.p_id = id && counter < succ, %s)) as lk1, 
-      atuple([ascalar(lk1.counter as p_counter), ascalar(lk1.succ as p_succ)], cross)), 
+    alist(select([counter, succ], filter(hk.p_id = id && counter < succ, %s)) as lk1,
+      atuple([ascalar(lk1.counter as p_counter), ascalar(lk1.succ as p_succ)], cross)),
     id_p) as dk,
   select([dk.p_counter, c_counter],
   filter(c_id = id_c,
-    aorderedidx(select([counter], %s) as ok, 
+    aorderedidx(select([counter], %s) as ok,
       alist(filter(counter = ok.counter, %s) as lk2,
-        atuple([ascalar(lk2.id as c_id), ascalar(lk2.counter as c_counter)], cross)), 
+        atuple([ascalar(lk2.id as c_id), ascalar(lk2.counter as c_counter)], cross)),
       dk.p_counter, dk.p_succ)))))
 |}
       log log log log
@@ -81,4 +81,3 @@ let sum_complex =
    ATuple([AScalar(k.f), AScalar((k.g - k.f) as v)], cross)))"
 
 let tpch_conn = lazy (Db.create @@ Sys.getenv_exn "CASTOR_TPCH_TEST_DB")
-let tpch_full_conn = lazy (Db.create @@ Sys.getenv_exn "CASTOR_TPCH_DB")

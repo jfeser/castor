@@ -67,10 +67,8 @@ let eval dir params query =
             Fmt.str "-p %s:%a" n Prim_type.pp t)
         |> String.concat ~sep:" "
       in
-      sprintf
-        "$CASTOR_ROOT/../_build/default/castor/bin/compile.exe -o %s %s %s > \
-         %s/compile.log 2>&1"
-        dir params query_fn dir
+      sprintf "castor-compile -o %s %s %s > %s/compile.log 2>&1" dir params
+        query_fn dir
     in
     let%map out = command_out compile_cmd in
     Logs.info (fun m -> m "Compile output: %s" out)

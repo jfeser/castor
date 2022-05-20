@@ -7,7 +7,7 @@ license: "MIT"
 homepage: "https://github.com/jfeser/castor"
 bug-reports: "https://github.com/jfeser/castor/issues"
 depends: [
-  "dune" {build & >= "1.10"}
+  "dune" {>= "3.1" & build & >= "1.10"}
   "castor"
   "postgresql" {>= "4.4"}
   "bos" {>= "0.2"}
@@ -24,9 +24,10 @@ depends: [
   "visitors" {>= "20180513"}
   "ounit"
   "expect_test_helpers_core" {>= "v0.12"}
+  "odoc" {with-doc}
 ]
 build: [
-  ["dune" "subst"] {pinned}
+  ["dune" "subst"] {dev}
   [
     "dune"
     "build"
@@ -34,9 +35,11 @@ build: [
     name
     "-j"
     jobs
+    "--promote-install-files=false"
     "@install"
     "@runtest" {with-test}
     "@doc" {with-doc}
   ]
+  ["dune" "install" "-p" name "--create-install-files" name]
 ]
 dev-repo: "git+https://github.com/jfeser/castor.git"

@@ -1,4 +1,4 @@
-(lang dune 2.0)
+(lang dune 3.1)
 
 (name castor)
 (source (github jfeser/castor))
@@ -11,7 +11,7 @@
  (name castor)
  (synopsis "A deductive database synthesizer")
  (depends
-  (dune (and :build (>= 1.10)))
+  (dune (>= 1.10))
   (menhir :build)
 
   (core (>= v0.12))
@@ -29,7 +29,8 @@
   (ppx_hash (>= v0.12))
   (ppx_let (>= v0.12))
   (visitors (>= 20180513))
-  yojson))
+  yojson)
+ (sites (share code)))
 
 (package
  (name castor_test)
@@ -56,6 +57,7 @@
   (expect_test_helpers_core (>= v0.12))))
 
 (using menhir 2.0)
+(using dune_site 0.1)
 (generate_opam_files true)
 
 ; Local Variables:
