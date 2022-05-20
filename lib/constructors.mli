@@ -51,7 +51,7 @@ module Annot : sig
   val scalar_s : string -> < > annot
   val scalar_n : Name.t -> < > annot
   val list : _ annot -> string -> _ annot -> < > annot
-  val list' : (_ pred, _ annot) Ast.list_ -> < > annot
+  val list' : _ annot Ast.list_ -> < > annot
   val tuple : _ annot list -> Ast.tuple -> < > annot
   val call : string -> < > annot
 

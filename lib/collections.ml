@@ -303,6 +303,17 @@ end = struct
   let length = List.length
 end
 
+module Iter = struct
+  include Iter
+
+  let list_product iters f =
+    let rec product acc = function
+      | [] -> f @@ List.rev acc
+      | q :: qs -> q (fun x -> product (x :: acc) qs)
+    in
+    product [] iters
+end
+
 class ['s] tuple2_monoid m1 m2 =
   object
     inherit ['s] VisitorsRuntime.monoid

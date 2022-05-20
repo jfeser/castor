@@ -72,6 +72,92 @@ module Map = struct
     | _ -> failwith "unsupported"
 end
 
+module Map2 = struct
+  exception Mismatch
+
+  let annot query meta x x' =
+    { node = query x.node x'.node; meta = meta x.meta x'.meta }
+
+  let name _ _ = failwith "unsupported"
+  let int _ _ = failwith "unsupported"
+  let fixed _ _ = failwith "unsupported"
+  let date _ _ = failwith "unsupported"
+  let bool _ _ = failwith "unsupported"
+  let null _ _ = failwith "unsupported"
+  let string _ _ = failwith "unsupported"
+  let unop _ _ _ _ = failwith "unsupported"
+  let binop _ _ _ _ = failwith "unsupported"
+  let sum _ _ _ = failwith "unsupported"
+  let avg _ _ _ = failwith "unsupported"
+  let min _ _ _ = failwith "unsupported"
+  let max _ _ _ = failwith "unsupported"
+  let if_ _ _ _ = failwith "unsupported"
+  let first _ _ _ = failwith "unsupported"
+  let exists _ _ _ = failwith "unsupported"
+  let substring _ _ _ = failwith "unsupported"
+
+  let pred annot pred p p' =
+    match (p, p') with
+    | `Count, `Count -> `Count
+    | `Row_number, `Row_number -> `Row_number
+    | `Name x, `Name x' -> name x x'
+    | `Int x, `Int x' -> int x x'
+    | `Fixed x, `Fixed x' -> fixed x x'
+    | `Date x, `Date x' -> date x x'
+    | `Bool x, `Bool x' -> bool x x'
+    | `String x, `String x' -> string x x'
+    | `Null x, `Null x' -> null x x'
+    | `Unop (o, x), `Unop (o', x') when [%equal: Unop.t] o o' ->
+        unop pred o x x'
+    | `Binop (o, p1, p2), `Binop (o', p1', p2') when [%equal: Binop.t] o o' ->
+        binop pred o (p1, p2) (p1', p2')
+    | `Sum x, `Sum x' -> sum pred x x'
+    | `Avg x, `Avg x' -> avg pred x x'
+    | `Max x, `Max x' -> max pred x x'
+    | `Min x, `Min x' -> min pred x x'
+    | `If x, `If x' -> if_ pred x x'
+    | `First x, `First x' -> first annot x x'
+    | `Exists x, `Exists x' -> exists annot x x'
+    | `Substring x, `Substring x' -> substring pred x x'
+    | _ -> raise Mismatch
+
+  let select _ _ _ _ = failwith "unsupported"
+  let filter _ _ _ _ = failwith "unsupported"
+  let join _ _ _ _ = failwith "unsupported"
+  let depjoin _ _ _ = failwith "unsupported"
+  let groupby _ _ _ _ = failwith "unsupported"
+  let orderby _ _ _ _ = failwith "unsupported"
+  let dedup _ _ _ = failwith "unsupported"
+  let relation _ _ = failwith "unsupported"
+  let range _ _ _ = failwith "unsupported"
+  let ascalar _ _ _ = failwith "unsupported"
+  let alist _ _ _ = failwith "unsupported"
+  let atuple _ _ _ = failwith "unsupported"
+  let ahashidx _ _ _ _ = failwith "unsupported"
+  let aorderedidx _ _ _ _ = failwith "unsupported"
+  let call _ _ = failwith "unsupported"
+
+  let query annot pred q q' =
+    match (q, q') with
+    | AEmpty, AEmpty -> AEmpty
+    | Select x, Select x' -> select annot pred x x'
+    | Filter x, Filter x' -> filter annot pred x x'
+    | Join x, Join x' -> join annot pred x x'
+    | DepJoin x, DepJoin x' -> depjoin annot x x'
+    | GroupBy x, GroupBy x' -> groupby annot pred x x'
+    | OrderBy x, OrderBy x' -> orderby annot pred x x'
+    | Dedup x, Dedup x' -> dedup annot x x'
+    | Relation x, Relation x' -> relation x x'
+    | Range x, Range x' -> range pred x x'
+    | AScalar x, AScalar x' -> ascalar pred x x'
+    | AList x, AList x' -> alist annot x x'
+    | ATuple x, ATuple x' -> atuple annot x x'
+    | AHashIdx x, AHashIdx x' -> ahashidx annot pred x x'
+    | AOrderedIdx x, AOrderedIdx x' -> aorderedidx annot pred x x'
+    | Call x, Call x' -> call x x'
+    | _ -> raise Mismatch
+end
+
 let rec map_meta f { node; meta } =
   { node = map_meta_query f node; meta = f meta }
 

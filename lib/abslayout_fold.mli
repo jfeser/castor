@@ -44,7 +44,7 @@ class virtual ['a, 'm] abslayout_fold :
     method virtual ordered_idx :
       'm -> ('p, 'r) ordered_idx -> (Value.t list * 'a * 'a, 'a) Fold.t
 
-    method virtual list : 'm -> ('p, 'r) list_ -> (Value.t list * 'a, 'a) Fold.t
+    method virtual list : 'm -> 'r list_ -> (Value.t list * 'a, 'a) Fold.t
     method virtual scalar : 'm -> 'p scalar -> Value.t -> 'a
     method virtual tuple : 'm -> 'r list * tuple -> ('a, 'a) Fold.t
     method virtual empty : 'm -> 'a
@@ -78,7 +78,7 @@ class ['m] print_fold :
     method ordered_idx :
       'm -> ('p, 'r) ordered_idx -> (Value.t list * 's * 's, 's) Fold.t
 
-    method list : 'm -> ('p, 'r) list_ -> (Value.t list * 's, 's) Fold.t
+    method list : 'm -> 'r list_ -> (Value.t list * 's, 's) Fold.t
     method collection : string -> (Value.t list * 's * 's, 's) Fold.t
     method scalar : 'm -> 'p scalar -> Value.t -> 's
     method tuple : 'm -> 'r list * tuple -> ('s, 's) Fold.t

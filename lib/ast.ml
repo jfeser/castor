@@ -73,7 +73,7 @@ type ('p, 'r) ordered_idx = {
 }
 [@@deriving compare, equal, hash, sexp]
 
-type ('p, 'r) list_ = { l_keys : 'r; l_values : 'r; l_scope : scope }
+type 'r list_ = { l_keys : 'r; l_values : 'r; l_scope : scope }
 [@@deriving compare, equal, hash, sexp]
 
 type 'r depjoin = { d_lhs : 'r; d_alias : scope; d_rhs : 'r }
@@ -109,7 +109,7 @@ type ('p, 'r) query =
   | Range of ('p * 'p)
   | AEmpty
   | AScalar of 'p scalar
-  | AList of ('p, 'r) list_
+  | AList of 'r list_
   | ATuple of ('r list * tuple)
   | AHashIdx of ('p, 'r) hash_idx
   | AOrderedIdx of ('p, 'r) ordered_idx

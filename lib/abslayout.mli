@@ -32,7 +32,7 @@ val scalar : Pred.t -> string -> t
 val scalar' : Pred.t scalar -> t
 val scalar_name : Name.t -> t
 val list : t -> string -> t -> t
-val list' : (Pred.t, t) list_ -> t
+val list' : t list_ -> t
 val tuple : t list -> tuple -> t
 val hash_idx : ?key_layout:t -> t -> string -> t -> Pred.t list -> t
 val hash_idx' : (Pred.t, t) hash_idx -> t
