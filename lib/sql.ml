@@ -11,25 +11,31 @@ include (val Log.make "castor.sql")
 type select_entry = { pred : Pred.t; alias : string; cast : Prim_type.t option }
 [@@deriving compare, sexp_of]
 
-type spj = {
+type 'r spj = {
   select : select_entry list;
   distinct : bool;
   conds : Pred.t list;
-  relations :
-    ([ `Subquery of t * string
-     | `Table of Relation.t * string
-     | `Series of Pred.t * Pred.t * string ]
-    * [ `Left | `Lateral ])
-    list;
+  relations : 'r list;
   order : (Pred.t * order) list;
   group : Pred.t list;
   limit : int option;
 }
+[@@deriving compare, sexp_of]
 
-and t = Query of spj | Union_all of spj list [@@deriving compare, sexp_of]
+type 'q compound_relation =
+  [ `Subquery of 'q * string
+  | `Table of Relation.t * string
+  | `Series of Pred.t * Pred.t * string ]
+  * [ `Left | `Lateral ]
+[@@deriving compare, sexp_of]
 
-let create_query ?(distinct = false) ?(conds = []) ?(relations = [])
-    ?(order = []) ?(group = []) ?limit select =
+type t =
+  [ `Query of t compound_relation spj
+  | `Union_all of t compound_relation spj list ]
+[@@deriving compare, sexp_of]
+
+let create_spj ?(distinct = false) ?(conds = []) ?(relations = []) ?(order = [])
+    ?(group = []) ?limit select =
   { select; distinct; conds; relations; order; group; limit }
 
 let create_entry ?alias ?cast pred name =
@@ -40,20 +46,24 @@ let create_entry ?alias ?cast pred name =
       let new_n = Fresh.name Global.fresh fmt in
       { pred; alias = new_n; cast }
 
+let create_entry_s ?alias ?cast name =
+  create_entry ?alias ?cast (`Name (Name.create name)) name
+
+let create_entries_s names = List.map names ~f:create_entry_s
 let select_entry_name { alias; _ } = alias
 
 let to_schema = function
-  | Query { select; _ } | Union_all ({ select; _ } :: _) ->
+  | `Query { select; _ } | `Union_all ({ select; _ } :: _) ->
       List.map select ~f:select_entry_name
-  | Union_all [] -> failwith "No empty unions."
+  | `Union_all [] -> failwith "No empty unions."
 
 let to_select = function
-  | Union_all qs -> List.concat_map qs ~f:(fun { select; _ } -> select)
-  | Query { select; _ } -> select
+  | `Union_all qs -> List.concat_map qs ~f:(fun { select; _ } -> select)
+  | `Query { select; _ } -> select
 
-let to_group = function Union_all _ -> [] | Query q -> q.group
-let to_distinct = function Union_all _ -> false | Query q -> q.distinct
-let to_limit = function Union_all _ -> None | Query q -> q.limit
+let to_group = function `Union_all _ -> [] | `Query q -> q.group
+let to_distinct = function `Union_all _ -> false | `Query q -> q.distinct
+let to_limit = function `Union_all _ -> None | `Query q -> q.limit
 
 let preds_has_aggregates =
   Iter.exists (fun p ->
@@ -80,9 +90,9 @@ let create_subquery ?(extra_select = []) q =
     to_schema q @ extra_select
     |> List.map ~f:(fun n -> create_entry (`Name (Name.create n)) n)
   in
-  create_query ~relations:[ (`Subquery (q, alias), `Left) ] select_list
+  create_spj ~relations:[ (`Subquery (q, alias), `Left) ] select_list
 
-let to_spj = function Query q -> q | Union_all _ as q -> create_subquery q
+let to_spj = function `Query q -> q | `Union_all _ as q -> create_subquery q
 
 let make_ctx schema select =
   let pairs, _ = List.zip_with_remainder schema select in
@@ -110,8 +120,8 @@ let join schema1 schema2 sql1 sql2 pred =
   let select_list = spj1.select @ spj2.select in
   let ctx = make_ctx (schema1 @ schema2) select_list in
   let pred = Pred.subst ctx pred in
-  Query
-    (create_query
+  `Query
+    (create_spj
        ~conds:(pred :: (spj1.conds @ spj2.conds))
        ~relations:(spj1.relations @ spj2.relations)
        select_list)
@@ -134,7 +144,7 @@ let order_by of_ralgebra key r =
     List.filter key ~f:(fun (p, _) ->
         match p with `Int _ -> false | _ -> true)
   in
-  Query { spj with order = key }
+  `Query { spj with order = key }
 
 let scoped_names ns p =
   let visitor =
@@ -186,7 +196,7 @@ let select ?groupby of_ralgebra ps r =
         |> List.map ~f:(fun n ->
                create_entry ~alias:(Name.name n) (`Name n) (Name.name n))
       in
-      create_subquery (Query { spj with select = spj.select @ extra_fields })
+      create_subquery (`Query { spj with select = spj.select @ extra_fields })
     else spj
   in
   let sctx = make_ctx (schema r) spj.select in
@@ -201,7 +211,7 @@ let select ?groupby of_ralgebra ps r =
         { spj with group }
     | None -> spj
   in
-  Query spj
+  `Query spj
 
 let filter of_ralgebra pred r =
   let sql = of_ralgebra r in
@@ -215,10 +225,10 @@ let filter of_ralgebra pred r =
     let ctx = make_ctx (schema r) spj.select in
     Pred.subst ctx pred
   in
-  Query { spj with conds = pred :: spj.conds }
+  `Query { spj with conds = pred :: spj.conds }
 
 let dep_join of_ralgebra q1 scope q2 =
-  let sql1 = Query { (to_spj (of_ralgebra q1)) with order = [] } in
+  let sql1 = `Query { (to_spj (of_ralgebra q1)) with order = [] } in
   let sql1_names = to_schema sql1 in
   let q2 =
     (* Create a context that maps the names emitted by q1 (scoped) to the
@@ -231,13 +241,13 @@ let dep_join of_ralgebra q1 scope q2 =
     in
     A.subst ctx q2
   in
-  let sql2 = Query { (of_ralgebra q2 |> to_spj) with order = [] } in
+  let sql2 = `Query { (of_ralgebra q2 |> to_spj) with order = [] } in
   let sql2_names = to_schema sql2 in
   let select_list =
     List.map sql2_names ~f:(fun n -> create_entry (`Name (Name.create n)) n)
   in
-  Query
-    (create_query
+  `Query
+    (create_spj
        ~relations:
          [
            (`Subquery (sql1, Fresh.name Global.fresh "t%d"), `Left);
@@ -250,11 +260,11 @@ let of_ralgebra r =
     match r.node with
     | Range (p, p') ->
         let alias = Fresh.name Global.fresh "t%d" in
-        Query
-          (create_query
+        `Query
+          (create_spj
              ~relations:[ (`Series (p, p', alias), `Left) ]
              [ create_entry (`Name (Name.create "range")) "range" ])
-    | Dedup r -> Query { (to_spj (f r)) with distinct = true }
+    | Dedup r -> `Query { (to_spj (f r)) with distinct = true }
     | Relation ({ r_name = tbl; _ } as rel) ->
         let tbl_alias = tbl ^ Fresh.name Global.fresh "_%d" in
         (* Add table alias to all fields to generate a select list. *)
@@ -265,7 +275,7 @@ let of_ralgebra r =
                 (Name.name n))
         in
         let relations = [ (`Table (rel, tbl_alias), `Left) ] in
-        Query (create_query ~relations select_list)
+        `Query (create_spj ~relations select_list)
     | Filter (pred, r) -> filter f pred r
     | OrderBy { key; rel = r } -> order_by f key r
     | Select (fs, r) -> select f fs r
@@ -279,9 +289,9 @@ let of_ralgebra r =
         let q1 = r in
         let q2 = tuple rs Cross in
         join (schema q1) (schema q2) (f q1) (f q2) (`Bool true)
-    | ATuple (rs, Concat) -> Union_all (List.map ~f:(fun r -> to_spj (f r)) rs)
-    | ATuple ([], _) | AEmpty -> Query (create_query ~limit:0 [])
-    | AScalar p -> Query (create_query [ create_entry p.s_pred p.s_name ])
+    | ATuple (rs, Concat) -> `Union_all (List.map ~f:(fun r -> to_spj (f r)) rs)
+    | ATuple ([], _) | AEmpty -> `Query (create_spj ~limit:0 [])
+    | AScalar p -> `Query (create_spj [ create_entry p.s_pred p.s_name ])
     | ATuple (_, Zip) ->
         Error.(create "Unsupported." r [%sexp_of: _ annot] |> raise)
     | AList l -> f @@ dep_join' (Layout_to_depjoin.list l)
@@ -385,7 +395,7 @@ and spj_to_sql { select; distinct; order; group; relations; conds; limit } =
             match rel with
             | `Subquery (q, alias) ->
                 sprintf "(%s) as \"%s\"" (to_string q) alias
-            | `Table (t, alias) ->
+            | `Table ((t : Relation.t), alias) ->
                 if String.(t.r_name = alias) then sprintf "\"%s\"" t.r_name
                 else sprintf "\"%s\" as \"%s\"" t.r_name alias
             | `Series (p, p', alias) -> (
@@ -445,8 +455,8 @@ generate_series(%s :: timestamp, %s :: timestamp, '1 day' :: interval) range) as
   |> String.strip
 
 and to_string = function
-  | Query q -> spj_to_sql q
-  | Union_all qs ->
+  | `Query q -> spj_to_sql q
+  | `Union_all qs ->
       List.map qs ~f:(fun q -> sprintf "(%s)" (spj_to_sql q))
       |> String.concat ~sep:" union all "
 

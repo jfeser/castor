@@ -90,24 +90,6 @@
 
 
 (rule
- (targets large3.par.output large3.cost.output large3.ser.output)
- (deps (alias ../test_db))
- (action (with-stdin-from large3 (run ../bin/type.exe -p param0:date -db postgresql://localhost:6432/tpch_1k -parallel large3.par.output -cost large3.cost.output -serial large3.ser.output))))
-
-(rule
- (alias runtest)
- (action (diff large3.par.expected large3.par.output)))
-(rule
- (alias runtest)
- (action (diff large3.cost.expected large3.cost.output)))
-
-(rule
- (alias runtest)
- (action (diff large3.ser.expected large3.ser.output)))
-
-
-
-(rule
  (targets large4.par.output large4.cost.output)
  (deps (alias ../test_db))
  (action (with-stdin-from large4 (run ../bin/type.exe  -db postgresql://localhost:6432/tpch_1k -parallel large4.par.output -cost large4.cost.output))))

@@ -1,12 +1,5 @@
 open Core
 
-module Ctx : sig
-  type t
-end
-
-val codegen : Ctx.t -> Irgen.ir_module -> Llvm.llmodule
-val write_header : Ctx.t -> Out_channel.t -> unit
-
 val compile :
   ?out_dir:string ->
   ?layout_log:string ->

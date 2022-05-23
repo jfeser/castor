@@ -1,4 +1,5 @@
 open Core
+open Collections
 open Ast
 module V = Visitors
 module Binop = Ast.Binop
@@ -123,6 +124,15 @@ let eqs p =
     end
   in
   visitor#visit_pred () p |> dedup_pairs
+
+let equiv p =
+  List.fold_left (eqs p)
+    ~init:(Map.empty (module Name))
+    ~f:(fun acc (n, n') ->
+      let acc, c = Map.find_or_insert acc n ~value:Union_find.create in
+      let acc, c' = Map.find_or_insert acc n' ~value:Union_find.create in
+      Union_find.union c c';
+      acc)
 
 let kind p =
   let visitor =
@@ -372,3 +382,7 @@ let cse ?(min_uses = 3) p =
 
          let p_new = subst p_old p_k (`Name name) in
          if [%equal: t] p_new p_old then acc else (p_new, (name, p_k) :: m))
+
+let rec map_names ~f = function
+  | `Name n -> `Name (f n)
+  | p -> V.Map.pred Fun.id (map_names ~f) p

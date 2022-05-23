@@ -11,7 +11,7 @@ tests = [
     ("hidx_list", "", True, test_db),
     ("large1", "-p param0:int", True, tpch_db),
     ("large2", "-p param0:date", True, tpch_db),
-    ("large3", "-p param0:date", True, tpch_db),
+    # ("large3", "-p param0:date", True, tpch_db),
     ("large4", "", False, tpch_db),
     ("large5", "", False, tpch_db),
     ("large6", "", False, tpch_db),

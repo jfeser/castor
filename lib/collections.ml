@@ -77,6 +77,10 @@ module List = struct
         let xs, ys, zs = unzip3 l in
         (x :: xs, y :: ys, z :: zs)
     | [] -> ([], [], [])
+
+  let rec mapw2 : 'a list -> f:('a -> 'a -> 'b) -> 'b list =
+   fun l ~f ->
+    match l with [] | [ _ ] -> [] | x :: y :: xs -> f x y :: mapw2 ~f (y :: xs)
 end
 
 module Set = struct
@@ -118,6 +122,13 @@ module Map = struct
    fun m1 m2 ->
     merge m1 m2 ~f:(fun ~key:_ -> function
       | `Right x | `Left x -> Some x | `Both (_, y) -> Some y)
+
+  let find_or_insert m k ~value =
+    match Map.find m k with
+    | Some v -> (m, v)
+    | None ->
+        let v = value k in
+        (Map.add_exn m ~key:k ~data:v, v)
 end
 
 module Seq = struct

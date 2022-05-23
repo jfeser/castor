@@ -11,6 +11,8 @@ end
 include T
 include Comparator.Make (T)
 
+let create ?schema name = { r_name = name; r_schema = schema }
+
 let schema_exn { r_schema; r_name } =
   Option.value_exn
     ~error:Error.(create "Missing schema annotation." r_name [%sexp_of: string])

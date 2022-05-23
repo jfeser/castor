@@ -996,8 +996,6 @@ module Make () = struct
 end
 
 module Ctx = struct
-  type t = (module S)
-
   let create () = (module Make () : S)
 end
 

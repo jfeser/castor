@@ -48,6 +48,10 @@ val of_string_exn : string -> t
 val kind : _ annot pred -> [ `Agg | `Scalar | `Window ]
 val to_type : 'a annot pred -> Prim_type.t
 val eqs : 'a annot pred -> (Name.t * Name.t) list
+
+val equiv : 'a annot pred -> Name.t Union_find.t Map.M(Name).t
+(** [equiv p] returns the equivalence class for each name mentioned in [p]. *)
+
 val names : 'a annot pred -> Set.M(Name).t
 
 val collect_aggs :
@@ -77,3 +81,4 @@ val to_static : params:Set.M(Name).t -> t -> t
 val strip_meta : < .. > annot pred -> t
 val is_expensive : _ pred -> bool
 val cse : ?min_uses:int -> t -> t * (Name.t * t) list
+val map_names : f:(Name.t -> Name.t) -> 'a annot pred -> 'a annot pred
