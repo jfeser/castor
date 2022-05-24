@@ -35,8 +35,7 @@ val create_spj :
   select_entry list ->
   'a spj
 
-val create_entry :
-  ?alias:string -> ?cast:Prim_type.t -> Pred.t -> string -> select_entry
+val create_entry : ?alias:string -> ?cast:Prim_type.t -> Pred.t -> select_entry
 
 val create_entry_s :
   ?alias:string -> ?cast:Prim_type.t -> string -> select_entry

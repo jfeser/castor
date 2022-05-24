@@ -37,16 +37,16 @@ let create_spj ?(distinct = false) ?(conds = []) ?(relations = []) ?(order = [])
     ?(group = []) ?limit select =
   { select; distinct; conds; relations; order; group; limit }
 
-let create_entry ?alias ?cast pred name =
-  match alias with
-  | Some a -> { pred; alias = a; cast }
-  | None ->
-      let fmt = Scanf.format_from_string (name ^ "_%d") "%d" in
-      let new_n = Fresh.name Global.fresh fmt in
-      { pred; alias = new_n; cast }
+let create_entry ?alias ?cast pred =
+  match (alias, pred) with
+  | Some a, _ -> { pred; alias = a; cast }
+  | None, `Name n -> { pred; alias = Name.name n; cast }
+  | _ -> failwith "expected an alias or name"
+
+let create_entry_n ?alias ?cast name = create_entry ?alias ?cast (`Name name)
 
 let create_entry_s ?alias ?cast name =
-  create_entry ?alias ?cast (`Name (Name.create name)) name
+  create_entry_n ?alias ?cast (Name.create name)
 
 let create_entries_s names = List.map names ~f:create_entry_s
 let select_entry_name { alias; _ } = alias
@@ -83,11 +83,11 @@ let select_has_windows s =
 let has_windows sql = to_select sql |> select_has_windows
 
 (** Convert a query to an SPJ by introducing a subquery. *)
-let create_subquery ?(extra_select = []) q =
+let create_subquery q =
   let alias = Fresh.name Global.fresh "t%d" in
   let select_list =
-    to_schema q @ extra_select
-    |> List.map ~f:(fun n -> create_entry (`Name (Name.create n)) n)
+    List.map (to_schema q) ~f:(fun n ->
+        create_entry_n (Name.create ~scope:alias n))
   in
   create_spj ~relations:[ (`Subquery q, alias, `Left) ] select_list
 
@@ -190,17 +190,13 @@ let select ?groupby of_ralgebra ps r =
       |> Set.union_list (module Name)
     in
     if has_aggs && not (Set.is_empty scoped) then
-      let extra_fields =
-        Set.to_list scoped
-        |> List.map ~f:(fun n ->
-               create_entry ~alias:(Name.name n) (`Name n) (Name.name n))
-      in
+      let extra_fields = Set.to_list scoped |> List.map ~f:create_entry_n in
       create_subquery (`Query { spj with select = spj.select @ extra_fields })
     else spj
   in
   let sctx = make_ctx (schema r) spj.select in
   let fields =
-    List.map ps ~f:(fun (p, n) -> create_entry (Pred.subst sctx p) n)
+    List.map ps ~f:(fun (p, n) -> create_entry (Pred.subst sctx p) ~alias:n)
   in
   let spj = { spj with select = fields } in
   let spj =
@@ -242,63 +238,66 @@ let dep_join of_ralgebra q1 scope q2 =
   in
   let sql2 = `Query { (of_ralgebra q2 |> to_spj) with order = [] } in
   let sql2_names = to_schema sql2 in
+  let sql2_alias = Fresh.name Global.fresh "t%d" in
   let select_list =
-    List.map sql2_names ~f:(fun n -> create_entry (`Name (Name.create n)) n)
+    List.map sql2_names ~f:(fun n ->
+        create_entry_n (Name.create ~scope:sql2_alias n))
   in
   `Query
     (create_spj
        ~relations:
          [
            (`Subquery sql1, Fresh.name Global.fresh "t%d", `Left);
-           (`Subquery sql2, Fresh.name Global.fresh "t%d", `Lateral);
+           (`Subquery sql2, sql2_alias, `Lateral);
          ]
        select_list)
 
-let of_ralgebra r =
-  let rec f r =
-    match r.node with
-    | Range (p, p') ->
-        let alias = Fresh.name Global.fresh "t%d" in
-        `Query
-          (create_spj
-             ~relations:[ (`Series (p, p'), alias, `Left) ]
-             [ create_entry (`Name (Name.create "range")) "range" ])
-    | Dedup r -> `Query { (to_spj (f r)) with distinct = true }
-    | Relation ({ r_name = tbl; _ } as rel) ->
-        let tbl_alias = tbl ^ Fresh.name Global.fresh "_%d" in
-        (* Add table alias to all fields to generate a select list. *)
-        let select_list =
-          List.map (schema r) ~f:(fun n ->
-              create_entry
-                (`Name (Name.copy n ~scope:(Some tbl_alias)))
-                (Name.name n))
-        in
-        let relations = [ (`Table rel, tbl_alias, `Left) ] in
-        `Query (create_spj ~relations select_list)
-    | Filter (pred, r) -> filter f pred r
-    | OrderBy { key; rel = r } -> order_by f key r
-    | Select (fs, r) -> select f fs r
-    | DepJoin { d_lhs; d_rhs; d_alias } -> dep_join f d_lhs d_alias d_rhs
-    | Join { pred; r1; r2 } -> join (schema r1) (schema r2) (f r1) (f r2) pred
-    | GroupBy (ps, key, r) ->
-        let key = List.map ~f:P.name key in
-        select ~groupby:key f ps r
-    | ATuple ([ r ], (Cross | Concat)) -> f r
-    | ATuple (r :: rs, Cross) ->
-        let q1 = r in
-        let q2 = tuple rs Cross in
-        join (schema q1) (schema q2) (f q1) (f q2) (`Bool true)
-    | ATuple (rs, Concat) -> `Union_all (List.map ~f:(fun r -> to_spj (f r)) rs)
-    | ATuple ([], _) | AEmpty -> `Query (create_spj ~limit:0 [])
-    | AScalar p -> `Query (create_spj [ create_entry p.s_pred p.s_name ])
-    | ATuple (_, Zip) ->
-        Error.(create "Unsupported." r [%sexp_of: _ annot] |> raise)
-    | AList l -> f @@ dep_join' (Layout_to_depjoin.list l)
-    | AHashIdx h -> f @@ dep_join' (Layout_to_depjoin.hash_idx h)
-    | AOrderedIdx o -> f @@ dep_join' (Layout_to_depjoin.ordered_idx o)
-    | _ -> failwith "unsupported"
+let relation Relation.({ r_name = tbl; _ } as rel) =
+  let tbl_alias = tbl ^ Fresh.name Global.fresh "_%d" in
+  (* Add table alias to all fields to generate a select list. *)
+  let select_list =
+    List.map (Relation.schema_exn rel) ~f:(fun (n, _) ->
+        create_entry_n (Name.copy n ~scope:(Some tbl_alias)))
   in
-  strip_meta r |> f
+  let relations = [ (`Table rel, tbl_alias, `Left) ] in
+  `Query (create_spj ~relations select_list)
+
+let of_ralgebra_open f r =
+  match r.node with
+  | Range (p, p') ->
+      let alias = Fresh.name Global.fresh "t%d" in
+      `Query
+        (create_spj
+           ~relations:[ (`Series (p, p'), alias, `Left) ]
+           [ create_entry_s "range" ])
+  | Dedup r -> `Query { (to_spj (f r)) with distinct = true }
+  | Relation r -> relation r
+  | Filter (pred, r) -> filter f pred r
+  | OrderBy { key; rel = r } -> order_by f key r
+  | Select (fs, r) -> select f fs r
+  | DepJoin { d_lhs; d_rhs; d_alias } -> dep_join f d_lhs d_alias d_rhs
+  | Join { pred; r1; r2 } -> join (schema r1) (schema r2) (f r1) (f r2) pred
+  | GroupBy (ps, key, r) ->
+      let key = List.map ~f:P.name key in
+      select ~groupby:key f ps r
+  | ATuple ([ r ], (Cross | Concat)) -> f r
+  | ATuple (r :: rs, Cross) ->
+      let q1 = r in
+      let q2 = tuple rs Cross in
+      join (schema q1) (schema q2) (f q1) (f q2) (`Bool true)
+  | ATuple (rs, Concat) -> `Union_all (List.map ~f:(fun r -> to_spj (f r)) rs)
+  | ATuple ([], _) | AEmpty -> `Query (create_spj ~limit:0 [])
+  | AScalar p -> `Query (create_spj [ create_entry p.s_pred ~alias:p.s_name ])
+  | ATuple (_, Zip) ->
+      Error.(create "Unsupported." r [%sexp_of: _ annot] |> raise)
+  | AList l -> f @@ dep_join' (Layout_to_depjoin.list l)
+  | AHashIdx h -> f @@ dep_join' (Layout_to_depjoin.hash_idx h)
+  | AOrderedIdx o -> f @@ dep_join' (Layout_to_depjoin.ordered_idx o)
+  | _ -> failwith "unsupported"
+
+let of_ralgebra x =
+  let rec f x = of_ralgebra_open f x in
+  f (strip_meta x)
 
 let rec pred_to_sql p =
   let p2s = pred_to_sql in

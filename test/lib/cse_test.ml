@@ -16,24 +16,24 @@ let%expect_test "" =
     BEGIN
     CREATE
     TEMPORARY TABLE r0 AS
-    SELECT DISTINCT r_0."f" AS "f_0",
-                    r_0."g" AS "g_0"
+    SELECT DISTINCT r_0."f" AS "f",
+                    r_0."g" AS "g"
     FROM "r" AS "r_0";
 
     ANALYZE r0;
 
-    SELECT "f_2" AS "f_2_0",
-           "g_2" AS "g_2_0",
-           "m_0" AS "m_0_0"
+    SELECT t1."f" AS "f",
+           t1."g" AS "g",
+           t2."m" AS "m"
     FROM
-      (SELECT r0_2."f" AS "f_2",
-              r0_2."g" AS "g_2"
+      (SELECT r0_2."f" AS "f",
+              r0_2."g" AS "g"
        FROM "r0" AS "r0_2") AS "t1",
 
-      (SELECT min("f_1") AS "m_0"
+      (SELECT min(t0."f") AS "m"
        FROM
-         (SELECT r0_1."f" AS "f_1",
-                 r0_1."g" AS "g_1"
+         (SELECT r0_1."f" AS "f",
+                 r0_1."g" AS "g"
           FROM "r0" AS "r0_1") AS "t0") AS "t2"
     WHERE (TRUE);
 

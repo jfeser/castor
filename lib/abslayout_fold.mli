@@ -1,6 +1,8 @@
 open Core
 open Ast
 
+val src : Logs.Src.t
+
 module Data : sig
   type t
 

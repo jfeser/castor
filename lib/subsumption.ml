@@ -192,7 +192,7 @@ let%expect_test "" =
   [%expect {|
     ("subsumes ~query ~view"
      (Ok
-      ((((pred (Name ((name l_orderkey_0)))) (alias l_orderkey_1) (cast ()))
-        ((pred (Name ((name o_custkey_0)))) (alias o_custkey_1) (cast ()))
-        ((pred (Name ((name l_partkey_0)))) (alias l_partkey_1) (cast ())))
-       ((Binop (Eq (Name ((name l_shipdate_0))) (Name ((name l_shipdate_0))))))))) |}]
+      ((((pred (Name ((name l_orderkey)))) (alias l_orderkey) (cast ()))
+        ((pred (Name ((name o_custkey)))) (alias o_custkey) (cast ()))
+        ((pred (Name ((name l_partkey)))) (alias l_partkey) (cast ())))
+       ((Binop (Eq (Name ((name l_shipdate))) (Name ((name l_shipdate))))))))) |}]

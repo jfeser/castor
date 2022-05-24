@@ -63,6 +63,7 @@ include (val Logs.src_log src : Logs.LOG)
 
 let with_level src level f =
   let old_level = Logs.Src.level src in
+  let old_reporter = Logs.reporter () in
   protect
     ~f:(fun () ->
       Logs.Src.set_level src old_level;
@@ -71,13 +72,16 @@ let with_level src level f =
       Logs.Src.set_level src (Some level);
       Logs.set_reporter (format_reporter ppf);
       f ())
-    ~finally:(fun () -> Logs.Src.set_level src old_level)
+    ~finally:(fun () ->
+      Logs.set_reporter old_reporter;
+      Logs.Src.set_level src old_level)
 
 module type LOG = sig
   include Logs.LOG
 
   val src : Logs.Src.t
   val param : unit Command.Param.t
+  val info_s : (unit -> Sexp.t) -> unit
 end
 
 let make ?(level = Some Logs.Info) name =
@@ -98,4 +102,6 @@ let make ?(level = Some Logs.Info) name =
         Option.iter level ~f:(Logs.Src.set_level src)]
 
     include (val Logs.src_log src)
+
+    let info_s f = info (fun m -> m "%a" Sexp.pp_hum (f ()))
   end : LOG)
