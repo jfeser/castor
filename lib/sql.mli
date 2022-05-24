@@ -15,9 +15,8 @@ type 'r spj = {
 [@@deriving compare, sexp_of]
 
 type 'q compound_relation =
-  [ `Subquery of 'q * string
-  | `Table of Relation.t * string
-  | `Series of Pred.t * Pred.t * string ]
+  [ `Subquery of 'q | `Table of Relation.t | `Series of Pred.t * Pred.t ]
+  * string
   * [ `Left | `Lateral ]
 [@@deriving compare, sexp_of]
 

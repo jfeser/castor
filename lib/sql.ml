@@ -23,9 +23,8 @@ type 'r spj = {
 [@@deriving compare, sexp_of]
 
 type 'q compound_relation =
-  [ `Subquery of 'q * string
-  | `Table of Relation.t * string
-  | `Series of Pred.t * Pred.t * string ]
+  [ `Subquery of 'q | `Table of Relation.t | `Series of Pred.t * Pred.t ]
+  * string
   * [ `Left | `Lateral ]
 [@@deriving compare, sexp_of]
 
@@ -90,7 +89,7 @@ let create_subquery ?(extra_select = []) q =
     to_schema q @ extra_select
     |> List.map ~f:(fun n -> create_entry (`Name (Name.create n)) n)
   in
-  create_spj ~relations:[ (`Subquery (q, alias), `Left) ] select_list
+  create_spj ~relations:[ (`Subquery q, alias, `Left) ] select_list
 
 let to_spj = function `Query q -> q | `Union_all _ as q -> create_subquery q
 
@@ -250,8 +249,8 @@ let dep_join of_ralgebra q1 scope q2 =
     (create_spj
        ~relations:
          [
-           (`Subquery (sql1, Fresh.name Global.fresh "t%d"), `Left);
-           (`Subquery (sql2, Fresh.name Global.fresh "t%d"), `Lateral);
+           (`Subquery sql1, Fresh.name Global.fresh "t%d", `Left);
+           (`Subquery sql2, Fresh.name Global.fresh "t%d", `Lateral);
          ]
        select_list)
 
@@ -262,7 +261,7 @@ let of_ralgebra r =
         let alias = Fresh.name Global.fresh "t%d" in
         `Query
           (create_spj
-             ~relations:[ (`Series (p, p', alias), `Left) ]
+             ~relations:[ (`Series (p, p'), alias, `Left) ]
              [ create_entry (`Name (Name.create "range")) "range" ])
     | Dedup r -> `Query { (to_spj (f r)) with distinct = true }
     | Relation ({ r_name = tbl; _ } as rel) ->
@@ -274,7 +273,7 @@ let of_ralgebra r =
                 (`Name (Name.copy n ~scope:(Some tbl_alias)))
                 (Name.name n))
         in
-        let relations = [ (`Table (rel, tbl_alias), `Left) ] in
+        let relations = [ (`Table rel, tbl_alias, `Left) ] in
         `Query (create_spj ~relations select_list)
     | Filter (pred, r) -> filter f pred r
     | OrderBy { key; rel = r } -> order_by f key r
@@ -390,15 +389,14 @@ and spj_to_sql { select; distinct; order; group; relations; conds; limit } =
   let relation_sql =
     if List.is_empty relations then ""
     else
-      List.map relations ~f:(fun (rel, join_type) ->
+      List.map relations ~f:(fun (rel, alias, join_type) ->
           let rel_str =
             match rel with
-            | `Subquery (q, alias) ->
-                sprintf "(%s) as \"%s\"" (to_string q) alias
-            | `Table ((t : Relation.t), alias) ->
+            | `Subquery q -> sprintf "(%s) as \"%s\"" (to_string q) alias
+            | `Table (t : Relation.t) ->
                 if String.(t.r_name = alias) then sprintf "\"%s\"" t.r_name
                 else sprintf "\"%s\" as \"%s\"" t.r_name alias
-            | `Series (p, p', alias) -> (
+            | `Series (p, p') -> (
                 let t = Prim_type.unify (Pred.to_type p) (Pred.to_type p') in
                 match t with
                 | DateT _ ->
