@@ -1,8 +1,7 @@
 open Castor_test.Test_util
 
 let run_test ~params ~db ?parallel ?serial ?cost () =
-  let conn = Db.create db in
-
+  Db.with_conn db @@ fun conn ->
   let layout = Abslayout_load.load_stdin_nostrip_exn params conn in
 
   let module Type_cost = Type_cost.Make (struct

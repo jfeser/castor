@@ -44,7 +44,7 @@ let create db name fields values =
         |> Or_error.ok_exn |> command_ok_exn))
 
 let () =
-  let conn = Db.create "postgresql:///castor_test" in
+  Db.with_conn "postgresql:///castor_test" @@ fun conn ->
   create_simple conn "r" [ "f"; "g" ]
     [ [ 0; 5 ]; [ 1; 2 ]; [ 1; 3 ]; [ 2; 1 ]; [ 2; 2 ]; [ 3; 4 ]; [ 4; 6 ] ];
   create conn "r_date"

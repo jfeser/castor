@@ -2,7 +2,7 @@ open Abslayout_load
 open Castor_test.Test_util
 
 let run_test ?(params = []) ?implang ?type_ ?opt () =
-  let conn = Lazy.force test_db_conn in
+  Db.with_conn "postgresql:///castor_test" @@ fun conn ->
   let layout =
     load_stdin_nostrip_exn params conn
     |> Equiv.annotate

@@ -49,6 +49,10 @@ let create ?(pool_size = default_pool_size) uri =
   }
 
 let close { conn; _ } = ensure_finish conn
+
+let with_conn ?pool_size uri f =
+  Exn.protectx (create ?pool_size uri) ~f ~finally:close
+
 let conn { conn; _ } = conn
 
 let rec psql_exec ?(max_retries = 0) db query =
