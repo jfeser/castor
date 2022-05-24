@@ -324,7 +324,7 @@ let scan_crosstuple ~debug scan ctx b (child_layouts, _) ((child_types, _) as t)
         let ctx = Ctx.bind ctx "start" Prim_type.int_t cstart in
         scan ctx b clayout ctype (fun b tup ->
             make_loops ctx (fields @ tup) clayouts ctypes cstarts b)
-    | _ -> failwith ""
+    | _ -> failwith "building crosstuple failed"
   in
   let hdr = Header.make_header (TupleT t) in
   let start = Ctx.find_exn ctx (Name.create "start") b in

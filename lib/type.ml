@@ -297,7 +297,7 @@ class ['self] type_fold =
       let kind =
         match kind with
         | Cross -> `Cross
-        | Zip -> failwith ""
+        | Zip -> failwith "zip tuples not supported"
         | Concat -> `Concat
       in
       let init = RevList.empty in

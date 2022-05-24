@@ -1,7 +1,5 @@
-open Castor_test.Test_util
-
 let run_test ~params ~db ?parallel ?serial ?cost () =
-  Db.with_conn db @@ fun conn ->
+  Db.with_conn ~pool_size:2 db @@ fun conn ->
   let layout = Abslayout_load.load_stdin_nostrip_exn params conn in
 
   let module Type_cost = Type_cost.Make (struct
@@ -14,9 +12,11 @@ let run_test ~params ~db ?parallel ?serial ?cost () =
     let cost_timeout = None
   end) in
   let par_type =
-    Type.Parallel.type_of conn layout
-    |> Result.map_error ~f:(fun _ -> Failure "")
-    |> Result.ok_exn
+    match Type.Parallel.type_of conn layout with
+    | Ok ok -> ok
+    | Error err ->
+        Fmt.epr "%a\n" (Resolve.pp_err @@ Type.Parallel.pp_err @@ Fmt.nop) err;
+        exit 1
   in
 
   Option.iter parallel ~f:(fun fn ->

@@ -1,5 +1,6 @@
 
 (rule
+ (alias runtest)
  (targets list.par.output list.cost.output list.ser.output)
  (deps (alias ../test_db))
  (action (with-stdin-from list (run ../bin/type.exe  -db postgresql:///castor_test -parallel list.par.output -cost list.cost.output -serial list.ser.output))))
@@ -18,6 +19,7 @@
 
 
 (rule
+ (alias runtest)
  (targets hidx.par.output hidx.cost.output hidx.ser.output)
  (deps (alias ../test_db))
  (action (with-stdin-from hidx (run ../bin/type.exe  -db postgresql:///castor_test -parallel hidx.par.output -cost hidx.cost.output -serial hidx.ser.output))))
@@ -36,6 +38,7 @@
 
 
 (rule
+ (alias runtest)
  (targets hidx_list.par.output hidx_list.cost.output hidx_list.ser.output)
  (deps (alias ../test_db))
  (action (with-stdin-from hidx_list (run ../bin/type.exe  -db postgresql:///castor_test -parallel hidx_list.par.output -cost hidx_list.cost.output -serial hidx_list.ser.output))))
@@ -54,6 +57,7 @@
 
 
 (rule
+ (alias runtest)
  (targets large1.par.output large1.cost.output large1.ser.output)
  (deps (alias ../test_db))
  (action (with-stdin-from large1 (run ../bin/type.exe -p param0:int -db postgresql:///tpch_1k -parallel large1.par.output -cost large1.cost.output -serial large1.ser.output))))
@@ -72,6 +76,7 @@
 
 
 (rule
+ (alias runtest)
  (targets large2.par.output large2.cost.output large2.ser.output)
  (deps (alias ../test_db))
  (action (with-stdin-from large2 (run ../bin/type.exe -p param0:date -db postgresql:///tpch_1k -parallel large2.par.output -cost large2.cost.output -serial large2.ser.output))))
@@ -90,20 +95,7 @@
 
 
 (rule
- (targets large4.par.output large4.cost.output)
- (deps (alias ../test_db))
- (action (with-stdin-from large4 (run ../bin/type.exe  -db postgresql:///tpch_1k -parallel large4.par.output -cost large4.cost.output))))
-
-(rule
  (alias runtest)
- (action (diff large4.par.expected large4.par.output)))
-(rule
- (alias runtest)
- (action (diff large4.cost.expected large4.cost.output)))
-
-
-
-(rule
  (targets large5.par.output large5.cost.output)
  (deps (alias ../test_db))
  (action (with-stdin-from large5 (run ../bin/type.exe  -db postgresql:///tpch_1k -parallel large5.par.output -cost large5.cost.output))))
@@ -118,6 +110,7 @@
 
 
 (rule
+ (alias runtest)
  (targets large6.par.output large6.cost.output)
  (deps (alias ../test_db))
  (action (with-stdin-from large6 (run ../bin/type.exe  -db postgresql:///tpch_1k -parallel large6.par.output -cost large6.cost.output))))
@@ -132,6 +125,7 @@
 
 
 (rule
+ (alias runtest)
  (targets cost1.par.output cost1.cost.output)
  (deps (alias ../test_db))
  (action (with-stdin-from cost1 (run ../bin/type.exe  -db postgresql:///tpch_1k -parallel cost1.par.output -cost cost1.cost.output))))

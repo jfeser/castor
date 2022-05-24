@@ -18,6 +18,7 @@ for (name, params, param_values) in tests:
     print(
         f"""
 (rule
+ (alias runtest)
  (targets {name}.ll.output {name}.ir.output {name}.layout.output {name}.result.output)
  (deps (alias ../test_db) ../../bin/compile.exe ../bin/codegen.sh {name} (sandbox always))
  (action

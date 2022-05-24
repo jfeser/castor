@@ -11,7 +11,6 @@ end
 
 (* Don't currently have support for hashtables w/ composite keys. *)
 let complex_hashtables = false
-let test_db_conn = lazy (Db.create "postgresql:///castor_test")
 
 module Demomatch = struct
   let example_params =
@@ -80,4 +79,14 @@ let sum_complex =
   "Select([(sum(f) + 5) as x, (count() + sum(f / 2)) as y], AList(r1 as k, \
    ATuple([AScalar(k.f), AScalar((k.g - k.f) as v)], cross)))"
 
-let tpch_conn = lazy (Db.create @@ Sys.getenv_exn "CASTOR_TPCH_TEST_DB")
+let test_db_conn =
+  lazy
+    (let conn = Db.create "postgresql:///castor_test" in
+     at_exit (fun () -> Db.close conn);
+     conn)
+
+let tpch_conn =
+  lazy
+    (let conn = Db.create @@ Sys.getenv_exn "CASTOR_TPCH_TEST_DB" in
+     at_exit (fun () -> Db.close conn);
+     conn)

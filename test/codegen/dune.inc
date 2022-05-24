@@ -1,5 +1,6 @@
 
 (rule
+ (alias runtest)
  (targets agg.query.ll.output agg.query.ir.output agg.query.layout.output agg.query.result.output)
  (deps (alias ../test_db) ../../bin/compile.exe ../bin/codegen.sh agg.query (sandbox always))
  (action
@@ -16,6 +17,7 @@
 
 
 (rule
+ (alias runtest)
  (targets date-arith.query.ll.output date-arith.query.ir.output date-arith.query.layout.output date-arith.query.result.output)
  (deps (alias ../test_db) ../../bin/compile.exe ../bin/codegen.sh date-arith.query (sandbox always))
  (action
@@ -32,6 +34,7 @@
 
 
 (rule
+ (alias runtest)
  (targets depjoin.query.ll.output depjoin.query.ir.output depjoin.query.layout.output depjoin.query.result.output)
  (deps (alias ../test_db) ../../bin/compile.exe ../bin/codegen.sh depjoin.query (sandbox always))
  (action
@@ -48,6 +51,7 @@
 
 
 (rule
+ (alias runtest)
  (targets hash-idx.query.ll.output hash-idx.query.ir.output hash-idx.query.layout.output hash-idx.query.result.output)
  (deps (alias ../test_db) ../../bin/compile.exe ../bin/codegen.sh hash-idx.query (sandbox always))
  (action
@@ -64,6 +68,7 @@
 
 
 (rule
+ (alias runtest)
  (targets ordered-idx-dates-2.query.ll.output ordered-idx-dates-2.query.ir.output ordered-idx-dates-2.query.layout.output ordered-idx-dates-2.query.result.output)
  (deps (alias ../test_db) ../../bin/compile.exe ../bin/codegen.sh ordered-idx-dates-2.query (sandbox always))
  (action
@@ -80,6 +85,7 @@
 
 
 (rule
+ (alias runtest)
  (targets ordered-idx-dates-3.query.ll.output ordered-idx-dates-3.query.ir.output ordered-idx-dates-3.query.layout.output ordered-idx-dates-3.query.result.output)
  (deps (alias ../test_db) ../../bin/compile.exe ../bin/codegen.sh ordered-idx-dates-3.query (sandbox always))
  (action
@@ -96,6 +102,7 @@
 
 
 (rule
+ (alias runtest)
  (targets ordered-idx-dates-4.query.ll.output ordered-idx-dates-4.query.ir.output ordered-idx-dates-4.query.layout.output ordered-idx-dates-4.query.result.output)
  (deps (alias ../test_db) ../../bin/compile.exe ../bin/codegen.sh ordered-idx-dates-4.query (sandbox always))
  (action
@@ -112,6 +119,7 @@
 
 
 (rule
+ (alias runtest)
  (targets ordered-idx-dates-5.query.ll.output ordered-idx-dates-5.query.ir.output ordered-idx-dates-5.query.layout.output ordered-idx-dates-5.query.result.output)
  (deps (alias ../test_db) ../../bin/compile.exe ../bin/codegen.sh ordered-idx-dates-5.query (sandbox always))
  (action
@@ -128,6 +136,7 @@
 
 
 (rule
+ (alias runtest)
  (targets ordered-idx-dates-6.query.ll.output ordered-idx-dates-6.query.ir.output ordered-idx-dates-6.query.layout.output ordered-idx-dates-6.query.result.output)
  (deps (alias ../test_db) ../../bin/compile.exe ../bin/codegen.sh ordered-idx-dates-6.query (sandbox always))
  (action
@@ -144,6 +153,7 @@
 
 
 (rule
+ (alias runtest)
  (targets ordered-idx-dates-7.query.ll.output ordered-idx-dates-7.query.ir.output ordered-idx-dates-7.query.layout.output ordered-idx-dates-7.query.result.output)
  (deps (alias ../test_db) ../../bin/compile.exe ../bin/codegen.sh ordered-idx-dates-7.query (sandbox always))
  (action
@@ -160,6 +170,7 @@
 
 
 (rule
+ (alias runtest)
  (targets ordered-idx-dates-8.query.ll.output ordered-idx-dates-8.query.ir.output ordered-idx-dates-8.query.layout.output ordered-idx-dates-8.query.result.output)
  (deps (alias ../test_db) ../../bin/compile.exe ../bin/codegen.sh ordered-idx-dates-8.query (sandbox always))
  (action
@@ -176,6 +187,7 @@
 
 
 (rule
+ (alias runtest)
  (targets ordered-idx-dates.query.ll.output ordered-idx-dates.query.ir.output ordered-idx-dates.query.layout.output ordered-idx-dates.query.result.output)
  (deps (alias ../test_db) ../../bin/compile.exe ../bin/codegen.sh ordered-idx-dates.query (sandbox always))
  (action
@@ -192,6 +204,7 @@
 
 
 (rule
+ (alias runtest)
  (targets ordered-idx.query.ll.output ordered-idx.query.ir.output ordered-idx.query.layout.output ordered-idx.query.result.output)
  (deps (alias ../test_db) ../../bin/compile.exe ../bin/codegen.sh ordered-idx.query (sandbox always))
  (action
@@ -208,6 +221,7 @@
 
 
 (rule
+ (alias runtest)
  (targets ordering-2.query.ll.output ordering-2.query.ir.output ordering-2.query.layout.output ordering-2.query.result.output)
  (deps (alias ../test_db) ../../bin/compile.exe ../bin/codegen.sh ordering-2.query (sandbox always))
  (action
@@ -224,6 +238,7 @@
 
 
 (rule
+ (alias runtest)
  (targets ordering-3.query.ll.output ordering-3.query.ir.output ordering-3.query.layout.output ordering-3.query.result.output)
  (deps (alias ../test_db) ../../bin/compile.exe ../bin/codegen.sh ordering-3.query (sandbox always))
  (action
@@ -240,6 +255,7 @@
 
 
 (rule
+ (alias runtest)
  (targets ordering-4.query.ll.output ordering-4.query.ir.output ordering-4.query.layout.output ordering-4.query.result.output)
  (deps (alias ../test_db) ../../bin/compile.exe ../bin/codegen.sh ordering-4.query (sandbox always))
  (action
@@ -256,6 +272,7 @@
 
 
 (rule
+ (alias runtest)
  (targets ordering.query.ll.output ordering.query.ir.output ordering.query.layout.output ordering.query.result.output)
  (deps (alias ../test_db) ../../bin/compile.exe ../bin/codegen.sh ordering.query (sandbox always))
  (action
@@ -272,6 +289,7 @@
 
 
 (rule
+ (alias runtest)
  (targets output-test.query.ll.output output-test.query.ir.output output-test.query.layout.output output-test.query.result.output)
  (deps (alias ../test_db) ../../bin/compile.exe ../bin/codegen.sh output-test.query (sandbox always))
  (action
@@ -288,6 +306,7 @@
 
 
 (rule
+ (alias runtest)
  (targets strops.query.ll.output strops.query.ir.output strops.query.layout.output strops.query.result.output)
  (deps (alias ../test_db) ../../bin/compile.exe ../bin/codegen.sh strops.query (sandbox always))
  (action

@@ -5,6 +5,7 @@ type t
 val src : Logs.Src.t
 val create : ?pool_size:int -> string -> t
 val with_conn : ?pool_size:int -> string -> (t -> 'a) -> 'a
+val close : t -> unit
 val conn : t -> Postgresql.connection
 val param : unit Command.Param.t
 val psql_exec : ?max_retries:int -> t -> string -> Postgresql.result Or_error.t

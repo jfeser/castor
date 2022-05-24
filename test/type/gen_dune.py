@@ -12,7 +12,7 @@ tests = [
     ("large1", "-p param0:int", True, tpch_db),
     ("large2", "-p param0:date", True, tpch_db),
     # ("large3", "-p param0:date", True, tpch_db),
-    ("large4", "", False, tpch_db),
+    # ("large4", "", False, tpch_db),
     ("large5", "", False, tpch_db),
     ("large6", "", False, tpch_db),
     ("cost1", "", False, tpch_db),
@@ -42,6 +42,7 @@ for (name, params, run_ser, db) in tests:
     print(
         f"""
 (rule
+ (alias runtest)
  (targets {targets})
  (deps (alias ../test_db))
  (action (with-stdin-from {name} (run ../bin/type.exe {params} -db {db} {options}))))

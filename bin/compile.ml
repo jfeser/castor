@@ -3,6 +3,8 @@ open Castor
 open Collections
 open Abslayout_load
 
+let ( let* ) x y = Db.with_conn x y
+
 let main ~debug ~gprof ~params ~query ~enable_redshift_dates ~output_layout ?db
     ?out_dir fn =
   let open Result.Let_syntax in
@@ -10,9 +12,8 @@ let main ~debug ~gprof ~params ~query ~enable_redshift_dates ~output_layout ?db
   Log.info (fun m ->
       m "Command: %a" Fmt.(array ~sep:sp string) (Sys.get_argv ()));
 
-  let conn =
+  let* conn =
     Option.value_or_thunk db ~default:(fun () -> Sys.getenv_exn "CASTOR_DB")
-    |> Db.create
   in
 
   let layout_file =
