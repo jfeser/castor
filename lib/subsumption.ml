@@ -80,6 +80,18 @@ let residual_sub query_equiv view_preds query_preds =
 
 let relations x = List.map x.relations ~f:(fun (r, a) -> (r, a))
 
+let of_sql : Sql.t -> _ =
+  let open Option.Let_syntax in
+  function
+  | `Union_all _ -> None
+  | `Query q ->
+      let%bind relations =
+        List.map q.relations ~f:(fun (r, a, j) ->
+            match (r, j) with `Table t, `Left -> Some (t, a) | _ -> None)
+        |> Option.all
+      in
+      return { q with relations }
+
 let subsumes ~view ~query =
   let open Or_error.Let_syntax in
   if view.distinct || query.distinct then
@@ -189,7 +201,8 @@ let%expect_test "" =
     [%message
       (subsumes ~query ~view
         : (select_entry list * _ annot pred list) Or_error.t)];
-  [%expect {|
+  [%expect
+    {|
     ("subsumes ~query ~view"
      (Ok
       ((((pred (Name ((name l_orderkey)))) (alias l_orderkey) (cast ()))

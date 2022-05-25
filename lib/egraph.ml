@@ -49,6 +49,7 @@ module type EGRAPH = sig
   val add : t -> Id.t lang -> Id.t
   val merge : t -> Id.t -> Id.t -> Id.t
   val rebuild : t -> unit
+  val classes : t -> Id.t Iter.t
 
   type pat = [ `Apply of pat lang | `Var of int ]
 
@@ -117,6 +118,7 @@ struct
       max_id = 0;
     }
 
+  let classes g f = H.iter_keys g.classes ~f
   let find (id : Id.t) = { id with id = Union_find.get id.Id.canon }
   let eclass_id_equiv id1 id2 = [%equal: Id.t] (find id1) (find id2)
 
@@ -318,6 +320,38 @@ end
 
 module AstEGraph = struct
   include Make (AstLang) (UnitAnalysis)
+
+  let rec add_query g q =
+    let q' = V.Map.query (add_annot g) (add_pred g) q in
+    add g (Query q')
+
+  and add_pred g p =
+    let p' = V.Map.pred (add_annot g) (add_pred g) p in
+    add g (Pred p')
+
+  and add_annot g r = add_query g r.Ast.node
+
+  let rec choose_exn g id =
+    let enode, _ = H.choose_exn (H.find_exn g.classes id).nodes in
+    match enode with
+    | Query q ->
+        `Annot
+          Ast.
+            {
+              node = V.Map.query (choose_annot_exn g) (choose_pred_exn g) q;
+              meta = object end;
+            }
+    | Pred p -> `Pred (V.Map.pred (choose_annot_exn g) (choose_pred_exn g) p)
+
+  and choose_annot_exn g id =
+    match choose_exn g id with
+    | `Annot q -> q
+    | `Pred _ -> failwith "expected query"
+
+  and choose_pred_exn g id =
+    match choose_exn g id with
+    | `Pred x -> x
+    | `Annot _ -> failwith "expected pred"
 end
 
 let%expect_test "" =

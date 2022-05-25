@@ -1,10 +1,11 @@
 (include dune.inc)
 
 (rule
+ (alias typetest)
  (action (with-stdout-to dune.inc.gen (run ./gen_dune.py)))
  (deps (env_var CASTOR_TPCH_TEST_DB)))
 
 (rule
- (alias runtest)
+ (alias typetest)
  (action
   (diff dune.inc dune.inc.gen)))

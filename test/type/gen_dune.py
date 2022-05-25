@@ -24,10 +24,10 @@ for (name, params, run_ser, db) in tests:
     options = f"-parallel {name}.par.output -cost {name}.cost.output"
     diff_rules = f"""
 (rule
- (alias runtest)
+ (alias typetest)
  (action (diff {name}.par.expected {name}.par.output)))
 (rule
- (alias runtest)
+ (alias typetest)
  (action (diff {name}.cost.expected {name}.cost.output)))
 """
     if run_ser:
@@ -35,14 +35,14 @@ for (name, params, run_ser, db) in tests:
         options += f" -serial {name}.ser.output"
         diff_rules += f"""
 (rule
- (alias runtest)
+ (alias typetest)
  (action (diff {name}.ser.expected {name}.ser.output)))
 """
 
     print(
         f"""
 (rule
- (alias runtest)
+ (alias typetest)
  (targets {targets})
  (deps (alias ../test_db))
  (action (with-stdin-from {name} (run ../bin/type.exe {params} -db {db} {options}))))

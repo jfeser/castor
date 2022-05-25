@@ -39,6 +39,7 @@ module type EGRAPH = sig
   val add : t -> Id.t lang -> Id.t
   val merge : t -> Id.t -> Id.t -> Id.t
   val rebuild : t -> unit
+  val classes : t -> Id.t Iter.t
 
   type pat = [ `Apply of pat lang | `Var of int ]
 
@@ -64,4 +65,13 @@ module AstLang : sig
 end
 
 module UnitAnalysis : ANALYSIS with type t = unit and type 'a lang := 'a
-module AstEGraph : EGRAPH with type 'a lang := 'a AstLang.t
+
+module AstEGraph : sig
+  open Ast
+  include EGRAPH with type 'a lang := 'a AstLang.t
+
+  val add_query : t -> ('a annot pred, 'a annot) query -> Id.t
+  val add_pred : t -> 'a annot pred -> Id.t
+  val add_annot : t -> 'a annot -> Id.t
+  val choose_exn : t -> Id.t -> [ `Annot of < > annot | `Pred of < > annot pred ]
+end
