@@ -74,9 +74,9 @@ define void @printer(%params* noalias %0) #4 {
 entry:
   %tupleptrtmp = alloca { i64 }, align 8
   %hoisted0 = alloca i64, align 8
-  %count5 = alloca i64, align 8
-  %i4 = alloca i64, align 8
-  %cstart3 = alloca i64, align 8
+  %i1 = alloca i64, align 8
+  %cstart0 = alloca i64, align 8
+  %count2 = alloca i64, align 8
   %buf = getelementptr inbounds %params, %params* %0, i32 0, i32 0
   %buf_ptr = load [0 x i64]*, [0 x i64]** %buf, align 8, !tbaa !3
   %buf_ptr_cast = bitcast [0 x i64]* %buf_ptr to i8*
@@ -84,23 +84,23 @@ entry:
   %slice_val = load i8, i8* %slice_ptr, align 1, !tbaa !5
   %int_val = sext i8 %slice_val to i64
   store i64 %int_val, i64* %hoisted0, align 8, !tbaa !7
-  store i64 0, i64* %cstart3, align 8, !tbaa !7
-  store i64 0, i64* %i4, align 8, !tbaa !7
-  store i64 5, i64* %count5, align 8, !tbaa !7
+  store i64 0, i64* %cstart0, align 8, !tbaa !7
+  store i64 0, i64* %i1, align 8, !tbaa !7
+  store i64 5, i64* %count2, align 8, !tbaa !7
   br label %loopcond
 
 loopcond:                                         ; preds = %entry
-  %i41 = load i64, i64* %i4, align 8, !tbaa !7
-  %count52 = load i64, i64* %count5, align 8, !tbaa !7
-  %lttmp = icmp slt i64 %i41, %count52
+  %i11 = load i64, i64* %i1, align 8, !tbaa !7
+  %count22 = load i64, i64* %count2, align 8, !tbaa !7
+  %lttmp = icmp slt i64 %i11, %count22
   br i1 %lttmp, label %loopbody, label %loopend
 
 loopbody:                                         ; preds = %loopbody, %loopcond
-  %cstart33 = load i64, i64* %cstart3, align 8, !tbaa !7
+  %cstart03 = load i64, i64* %cstart0, align 8, !tbaa !7
   %buf4 = getelementptr inbounds %params, %params* %0, i32 0, i32 0
   %buf_ptr5 = load [0 x i64]*, [0 x i64]** %buf4, align 8, !tbaa !3
   %buf_ptr_cast6 = bitcast [0 x i64]* %buf_ptr5 to i8*
-  %slice_ptr7 = getelementptr inbounds i8, i8* %buf_ptr_cast6, i64 %cstart33
+  %slice_ptr7 = getelementptr inbounds i8, i8* %buf_ptr_cast6, i64 %cstart03
   %slice_val8 = load i8, i8* %slice_ptr7, align 1, !tbaa !5
   %int_val9 = sext i8 %slice_val8 to i64
   %hoisted010 = load i64, i64* %hoisted0, align 8, !tbaa !7
@@ -111,15 +111,15 @@ loopbody:                                         ; preds = %loopbody, %loopcond
   %elemtmp = extractvalue { i64 } %tupletmp, 0
   %1 = call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([3 x i8], [3 x i8]* @int_fmt, i32 0, i32 0), i64 %elemtmp)
   %2 = call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([2 x i8], [2 x i8]* @newline_str, i32 0, i32 0))
-  %cstart311 = load i64, i64* %cstart3, align 8, !tbaa !7
-  %addtmp12 = add nsw i64 %cstart311, 1
-  store i64 %addtmp12, i64* %cstart3, align 8, !tbaa !7
-  %i413 = load i64, i64* %i4, align 8, !tbaa !7
-  %addtmp14 = add nsw i64 %i413, 1
-  store i64 %addtmp14, i64* %i4, align 8, !tbaa !7
-  %i415 = load i64, i64* %i4, align 8, !tbaa !7
-  %count516 = load i64, i64* %count5, align 8, !tbaa !7
-  %lttmp17 = icmp slt i64 %i415, %count516
+  %cstart011 = load i64, i64* %cstart0, align 8, !tbaa !7
+  %addtmp12 = add nsw i64 %cstart011, 1
+  store i64 %addtmp12, i64* %cstart0, align 8, !tbaa !7
+  %i113 = load i64, i64* %i1, align 8, !tbaa !7
+  %addtmp14 = add nsw i64 %i113, 1
+  store i64 %addtmp14, i64* %i1, align 8, !tbaa !7
+  %i115 = load i64, i64* %i1, align 8, !tbaa !7
+  %count216 = load i64, i64* %count2, align 8, !tbaa !7
+  %lttmp17 = icmp slt i64 %i115, %count216
   br i1 %lttmp17, label %loopbody, label %loopend
 
 loopend:                                          ; preds = %loopbody, %loopcond

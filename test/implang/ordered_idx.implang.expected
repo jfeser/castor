@@ -1,59 +1,59 @@
 // Locals:
-// count16 : int (persists=true)
-// mid22 : int (persists=true)
-// key23 : tuple[int] (persists=false)
-// key19 : tuple[int] (persists=true)
-// kstart17 : int (persists=true)
-// key27 : tuple[int] (persists=false)
-// key25 : tuple[int] (persists=false)
-// key26 : tuple[int] (persists=true)
-// idx24 : int (persists=true)
-// vstart18 : int (persists=true)
-// i15 : int (persists=true)
-// cstart14 : int (persists=true)
-// low20 : int (persists=true)
-// high21 : int (persists=true)
+// idx10 : int (persists=true)
+// i1 : int (persists=true)
+// key13 : tuple[int] (persists=false)
+// vstart4 : int (persists=true)
+// mid8 : int (persists=true)
+// key9 : tuple[int] (persists=false)
+// key11 : tuple[int] (persists=false)
+// count2 : int (persists=true)
+// high7 : int (persists=true)
+// kstart3 : int (persists=true)
+// key5 : tuple[int] (persists=true)
+// low6 : int (persists=true)
+// key12 : tuple[int] (persists=true)
+// cstart0 : int (persists=true)
 fun printer () : void {
-    cstart14 = 0;
-    i15 = 0;
-    count16 = 5;
-    loop (i15 < count16) {
-        low20 = 0;
-        high21 = 6 / 2;
-        loop (low20 < high21) {
-            mid22 = low20 + high21 / 2;
-            kstart17 = 5 + mid22 * 2;
-            key23 = (buf[kstart17 : 1]);
-            if (not(key23[0] < buf[cstart14 : 1])) {
-                high21 = mid22;
+    cstart0 = 0;
+    i1 = 0;
+    count2 = 5;
+    loop (i1 < count2) {
+        low6 = 0;
+        high7 = 6 / 2;
+        loop (low6 < high7) {
+            mid8 = low6 + high7 / 2;
+            kstart3 = 5 + mid8 * 2;
+            key9 = (buf[kstart3 : 1]);
+            if (not(key9[0] < buf[cstart0 : 1])) {
+                high7 = mid8;
             } else {
-                 low20 = mid22 + 1;
+                 low6 = mid8 + 1;
             }
         }
-        idx24 = low20;
-        if (idx24 < 6 / 2) {
-            kstart17 = 5 + idx24 * 2;
-            key25 = (buf[kstart17 : 1]);
-            key26 = key25;
-            loop (key26[0] < buf[cstart14 : 1] + 1 && idx24 < 6 / 2) {
-                if (key26[0] < buf[cstart14 : 1] + 1 &&
-                    not(key26[0] < buf[cstart14 : 1])) {
-                    vstart18 = buf[5 + idx24 * 2 + 1 : 1] + 6 + 5;
-                    key19 = key26;
-                    print(tuple[int, int], (key19[0], buf[vstart18 : 1]));
+        idx10 = low6;
+        if (idx10 < 6 / 2) {
+            kstart3 = 5 + idx10 * 2;
+            key11 = (buf[kstart3 : 1]);
+            key12 = key11;
+            loop (key12[0] < buf[cstart0 : 1] + 1 && idx10 < 6 / 2) {
+                if (key12[0] < buf[cstart0 : 1] + 1 &&
+                    not(key12[0] < buf[cstart0 : 1])) {
+                    vstart4 = buf[5 + idx10 * 2 + 1 : 1] + 6 + 5;
+                    key5 = key12;
+                    print(tuple[int, int], (key5[0], buf[vstart4 : 1]));
                 } else {
                      
                 }
-                idx24 = idx24 + 1;
-                kstart17 = 5 + idx24 * 2;
-                key27 = (buf[kstart17 : 1]);
-                key26 = key27;
+                idx10 = idx10 + 1;
+                kstart3 = 5 + idx10 * 2;
+                key13 = (buf[kstart3 : 1]);
+                key12 = key13;
             }
         } else {
              
         }
-        cstart14 = cstart14 + 1;
-        i15 = i15 + 1;
+        cstart0 = cstart0 + 1;
+        i1 = i1 + 1;
     }
 }
 // Locals:

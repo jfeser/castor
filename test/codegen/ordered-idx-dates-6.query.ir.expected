@@ -14,17 +14,17 @@
 // hoisted12 : int (persists=false)
 // hoisted13 : date (persists=false)
 // hoisted14 : int (persists=false)
-// low14 : int (persists=true)
-// key13 : tuple[date] (persists=true)
-// key20 : tuple[date] (persists=true)
-// key19 : tuple[date] (persists=false)
-// key17 : tuple[date] (persists=false)
-// mid16 : int (persists=true)
-// kstart11 : int (persists=true)
-// vstart12 : int (persists=true)
-// key21 : tuple[date] (persists=false)
-// high15 : int (persists=true)
-// idx18 : int (persists=true)
+// mid5 : int (persists=true)
+// key10 : tuple[date] (persists=false)
+// key9 : tuple[date] (persists=true)
+// high4 : int (persists=true)
+// kstart0 : int (persists=true)
+// key6 : tuple[date] (persists=false)
+// idx7 : int (persists=true)
+// vstart1 : int (persists=true)
+// key2 : tuple[date] (persists=true)
+// key8 : tuple[date] (persists=false)
+// low3 : int (persists=true)
 fun printer () : void {
     hoisted0 = 15 / 3;
     hoisted1 = 0000-01-01;
@@ -41,39 +41,39 @@ fun printer () : void {
     hoisted12 = date2int(hoisted11);
     hoisted13 = 0000-01-01;
     hoisted14 = date2int(hoisted13);
-    low14 = 0;
-    high15 = hoisted0;
-    loop (low14 < high15) {
-        mid16 = low14 + high15 / 2;
-        kstart11 = 0 + mid16 * 3;
-        key17 = (int2date(buf[kstart11 : 2]));
-        if (not(date2int(key17[0]) < hoisted2)) {
-            high15 = mid16;
+    low3 = 0;
+    high4 = hoisted0;
+    loop (low3 < high4) {
+        mid5 = low3 + high4 / 2;
+        kstart0 = 0 + mid5 * 3;
+        key6 = (int2date(buf[kstart0 : 2]));
+        if (not(date2int(key6[0]) < hoisted2)) {
+            high4 = mid5;
         } else {
-             low14 = mid16 + 1;
+             low3 = mid5 + 1;
         }
     }
-    idx18 = low14;
-    if (idx18 < hoisted3) {
-        kstart11 = 0 + idx18 * 3;
-        key19 = (int2date(buf[kstart11 : 2]));
-        key20 = key19;
-        loop (date2int(key20[0]) < hoisted5 || date2int(key20[0]) == hoisted7 &&
-              idx18 < hoisted8) {
-            if (date2int(key20[0]) < hoisted10 ||
-                date2int(key20[0]) == hoisted12 &&
-                not(date2int(key20[0]) < hoisted14)) {
-                vstart12 = buf[0 + idx18 * 3 + 2 : 1] + 15 + 0;
-                key13 = key20;
+    idx7 = low3;
+    if (idx7 < hoisted3) {
+        kstart0 = 0 + idx7 * 3;
+        key8 = (int2date(buf[kstart0 : 2]));
+        key9 = key8;
+        loop (date2int(key9[0]) < hoisted5 || date2int(key9[0]) == hoisted7 &&
+              idx7 < hoisted8) {
+            if (date2int(key9[0]) < hoisted10 ||
+                date2int(key9[0]) == hoisted12 &&
+                not(date2int(key9[0]) < hoisted14)) {
+                vstart1 = buf[0 + idx7 * 3 + 2 : 1] + 15 + 0;
+                key2 = key9;
                 print(tuple[date, date],
-                (key13[0], int2date(buf[vstart12 : 2])));
+                (key2[0], int2date(buf[vstart1 : 2])));
             } else {
                  
             }
-            idx18 = idx18 + 1;
-            kstart11 = 0 + idx18 * 3;
-            key21 = (int2date(buf[kstart11 : 2]));
-            key20 = key21;
+            idx7 = idx7 + 1;
+            kstart0 = 0 + idx7 * 3;
+            key10 = (int2date(buf[kstart0 : 2]));
+            key9 = key10;
         }
     } else {
          

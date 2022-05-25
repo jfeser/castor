@@ -6,13 +6,13 @@
 // hoisted4 : int (persists=false)
 // hoisted5 : int (persists=false)
 // hoisted6 : int (persists=false)
-// cstart11 : int (persists=true)
-// i12 : int (persists=true)
-// vstart8 : int (persists=false)
-// kstart7 : int (persists=false)
-// hash10 : int (persists=false)
-// key9 : tuple[int] (persists=false)
-// count13 : int (persists=true)
+// i5 : int (persists=true)
+// hash3 : int (persists=false)
+// vstart1 : int (persists=false)
+// key2 : tuple[int] (persists=false)
+// cstart4 : int (persists=true)
+// count6 : int (persists=true)
+// kstart0 : int (persists=false)
 fun printer () : void {
     hoisted0 = 2 * 1;
     hoisted1 = buf[1 : 1];
@@ -21,21 +21,21 @@ fun printer () : void {
     hoisted4 = 2 + hoisted3;
     hoisted5 = buf[1 : 1];
     hoisted6 = 2 + hoisted5;
-    hash10 = hoisted0;
-    if (hash10 < 0 || hoisted2 < hash10) {
+    hash3 = hoisted0;
+    if (hash3 < 0 || hoisted2 < hash3) {
         
     } else {
-         kstart7 = buf[2 + hash10 : 1] + hoisted4;
-         key9 = (buf[kstart7 : 1]);
-         vstart8 = buf[2 + hash10 : 1] + hoisted6 + 1;
-         if (true && key9[0] == 2) {
-             cstart11 = vstart8 + 1 + 1;
-             i12 = 0;
-             count13 = buf[vstart8 : 1];
-             loop (i12 < count13) {
-                 print(tuple[int, int], (key9[0], buf[cstart11 : 1]));
-                 cstart11 = cstart11 + 1;
-                 i12 = i12 + 1;
+         kstart0 = buf[2 + hash3 : 1] + hoisted4;
+         key2 = (buf[kstart0 : 1]);
+         vstart1 = buf[2 + hash3 : 1] + hoisted6 + 1;
+         if (true && key2[0] == 2) {
+             cstart4 = vstart1 + 1 + 1;
+             i5 = 0;
+             count6 = buf[vstart1 : 1];
+             loop (i5 < count6) {
+                 print(tuple[int, int], (key2[0], buf[cstart4 : 1]));
+                 cstart4 = cstart4 + 1;
+                 i5 = i5 + 1;
              }
          } else {
               

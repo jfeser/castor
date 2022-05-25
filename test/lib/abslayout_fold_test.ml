@@ -24,9 +24,9 @@ let%expect_test "" =
                 t0."f" AS "f",
                 t0."g" AS "g"
          FROM
-           (SELECT r1_0."f" AS "f",
-                   r1_0."g" AS "g"
-            FROM "r1" AS "r1_0") AS "t0"
+           (SELECT r1."f" AS "f",
+                   r1."g" AS "g"
+            FROM "r1") AS "t0"
          GROUP BY t0."f",
                   t0."g") AS "t2",
            LATERAL
@@ -75,9 +75,9 @@ depjoin(ascalar(0 as f) as k, select([(k.f + g) as s], alist(r1 as k1, ascalar(k
                          t3."f" AS "f",
                          t3."g" AS "g"
                   FROM
-                    (SELECT r1_1."f" AS "f",
-                            r1_1."g" AS "g"
-                     FROM "r1" AS "r1_1") AS "t3"
+                    (SELECT r1."f" AS "f",
+                            r1."g" AS "g"
+                     FROM "r1") AS "t3"
                   GROUP BY t3."f",
                            t3."g") AS "t5",
                     LATERAL
@@ -115,9 +115,9 @@ let%expect_test "" =
                 t7."f" AS "f",
                 t7."g" AS "g"
          FROM
-           (SELECT r1_2."f" AS "f",
-                   r1_2."g" AS "g"
-            FROM "r1" AS "r1_2") AS "t7"
+           (SELECT r1."f" AS "f",
+                   r1."g" AS "g"
+            FROM "r1") AS "t7"
          GROUP BY t7."f",
                   t7."g") AS "t9",
            LATERAL
@@ -164,9 +164,9 @@ let%expect_test "" =
                   t10."f" AS "f",
                   t10."g" AS "g"
            FROM
-             (SELECT r1_3."f" AS "f",
-                     r1_3."g" AS "g"
-              FROM "r1" AS "r1_3") AS "t10"
+             (SELECT r1."f" AS "f",
+                     r1."g" AS "g"
+              FROM "r1") AS "t10"
            GROUP BY t10."f",
                     t10."g") AS "t15",
              LATERAL
@@ -182,9 +182,9 @@ let%expect_test "" =
                      t11."f" AS "f",
                      t11."g" AS "g"
               FROM
-                (SELECT r1_4."f" AS "f",
-                        r1_4."g" AS "g"
-                 FROM "r1" AS "r1_4") AS "t11"
+                (SELECT r1."f" AS "f",
+                        r1."g" AS "g"
+                 FROM "r1") AS "t11"
               GROUP BY t11."f",
                        t11."g") AS "t13",
                 LATERAL

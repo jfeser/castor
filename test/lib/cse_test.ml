@@ -16,9 +16,9 @@ let%expect_test "" =
     BEGIN
     CREATE
     TEMPORARY TABLE r0 AS
-    SELECT DISTINCT r_0."f" AS "f",
-                    r_0."g" AS "g"
-    FROM "r" AS "r_0";
+    SELECT DISTINCT r."f" AS "f",
+                    r."g" AS "g"
+    FROM "r";
 
     ANALYZE r0;
 
@@ -26,15 +26,15 @@ let%expect_test "" =
            t1."g" AS "g",
            t2."m" AS "m"
     FROM
-      (SELECT r0_2."f" AS "f",
-              r0_2."g" AS "g"
-       FROM "r0" AS "r0_2") AS "t1",
+      (SELECT r0."f" AS "f",
+              r0."g" AS "g"
+       FROM "r0") AS "t1",
 
       (SELECT min(t0."f") AS "m"
        FROM
-         (SELECT r0_1."f" AS "f",
-                 r0_1."g" AS "g"
-          FROM "r0" AS "r0_1") AS "t0") AS "t2"
+         (SELECT r0."f" AS "f",
+                 r0."g" AS "g"
+          FROM "r0") AS "t0") AS "t2"
     WHERE (TRUE);
 
     COMMIT |}]

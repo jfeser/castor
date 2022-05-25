@@ -2,70 +2,70 @@
 // hoisted0 : int (persists=false)
 // hoisted1 : int (persists=false)
 // hoisted2 : int (persists=false)
-// key32 : tuple[int, int] (persists=true)
-// cstart34 : int (persists=true)
-// key25 : tuple[int, int] (persists=false)
-// key35 : tuple[int, int] (persists=false)
-// cstart31 : int (persists=true)
-// idx28 : int (persists=true)
-// cstart36 : int (persists=true)
-// key29 : tuple[int, int] (persists=false)
-// key21 : tuple[int, int] (persists=true)
-// vstart20 : int (persists=true)
-// high23 : int (persists=true)
-// cstart30 : int (persists=true)
-// cstart33 : int (persists=true)
-// mid24 : int (persists=true)
-// low22 : int (persists=true)
-// kstart19 : int (persists=true)
-// cstart27 : int (persists=true)
-// cstart37 : int (persists=true)
-// cstart26 : int (persists=true)
+// mid5 : int (persists=true)
+// key13 : tuple[int, int] (persists=true)
+// key10 : tuple[int, int] (persists=false)
+// cstart12 : int (persists=true)
+// high4 : int (persists=true)
+// cstart17 : int (persists=true)
+// cstart8 : int (persists=true)
+// cstart15 : int (persists=true)
+// key16 : tuple[int, int] (persists=false)
+// key2 : tuple[int, int] (persists=true)
+// low3 : int (persists=true)
+// cstart7 : int (persists=true)
+// cstart18 : int (persists=true)
+// kstart0 : int (persists=true)
+// key6 : tuple[int, int] (persists=false)
+// cstart11 : int (persists=true)
+// vstart1 : int (persists=true)
+// idx9 : int (persists=true)
+// cstart14 : int (persists=true)
 fun printer () : void {
     hoisted0 = 400 / 4;
     hoisted1 = 400 / 4;
     hoisted2 = 400 / 4;
-    low22 = 0;
-    high23 = hoisted0;
-    loop (low22 < high23) {
-        mid24 = low22 + high23 / 2;
-        kstart19 = 0 + mid24 * 4;
-        cstart26 = kstart19;
-        cstart27 = cstart26 + 1;
-        key25 = (buf[cstart26 : 1], buf[cstart27 : 1]);
-        if (not(key25[0] < 3) || not(key25[1] < 4)) {
-            high23 = mid24;
+    low3 = 0;
+    high4 = hoisted0;
+    loop (low3 < high4) {
+        mid5 = low3 + high4 / 2;
+        kstart0 = 0 + mid5 * 4;
+        cstart7 = kstart0;
+        cstart8 = cstart7 + 1;
+        key6 = (buf[cstart7 : 1], buf[cstart8 : 1]);
+        if (not(key6[0] < 3) || not(key6[1] < 4)) {
+            high4 = mid5;
         } else {
-             low22 = mid24 + 1;
+             low3 = mid5 + 1;
         }
     }
-    idx28 = low22;
-    if (idx28 < hoisted1) {
-        kstart19 = 0 + idx28 * 4;
-        cstart30 = kstart19;
-        cstart31 = cstart30 + 1;
-        key29 = (buf[cstart30 : 1], buf[cstart31 : 1]);
-        key32 = key29;
-        loop (key32[0] < 5 || key32[0] == 5 || key32[1] < 6 || key32[1] == 6 &&
-              idx28 < hoisted2) {
-            if (key32[0] < 5 || key32[0] == 5 &&
-                key32[1] < 6 || key32[1] == 6 &&
-                not(key32[0] < 3) && not(key32[1] < 4)) {
-                vstart20 = buf[0 + idx28 * 4 + 2 : 2] + 400 + 0;
-                key21 = key32;
-                cstart33 = vstart20;
-                cstart34 = cstart33 + 1;
+    idx9 = low3;
+    if (idx9 < hoisted1) {
+        kstart0 = 0 + idx9 * 4;
+        cstart11 = kstart0;
+        cstart12 = cstart11 + 1;
+        key10 = (buf[cstart11 : 1], buf[cstart12 : 1]);
+        key13 = key10;
+        loop (key13[0] < 5 || key13[0] == 5 || key13[1] < 6 || key13[1] == 6 &&
+              idx9 < hoisted2) {
+            if (key13[0] < 5 || key13[0] == 5 &&
+                key13[1] < 6 || key13[1] == 6 &&
+                not(key13[0] < 3) && not(key13[1] < 4)) {
+                vstart1 = buf[0 + idx9 * 4 + 2 : 2] + 400 + 0;
+                key2 = key13;
+                cstart14 = vstart1;
+                cstart15 = cstart14 + 1;
                 print(tuple[int, int, int, int],
-                (key21[0], key21[1], buf[cstart33 : 1], buf[cstart34 : 1]));
+                (key2[0], key2[1], buf[cstart14 : 1], buf[cstart15 : 1]));
             } else {
                  
             }
-            idx28 = idx28 + 1;
-            kstart19 = 0 + idx28 * 4;
-            cstart36 = kstart19;
-            cstart37 = cstart36 + 1;
-            key35 = (buf[cstart36 : 1], buf[cstart37 : 1]);
-            key32 = key35;
+            idx9 = idx9 + 1;
+            kstart0 = 0 + idx9 * 4;
+            cstart17 = kstart0;
+            cstart18 = cstart17 + 1;
+            key16 = (buf[cstart17 : 1], buf[cstart18 : 1]);
+            key13 = key16;
         }
     } else {
          

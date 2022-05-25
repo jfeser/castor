@@ -76,43 +76,43 @@ entry:
   %tupleptrtmp = alloca { double }, align 8
   %hoisted0 = alloca double, align 8
   %hoisted1 = alloca double, align 8
-  %i30 = alloca i64, align 8
-  %cstart29 = alloca i64, align 8
-  %max28 = alloca double, align 8
-  %min27 = alloca double, align 8
-  %sum26 = alloca double, align 8
-  %tup21 = alloca { double }, align 8
-  %found_tup22 = alloca i1, align 1
-  %avg_num24 = alloca double, align 8
-  %count25 = alloca i64, align 8
-  %avg_dem23 = alloca i64, align 8
-  %count31 = alloca i64, align 8
+  %found_tup1 = alloca i1, align 1
+  %min6 = alloca double, align 8
+  %avg_num3 = alloca double, align 8
+  %sum5 = alloca double, align 8
+  %count4 = alloca i64, align 8
+  %tup0 = alloca { double }, align 8
+  %cstart8 = alloca i64, align 8
+  %count10 = alloca i64, align 8
+  %i9 = alloca i64, align 8
+  %max7 = alloca double, align 8
+  %avg_dem2 = alloca i64, align 8
   store double 1.000000e+02, double* %hoisted0, align 8, !tbaa !3
   store double 3.000000e+00, double* %hoisted1, align 8, !tbaa !3
-  store i1 false, i1* %found_tup22, align 1, !tbaa !3
-  store i64 0, i64* %avg_dem23, align 8, !tbaa !3
-  store double 0.000000e+00, double* %avg_num24, align 8, !tbaa !3
-  store i64 0, i64* %count25, align 8, !tbaa !3
-  store double 0.000000e+00, double* %sum26, align 8, !tbaa !3
-  store double 0x43D0000000000000, double* %min27, align 8, !tbaa !3
-  store double 0xC3D0000000000000, double* %max28, align 8, !tbaa !3
-  store i64 0, i64* %cstart29, align 8, !tbaa !3
-  store i64 0, i64* %i30, align 8, !tbaa !3
-  store i64 5, i64* %count31, align 8, !tbaa !3
+  store i1 false, i1* %found_tup1, align 1, !tbaa !3
+  store i64 0, i64* %avg_dem2, align 8, !tbaa !3
+  store double 0.000000e+00, double* %avg_num3, align 8, !tbaa !3
+  store i64 0, i64* %count4, align 8, !tbaa !3
+  store double 0.000000e+00, double* %sum5, align 8, !tbaa !3
+  store double 0x43D0000000000000, double* %min6, align 8, !tbaa !3
+  store double 0xC3D0000000000000, double* %max7, align 8, !tbaa !3
+  store i64 0, i64* %cstart8, align 8, !tbaa !3
+  store i64 0, i64* %i9, align 8, !tbaa !3
+  store i64 5, i64* %count10, align 8, !tbaa !3
   br label %loopcond
 
 loopcond:                                         ; preds = %entry
-  %i301 = load i64, i64* %i30, align 8, !tbaa !3
-  %count312 = load i64, i64* %count31, align 8, !tbaa !3
-  %lttmp = icmp slt i64 %i301, %count312
+  %i91 = load i64, i64* %i9, align 8, !tbaa !3
+  %count102 = load i64, i64* %count10, align 8, !tbaa !3
+  %lttmp = icmp slt i64 %i91, %count102
   br i1 %lttmp, label %loopbody, label %loopend
 
 loopbody:                                         ; preds = %loopbody, %loopcond
-  %cstart293 = load i64, i64* %cstart29, align 8, !tbaa !3
+  %cstart83 = load i64, i64* %cstart8, align 8, !tbaa !3
   %buf = getelementptr inbounds %params, %params* %0, i32 0, i32 0
   %buf_ptr = load [1 x i64]*, [1 x i64]** %buf, align 8, !tbaa !5
   %buf_ptr_cast = bitcast [1 x i64]* %buf_ptr to i8*
-  %slice_ptr = getelementptr inbounds i8, i8* %buf_ptr_cast, i64 %cstart293
+  %slice_ptr = getelementptr inbounds i8, i8* %buf_ptr_cast, i64 %cstart83
   %slice_ptr_cast = bitcast i8* %slice_ptr to i16*
   %slice_val = load i16, i16* %slice_ptr_cast, align 2, !tbaa !7
   %int_val = sext i16 %slice_val to i64
@@ -122,82 +122,82 @@ loopbody:                                         ; preds = %loopbody, %loopcond
   %ptrtmp = getelementptr inbounds { double }, { double }* %tupleptrtmp, i32 0, i32 0
   store double %divtmp, double* %ptrtmp, align 8, !tbaa !3
   %tupletmp = load { double }, { double }* %tupleptrtmp, align 8, !tbaa !3
-  store { double } %tupletmp, { double }* %tup21, align 8, !tbaa !3
-  %avg_num245 = load double, double* %avg_num24, align 8, !tbaa !3
-  %tup216 = load { double }, { double }* %tup21, align 8, !tbaa !3
-  %elemtmp = extractvalue { double } %tup216, 0
-  %addtmp = fadd double %avg_num245, %elemtmp
-  store double %addtmp, double* %avg_num24, align 8, !tbaa !3
-  %avg_dem237 = load i64, i64* %avg_dem23, align 8, !tbaa !3
-  %addtmp8 = add nsw i64 %avg_dem237, 1
-  store i64 %addtmp8, i64* %avg_dem23, align 8, !tbaa !3
-  %count259 = load i64, i64* %count25, align 8, !tbaa !3
-  %addtmp10 = add nsw i64 %count259, 1
-  store i64 %addtmp10, i64* %count25, align 8, !tbaa !3
-  %sum2611 = load double, double* %sum26, align 8, !tbaa !3
-  %tup2112 = load { double }, { double }* %tup21, align 8, !tbaa !3
-  %elemtmp13 = extractvalue { double } %tup2112, 0
-  %addtmp14 = fadd double %sum2611, %elemtmp13
-  store double %addtmp14, double* %sum26, align 8, !tbaa !3
-  %tup2115 = load { double }, { double }* %tup21, align 8, !tbaa !3
-  %elemtmp16 = extractvalue { double } %tup2115, 0
-  %min2717 = load double, double* %min27, align 8, !tbaa !3
-  %lttmp18 = fcmp olt double %elemtmp16, %min2717
-  %tup2119 = load { double }, { double }* %tup21, align 8, !tbaa !3
-  %elemtmp20 = extractvalue { double } %tup2119, 0
-  %min2721 = load double, double* %min27, align 8, !tbaa !3
-  %2 = select i1 %lttmp18, double %elemtmp20, double %min2721
-  store double %2, double* %min27, align 8, !tbaa !3
-  %tup2122 = load { double }, { double }* %tup21, align 8, !tbaa !3
-  %elemtmp23 = extractvalue { double } %tup2122, 0
-  %max2824 = load double, double* %max28, align 8, !tbaa !3
-  %lttmp25 = fcmp olt double %elemtmp23, %max2824
-  %max2826 = load double, double* %max28, align 8, !tbaa !3
-  %tup2127 = load { double }, { double }* %tup21, align 8, !tbaa !3
-  %elemtmp28 = extractvalue { double } %tup2127, 0
-  %3 = select i1 %lttmp25, double %max2826, double %elemtmp28
-  store double %3, double* %max28, align 8, !tbaa !3
-  store i1 true, i1* %found_tup22, align 1, !tbaa !3
-  %cstart2929 = load i64, i64* %cstart29, align 8, !tbaa !3
-  %addtmp30 = add nsw i64 %cstart2929, 2
-  store i64 %addtmp30, i64* %cstart29, align 8, !tbaa !3
-  %i3031 = load i64, i64* %i30, align 8, !tbaa !3
-  %addtmp32 = add nsw i64 %i3031, 1
-  store i64 %addtmp32, i64* %i30, align 8, !tbaa !3
-  %i3033 = load i64, i64* %i30, align 8, !tbaa !3
-  %count3134 = load i64, i64* %count31, align 8, !tbaa !3
-  %lttmp35 = icmp slt i64 %i3033, %count3134
+  store { double } %tupletmp, { double }* %tup0, align 8, !tbaa !3
+  %avg_num35 = load double, double* %avg_num3, align 8, !tbaa !3
+  %tup06 = load { double }, { double }* %tup0, align 8, !tbaa !3
+  %elemtmp = extractvalue { double } %tup06, 0
+  %addtmp = fadd double %avg_num35, %elemtmp
+  store double %addtmp, double* %avg_num3, align 8, !tbaa !3
+  %avg_dem27 = load i64, i64* %avg_dem2, align 8, !tbaa !3
+  %addtmp8 = add nsw i64 %avg_dem27, 1
+  store i64 %addtmp8, i64* %avg_dem2, align 8, !tbaa !3
+  %count49 = load i64, i64* %count4, align 8, !tbaa !3
+  %addtmp10 = add nsw i64 %count49, 1
+  store i64 %addtmp10, i64* %count4, align 8, !tbaa !3
+  %sum511 = load double, double* %sum5, align 8, !tbaa !3
+  %tup012 = load { double }, { double }* %tup0, align 8, !tbaa !3
+  %elemtmp13 = extractvalue { double } %tup012, 0
+  %addtmp14 = fadd double %sum511, %elemtmp13
+  store double %addtmp14, double* %sum5, align 8, !tbaa !3
+  %tup015 = load { double }, { double }* %tup0, align 8, !tbaa !3
+  %elemtmp16 = extractvalue { double } %tup015, 0
+  %min617 = load double, double* %min6, align 8, !tbaa !3
+  %lttmp18 = fcmp olt double %elemtmp16, %min617
+  %tup019 = load { double }, { double }* %tup0, align 8, !tbaa !3
+  %elemtmp20 = extractvalue { double } %tup019, 0
+  %min621 = load double, double* %min6, align 8, !tbaa !3
+  %2 = select i1 %lttmp18, double %elemtmp20, double %min621
+  store double %2, double* %min6, align 8, !tbaa !3
+  %tup022 = load { double }, { double }* %tup0, align 8, !tbaa !3
+  %elemtmp23 = extractvalue { double } %tup022, 0
+  %max724 = load double, double* %max7, align 8, !tbaa !3
+  %lttmp25 = fcmp olt double %elemtmp23, %max724
+  %max726 = load double, double* %max7, align 8, !tbaa !3
+  %tup027 = load { double }, { double }* %tup0, align 8, !tbaa !3
+  %elemtmp28 = extractvalue { double } %tup027, 0
+  %3 = select i1 %lttmp25, double %max726, double %elemtmp28
+  store double %3, double* %max7, align 8, !tbaa !3
+  store i1 true, i1* %found_tup1, align 1, !tbaa !3
+  %cstart829 = load i64, i64* %cstart8, align 8, !tbaa !3
+  %addtmp30 = add nsw i64 %cstart829, 2
+  store i64 %addtmp30, i64* %cstart8, align 8, !tbaa !3
+  %i931 = load i64, i64* %i9, align 8, !tbaa !3
+  %addtmp32 = add nsw i64 %i931, 1
+  store i64 %addtmp32, i64* %i9, align 8, !tbaa !3
+  %i933 = load i64, i64* %i9, align 8, !tbaa !3
+  %count1034 = load i64, i64* %count10, align 8, !tbaa !3
+  %lttmp35 = icmp slt i64 %i933, %count1034
   br i1 %lttmp35, label %loopbody, label %loopend
 
 loopend:                                          ; preds = %loopbody, %loopcond
   br label %if
 
 if:                                               ; preds = %loopend
-  %found_tup2236 = load i1, i1* %found_tup22, align 1, !tbaa !3
-  br i1 %found_tup2236, label %then, label %else
+  %found_tup136 = load i1, i1* %found_tup1, align 1, !tbaa !3
+  br i1 %found_tup136, label %then, label %else
 
 then:                                             ; preds = %if
   %hoisted137 = load double, double* %hoisted1, align 8, !tbaa !3
-  %avg_num2438 = load double, double* %avg_num24, align 8, !tbaa !3
-  %avg_dem2339 = load i64, i64* %avg_dem23, align 8, !tbaa !3
-  %4 = sitofp i64 %avg_dem2339 to double
-  %divtmp40 = fdiv double %avg_num2438, %4
-  %count2541 = load i64, i64* %count25, align 8, !tbaa !3
-  %sum2642 = load double, double* %sum26, align 8, !tbaa !3
-  %min2743 = load double, double* %min27, align 8, !tbaa !3
-  %max2844 = load double, double* %max28, align 8, !tbaa !3
+  %avg_num338 = load double, double* %avg_num3, align 8, !tbaa !3
+  %avg_dem239 = load i64, i64* %avg_dem2, align 8, !tbaa !3
+  %4 = sitofp i64 %avg_dem239 to double
+  %divtmp40 = fdiv double %avg_num338, %4
+  %count441 = load i64, i64* %count4, align 8, !tbaa !3
+  %sum542 = load double, double* %sum5, align 8, !tbaa !3
+  %min643 = load double, double* %min6, align 8, !tbaa !3
+  %max744 = load double, double* %max7, align 8, !tbaa !3
   %ptrtmp46 = getelementptr inbounds { double, double, i64, double, double, double }, { double, double, i64, double, double, double }* %tupleptrtmp45, i32 0, i32 0
   store double %hoisted137, double* %ptrtmp46, align 8, !tbaa !3
   %ptrtmp47 = getelementptr inbounds { double, double, i64, double, double, double }, { double, double, i64, double, double, double }* %tupleptrtmp45, i32 0, i32 1
   store double %divtmp40, double* %ptrtmp47, align 8, !tbaa !3
   %ptrtmp48 = getelementptr inbounds { double, double, i64, double, double, double }, { double, double, i64, double, double, double }* %tupleptrtmp45, i32 0, i32 2
-  store i64 %count2541, i64* %ptrtmp48, align 8, !tbaa !3
+  store i64 %count441, i64* %ptrtmp48, align 8, !tbaa !3
   %ptrtmp49 = getelementptr inbounds { double, double, i64, double, double, double }, { double, double, i64, double, double, double }* %tupleptrtmp45, i32 0, i32 3
-  store double %sum2642, double* %ptrtmp49, align 8, !tbaa !3
+  store double %sum542, double* %ptrtmp49, align 8, !tbaa !3
   %ptrtmp50 = getelementptr inbounds { double, double, i64, double, double, double }, { double, double, i64, double, double, double }* %tupleptrtmp45, i32 0, i32 4
-  store double %min2743, double* %ptrtmp50, align 8, !tbaa !3
+  store double %min643, double* %ptrtmp50, align 8, !tbaa !3
   %ptrtmp51 = getelementptr inbounds { double, double, i64, double, double, double }, { double, double, i64, double, double, double }* %tupleptrtmp45, i32 0, i32 5
-  store double %max2844, double* %ptrtmp51, align 8, !tbaa !3
+  store double %max744, double* %ptrtmp51, align 8, !tbaa !3
   %tupletmp52 = load { double, double, i64, double, double, double }, { double, double, i64, double, double, double }* %tupleptrtmp45, align 8, !tbaa !3
   %elemtmp53 = extractvalue { double, double, i64, double, double, double } %tupletmp52, 5
   %elemtmp54 = extractvalue { double, double, i64, double, double, double } %tupletmp52, 4
@@ -233,43 +233,43 @@ entry:
   %tupleptrtmp = alloca { double }, align 8
   %hoisted2 = alloca double, align 8
   %hoisted3 = alloca double, align 8
-  %avg_dem7 = alloca i64, align 8
-  %count9 = alloca i64, align 8
-  %i14 = alloca i64, align 8
-  %max12 = alloca double, align 8
-  %count15 = alloca i64, align 8
-  %avg_num8 = alloca double, align 8
-  %sum10 = alloca double, align 8
-  %cstart13 = alloca i64, align 8
-  %tup5 = alloca { double }, align 8
-  %found_tup6 = alloca i1, align 1
-  %min11 = alloca double, align 8
+  %found_tup1 = alloca i1, align 1
+  %min6 = alloca double, align 8
+  %avg_num3 = alloca double, align 8
+  %sum5 = alloca double, align 8
+  %count4 = alloca i64, align 8
+  %tup0 = alloca { double }, align 8
+  %cstart8 = alloca i64, align 8
+  %count10 = alloca i64, align 8
+  %i9 = alloca i64, align 8
+  %max7 = alloca double, align 8
+  %avg_dem2 = alloca i64, align 8
   store double 1.000000e+02, double* %hoisted2, align 8, !tbaa !3
   store double 3.000000e+00, double* %hoisted3, align 8, !tbaa !3
-  store i1 false, i1* %found_tup6, align 1, !tbaa !3
-  store i64 0, i64* %avg_dem7, align 8, !tbaa !3
-  store double 0.000000e+00, double* %avg_num8, align 8, !tbaa !3
-  store i64 0, i64* %count9, align 8, !tbaa !3
-  store double 0.000000e+00, double* %sum10, align 8, !tbaa !3
-  store double 0x43D0000000000000, double* %min11, align 8, !tbaa !3
-  store double 0xC3D0000000000000, double* %max12, align 8, !tbaa !3
-  store i64 0, i64* %cstart13, align 8, !tbaa !3
-  store i64 0, i64* %i14, align 8, !tbaa !3
-  store i64 5, i64* %count15, align 8, !tbaa !3
+  store i1 false, i1* %found_tup1, align 1, !tbaa !3
+  store i64 0, i64* %avg_dem2, align 8, !tbaa !3
+  store double 0.000000e+00, double* %avg_num3, align 8, !tbaa !3
+  store i64 0, i64* %count4, align 8, !tbaa !3
+  store double 0.000000e+00, double* %sum5, align 8, !tbaa !3
+  store double 0x43D0000000000000, double* %min6, align 8, !tbaa !3
+  store double 0xC3D0000000000000, double* %max7, align 8, !tbaa !3
+  store i64 0, i64* %cstart8, align 8, !tbaa !3
+  store i64 0, i64* %i9, align 8, !tbaa !3
+  store i64 5, i64* %count10, align 8, !tbaa !3
   br label %loopcond
 
 loopcond:                                         ; preds = %entry
-  %i141 = load i64, i64* %i14, align 8, !tbaa !3
-  %count152 = load i64, i64* %count15, align 8, !tbaa !3
-  %lttmp = icmp slt i64 %i141, %count152
+  %i91 = load i64, i64* %i9, align 8, !tbaa !3
+  %count102 = load i64, i64* %count10, align 8, !tbaa !3
+  %lttmp = icmp slt i64 %i91, %count102
   br i1 %lttmp, label %loopbody, label %loopend
 
 loopbody:                                         ; preds = %loopbody, %loopcond
-  %cstart133 = load i64, i64* %cstart13, align 8, !tbaa !3
+  %cstart83 = load i64, i64* %cstart8, align 8, !tbaa !3
   %buf = getelementptr inbounds %params, %params* %0, i32 0, i32 0
   %buf_ptr = load [1 x i64]*, [1 x i64]** %buf, align 8, !tbaa !5
   %buf_ptr_cast = bitcast [1 x i64]* %buf_ptr to i8*
-  %slice_ptr = getelementptr inbounds i8, i8* %buf_ptr_cast, i64 %cstart133
+  %slice_ptr = getelementptr inbounds i8, i8* %buf_ptr_cast, i64 %cstart83
   %slice_ptr_cast = bitcast i8* %slice_ptr to i16*
   %slice_val = load i16, i16* %slice_ptr_cast, align 2, !tbaa !7
   %int_val = sext i16 %slice_val to i64
@@ -279,82 +279,82 @@ loopbody:                                         ; preds = %loopbody, %loopcond
   %ptrtmp = getelementptr inbounds { double }, { double }* %tupleptrtmp, i32 0, i32 0
   store double %divtmp, double* %ptrtmp, align 8, !tbaa !3
   %tupletmp = load { double }, { double }* %tupleptrtmp, align 8, !tbaa !3
-  store { double } %tupletmp, { double }* %tup5, align 8, !tbaa !3
-  %avg_num85 = load double, double* %avg_num8, align 8, !tbaa !3
-  %tup56 = load { double }, { double }* %tup5, align 8, !tbaa !3
-  %elemtmp = extractvalue { double } %tup56, 0
-  %addtmp = fadd double %avg_num85, %elemtmp
-  store double %addtmp, double* %avg_num8, align 8, !tbaa !3
-  %avg_dem77 = load i64, i64* %avg_dem7, align 8, !tbaa !3
-  %addtmp8 = add nsw i64 %avg_dem77, 1
-  store i64 %addtmp8, i64* %avg_dem7, align 8, !tbaa !3
-  %count99 = load i64, i64* %count9, align 8, !tbaa !3
-  %addtmp10 = add nsw i64 %count99, 1
-  store i64 %addtmp10, i64* %count9, align 8, !tbaa !3
-  %sum1011 = load double, double* %sum10, align 8, !tbaa !3
-  %tup512 = load { double }, { double }* %tup5, align 8, !tbaa !3
-  %elemtmp13 = extractvalue { double } %tup512, 0
-  %addtmp14 = fadd double %sum1011, %elemtmp13
-  store double %addtmp14, double* %sum10, align 8, !tbaa !3
-  %tup515 = load { double }, { double }* %tup5, align 8, !tbaa !3
-  %elemtmp16 = extractvalue { double } %tup515, 0
-  %min1117 = load double, double* %min11, align 8, !tbaa !3
-  %lttmp18 = fcmp olt double %elemtmp16, %min1117
-  %tup519 = load { double }, { double }* %tup5, align 8, !tbaa !3
-  %elemtmp20 = extractvalue { double } %tup519, 0
-  %min1121 = load double, double* %min11, align 8, !tbaa !3
-  %2 = select i1 %lttmp18, double %elemtmp20, double %min1121
-  store double %2, double* %min11, align 8, !tbaa !3
-  %tup522 = load { double }, { double }* %tup5, align 8, !tbaa !3
-  %elemtmp23 = extractvalue { double } %tup522, 0
-  %max1224 = load double, double* %max12, align 8, !tbaa !3
-  %lttmp25 = fcmp olt double %elemtmp23, %max1224
-  %max1226 = load double, double* %max12, align 8, !tbaa !3
-  %tup527 = load { double }, { double }* %tup5, align 8, !tbaa !3
-  %elemtmp28 = extractvalue { double } %tup527, 0
-  %3 = select i1 %lttmp25, double %max1226, double %elemtmp28
-  store double %3, double* %max12, align 8, !tbaa !3
-  store i1 true, i1* %found_tup6, align 1, !tbaa !3
-  %cstart1329 = load i64, i64* %cstart13, align 8, !tbaa !3
-  %addtmp30 = add nsw i64 %cstart1329, 2
-  store i64 %addtmp30, i64* %cstart13, align 8, !tbaa !3
-  %i1431 = load i64, i64* %i14, align 8, !tbaa !3
-  %addtmp32 = add nsw i64 %i1431, 1
-  store i64 %addtmp32, i64* %i14, align 8, !tbaa !3
-  %i1433 = load i64, i64* %i14, align 8, !tbaa !3
-  %count1534 = load i64, i64* %count15, align 8, !tbaa !3
-  %lttmp35 = icmp slt i64 %i1433, %count1534
+  store { double } %tupletmp, { double }* %tup0, align 8, !tbaa !3
+  %avg_num35 = load double, double* %avg_num3, align 8, !tbaa !3
+  %tup06 = load { double }, { double }* %tup0, align 8, !tbaa !3
+  %elemtmp = extractvalue { double } %tup06, 0
+  %addtmp = fadd double %avg_num35, %elemtmp
+  store double %addtmp, double* %avg_num3, align 8, !tbaa !3
+  %avg_dem27 = load i64, i64* %avg_dem2, align 8, !tbaa !3
+  %addtmp8 = add nsw i64 %avg_dem27, 1
+  store i64 %addtmp8, i64* %avg_dem2, align 8, !tbaa !3
+  %count49 = load i64, i64* %count4, align 8, !tbaa !3
+  %addtmp10 = add nsw i64 %count49, 1
+  store i64 %addtmp10, i64* %count4, align 8, !tbaa !3
+  %sum511 = load double, double* %sum5, align 8, !tbaa !3
+  %tup012 = load { double }, { double }* %tup0, align 8, !tbaa !3
+  %elemtmp13 = extractvalue { double } %tup012, 0
+  %addtmp14 = fadd double %sum511, %elemtmp13
+  store double %addtmp14, double* %sum5, align 8, !tbaa !3
+  %tup015 = load { double }, { double }* %tup0, align 8, !tbaa !3
+  %elemtmp16 = extractvalue { double } %tup015, 0
+  %min617 = load double, double* %min6, align 8, !tbaa !3
+  %lttmp18 = fcmp olt double %elemtmp16, %min617
+  %tup019 = load { double }, { double }* %tup0, align 8, !tbaa !3
+  %elemtmp20 = extractvalue { double } %tup019, 0
+  %min621 = load double, double* %min6, align 8, !tbaa !3
+  %2 = select i1 %lttmp18, double %elemtmp20, double %min621
+  store double %2, double* %min6, align 8, !tbaa !3
+  %tup022 = load { double }, { double }* %tup0, align 8, !tbaa !3
+  %elemtmp23 = extractvalue { double } %tup022, 0
+  %max724 = load double, double* %max7, align 8, !tbaa !3
+  %lttmp25 = fcmp olt double %elemtmp23, %max724
+  %max726 = load double, double* %max7, align 8, !tbaa !3
+  %tup027 = load { double }, { double }* %tup0, align 8, !tbaa !3
+  %elemtmp28 = extractvalue { double } %tup027, 0
+  %3 = select i1 %lttmp25, double %max726, double %elemtmp28
+  store double %3, double* %max7, align 8, !tbaa !3
+  store i1 true, i1* %found_tup1, align 1, !tbaa !3
+  %cstart829 = load i64, i64* %cstart8, align 8, !tbaa !3
+  %addtmp30 = add nsw i64 %cstart829, 2
+  store i64 %addtmp30, i64* %cstart8, align 8, !tbaa !3
+  %i931 = load i64, i64* %i9, align 8, !tbaa !3
+  %addtmp32 = add nsw i64 %i931, 1
+  store i64 %addtmp32, i64* %i9, align 8, !tbaa !3
+  %i933 = load i64, i64* %i9, align 8, !tbaa !3
+  %count1034 = load i64, i64* %count10, align 8, !tbaa !3
+  %lttmp35 = icmp slt i64 %i933, %count1034
   br i1 %lttmp35, label %loopbody, label %loopend
 
 loopend:                                          ; preds = %loopbody, %loopcond
   br label %if
 
 if:                                               ; preds = %loopend
-  %found_tup636 = load i1, i1* %found_tup6, align 1, !tbaa !3
-  br i1 %found_tup636, label %then, label %else
+  %found_tup136 = load i1, i1* %found_tup1, align 1, !tbaa !3
+  br i1 %found_tup136, label %then, label %else
 
 then:                                             ; preds = %if
   %hoisted337 = load double, double* %hoisted3, align 8, !tbaa !3
-  %avg_num838 = load double, double* %avg_num8, align 8, !tbaa !3
-  %avg_dem739 = load i64, i64* %avg_dem7, align 8, !tbaa !3
-  %4 = sitofp i64 %avg_dem739 to double
-  %divtmp40 = fdiv double %avg_num838, %4
-  %count941 = load i64, i64* %count9, align 8, !tbaa !3
-  %sum1042 = load double, double* %sum10, align 8, !tbaa !3
-  %min1143 = load double, double* %min11, align 8, !tbaa !3
-  %max1244 = load double, double* %max12, align 8, !tbaa !3
+  %avg_num338 = load double, double* %avg_num3, align 8, !tbaa !3
+  %avg_dem239 = load i64, i64* %avg_dem2, align 8, !tbaa !3
+  %4 = sitofp i64 %avg_dem239 to double
+  %divtmp40 = fdiv double %avg_num338, %4
+  %count441 = load i64, i64* %count4, align 8, !tbaa !3
+  %sum542 = load double, double* %sum5, align 8, !tbaa !3
+  %min643 = load double, double* %min6, align 8, !tbaa !3
+  %max744 = load double, double* %max7, align 8, !tbaa !3
   %ptrtmp46 = getelementptr inbounds { double, double, i64, double, double, double }, { double, double, i64, double, double, double }* %tupleptrtmp45, i32 0, i32 0
   store double %hoisted337, double* %ptrtmp46, align 8, !tbaa !3
   %ptrtmp47 = getelementptr inbounds { double, double, i64, double, double, double }, { double, double, i64, double, double, double }* %tupleptrtmp45, i32 0, i32 1
   store double %divtmp40, double* %ptrtmp47, align 8, !tbaa !3
   %ptrtmp48 = getelementptr inbounds { double, double, i64, double, double, double }, { double, double, i64, double, double, double }* %tupleptrtmp45, i32 0, i32 2
-  store i64 %count941, i64* %ptrtmp48, align 8, !tbaa !3
+  store i64 %count441, i64* %ptrtmp48, align 8, !tbaa !3
   %ptrtmp49 = getelementptr inbounds { double, double, i64, double, double, double }, { double, double, i64, double, double, double }* %tupleptrtmp45, i32 0, i32 3
-  store double %sum1042, double* %ptrtmp49, align 8, !tbaa !3
+  store double %sum542, double* %ptrtmp49, align 8, !tbaa !3
   %ptrtmp50 = getelementptr inbounds { double, double, i64, double, double, double }, { double, double, i64, double, double, double }* %tupleptrtmp45, i32 0, i32 4
-  store double %min1143, double* %ptrtmp50, align 8, !tbaa !3
+  store double %min643, double* %ptrtmp50, align 8, !tbaa !3
   %ptrtmp51 = getelementptr inbounds { double, double, i64, double, double, double }, { double, double, i64, double, double, double }* %tupleptrtmp45, i32 0, i32 5
-  store double %max1244, double* %ptrtmp51, align 8, !tbaa !3
+  store double %max744, double* %ptrtmp51, align 8, !tbaa !3
   %tupletmp52 = load { double, double, i64, double, double, double }, { double, double, i64, double, double, double }* %tupleptrtmp45, align 8, !tbaa !3
   %elemtmp53 = extractvalue { double, double, i64, double, double, double } %tupletmp52, 5
   %elemtmp54 = extractvalue { double, double, i64, double, double, double } %tupletmp52, 4

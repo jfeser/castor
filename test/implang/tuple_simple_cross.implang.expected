@@ -1,10 +1,10 @@
 // Locals:
-// cstart3 : int (persists=true)
-// cstart2 : int (persists=true)
+// cstart1 : int (persists=true)
+// cstart0 : int (persists=true)
 fun printer () : void {
-    cstart2 = 0;
-    cstart3 = cstart2 + 1;
-    print(tuple[int, int], (buf[cstart2 : 1], buf[cstart3 : 1]));
+    cstart0 = 0;
+    cstart1 = cstart0 + 1;
+    print(tuple[int, int], (buf[cstart0 : 1], buf[cstart1 : 1]));
 }
 // Locals:
 // cstart1 : int (persists=true)

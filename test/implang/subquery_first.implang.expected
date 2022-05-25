@@ -1,56 +1,56 @@
 // Locals:
-// found_tup17 : bool (persists=false)
-// tup16 : tuple[int] (persists=false)
-// count13 : int (persists=true)
-// min18 : int (persists=false)
-// first14 : int (persists=true)
-// i20 : int (persists=true)
-// cstart11 : int (persists=true)
-// i12 : int (persists=true)
-// count21 : int (persists=true)
-// cstart19 : int (persists=true)
+// i1 : int (persists=true)
+// cstart7 : int (persists=true)
+// count9 : int (persists=true)
+// min6 : int (persists=false)
+// first3 : int (persists=true)
+// count2 : int (persists=true)
+// i8 : int (persists=true)
+// tup4 : tuple[int] (persists=false)
+// found_tup5 : bool (persists=false)
+// cstart0 : int (persists=true)
 fun printer () : void {
-    cstart11 = 0;
-    i12 = 0;
-    count13 = 5;
-    loop (i12 < count13) {
-        first14 = 0;
-        found_tup17 = false;
-        min18 = 4611686018427387903;
-        cstart19 = 5;
-        i20 = 0;
-        count21 = 5;
-        loop (i20 < count21) {
-            tup16 = (buf[cstart19 : 1]);
-            min18 = tup16[0] < min18 ? tup16[0] : min18;
-            found_tup17 = true;
-            cstart19 = cstart19 + 1;
-            i20 = i20 + 1;
+    cstart0 = 0;
+    i1 = 0;
+    count2 = 5;
+    loop (i1 < count2) {
+        first3 = 0;
+        found_tup5 = false;
+        min6 = 4611686018427387903;
+        cstart7 = 5;
+        i8 = 0;
+        count9 = 5;
+        loop (i8 < count9) {
+            tup4 = (buf[cstart7 : 1]);
+            min6 = tup4[0] < min6 ? tup4[0] : min6;
+            found_tup5 = true;
+            cstart7 = cstart7 + 1;
+            i8 = i8 + 1;
         }
-        if (found_tup17) {
-            first14 = min18;
+        if (found_tup5) {
+            first3 = min6;
         } else {
              
         }
-        if (first14 == buf[cstart11 : 1]) {
-            print(tuple[int], (buf[cstart11 : 1]));
+        if (first3 == buf[cstart0 : 1]) {
+            print(tuple[int], (buf[cstart0 : 1]));
         } else {
              
         }
-        cstart11 = cstart11 + 1;
-        i12 = i12 + 1;
+        cstart0 = cstart0 + 1;
+        i1 = i1 + 1;
     }
 }
 // Locals:
 // i1 : int (persists=true)
+// cstart7 : int (persists=true)
+// count9 : int (persists=true)
+// min6 : int (persists=false)
 // first3 : int (persists=true)
 // count2 : int (persists=true)
-// min7 : int (persists=false)
-// cstart8 : int (persists=true)
-// count10 : int (persists=true)
-// tup5 : tuple[int] (persists=false)
-// i9 : int (persists=true)
-// found_tup6 : bool (persists=false)
+// i8 : int (persists=true)
+// tup4 : tuple[int] (persists=false)
+// found_tup5 : bool (persists=false)
 // cstart0 : int (persists=true)
 fun consumer () : void {
     cstart0 = 0;
@@ -58,20 +58,20 @@ fun consumer () : void {
     count2 = 5;
     loop (i1 < count2) {
         first3 = 0;
-        found_tup6 = false;
-        min7 = 4611686018427387903;
-        cstart8 = 5;
-        i9 = 0;
-        count10 = 5;
-        loop (i9 < count10) {
-            tup5 = (buf[cstart8 : 1]);
-            min7 = tup5[0] < min7 ? tup5[0] : min7;
-            found_tup6 = true;
-            cstart8 = cstart8 + 1;
-            i9 = i9 + 1;
+        found_tup5 = false;
+        min6 = 4611686018427387903;
+        cstart7 = 5;
+        i8 = 0;
+        count9 = 5;
+        loop (i8 < count9) {
+            tup4 = (buf[cstart7 : 1]);
+            min6 = tup4[0] < min6 ? tup4[0] : min6;
+            found_tup5 = true;
+            cstart7 = cstart7 + 1;
+            i8 = i8 + 1;
         }
-        if (found_tup6) {
-            first3 = min7;
+        if (found_tup5) {
+            first3 = min6;
         } else {
              
         }

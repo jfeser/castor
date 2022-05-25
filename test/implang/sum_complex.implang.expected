@@ -1,71 +1,71 @@
 // Locals:
-// found_tup17 : bool (persists=false)
-// cstart24 : int (persists=true)
-// cstart25 : int (persists=true)
-// cstart21 : int (persists=true)
-// tup16 : tuple[int, int] (persists=false)
-// i22 : int (persists=true)
-// count23 : int (persists=true)
-// sum20 : fixed (persists=false)
-// sum18 : int (persists=false)
-// count19 : int (persists=false)
+// found_tup1 : bool (persists=false)
+// cstart9 : int (persists=true)
+// tup0 : tuple[int, int] (persists=false)
+// sum2 : int (persists=false)
+// sum4 : fixed (persists=false)
+// cstart8 : int (persists=true)
+// count3 : int (persists=false)
+// count7 : int (persists=true)
+// cstart5 : int (persists=true)
+// i6 : int (persists=true)
 fun printer () : void {
-    found_tup17 = false;
-    sum18 = 0;
-    count19 = 0;
-    sum20 = 0.0;
-    cstart21 = 0;
-    i22 = 0;
-    count23 = 5;
-    loop (i22 < count23) {
-        cstart24 = cstart21;
-        cstart25 = cstart24 + 1;
-        tup16 = (buf[cstart24 : 1], buf[cstart25 : 1]);
-        sum18 = sum18 + tup16[0];
-        count19 = count19 + 1;
-        sum20 = sum20 + int2fl(tup16[0]) / int2fl(2);
-        found_tup17 = true;
-        cstart21 = cstart21 + 2;
-        i22 = i22 + 1;
+    found_tup1 = false;
+    sum2 = 0;
+    count3 = 0;
+    sum4 = 0.0;
+    cstart5 = 0;
+    i6 = 0;
+    count7 = 5;
+    loop (i6 < count7) {
+        cstart8 = cstart5;
+        cstart9 = cstart8 + 1;
+        tup0 = (buf[cstart8 : 1], buf[cstart9 : 1]);
+        sum2 = sum2 + tup0[0];
+        count3 = count3 + 1;
+        sum4 = sum4 + int2fl(tup0[0]) / int2fl(2);
+        found_tup1 = true;
+        cstart5 = cstart5 + 2;
+        i6 = i6 + 1;
     }
-    if (found_tup17) {
-        print(tuple[int, fixed], (sum18 + 5, int2fl(count19) + sum20));
+    if (found_tup1) {
+        print(tuple[int, fixed], (sum2 + 5, int2fl(count3) + sum4));
     } else {
          
     }
 }
 // Locals:
-// tup3 : tuple[int, int] (persists=false)
-// cstart12 : int (persists=true)
-// count6 : int (persists=false)
-// sum5 : int (persists=false)
+// found_tup1 : bool (persists=false)
+// cstart9 : int (persists=true)
+// tup0 : tuple[int, int] (persists=false)
+// sum2 : int (persists=false)
+// sum4 : fixed (persists=false)
 // cstart8 : int (persists=true)
-// cstart11 : int (persists=true)
-// count10 : int (persists=true)
-// sum7 : fixed (persists=false)
-// i9 : int (persists=true)
-// found_tup4 : bool (persists=false)
+// count3 : int (persists=false)
+// count7 : int (persists=true)
+// cstart5 : int (persists=true)
+// i6 : int (persists=true)
 fun consumer () : void {
-    found_tup4 = false;
-    sum5 = 0;
-    count6 = 0;
-    sum7 = 0.0;
-    cstart8 = 0;
-    i9 = 0;
-    count10 = 5;
-    loop (i9 < count10) {
-        cstart11 = cstart8;
-        cstart12 = cstart11 + 1;
-        tup3 = (buf[cstart11 : 1], buf[cstart12 : 1]);
-        sum5 = sum5 + tup3[0];
-        count6 = count6 + 1;
-        sum7 = sum7 + int2fl(tup3[0]) / int2fl(2);
-        found_tup4 = true;
-        cstart8 = cstart8 + 2;
-        i9 = i9 + 1;
+    found_tup1 = false;
+    sum2 = 0;
+    count3 = 0;
+    sum4 = 0.0;
+    cstart5 = 0;
+    i6 = 0;
+    count7 = 5;
+    loop (i6 < count7) {
+        cstart8 = cstart5;
+        cstart9 = cstart8 + 1;
+        tup0 = (buf[cstart8 : 1], buf[cstart9 : 1]);
+        sum2 = sum2 + tup0[0];
+        count3 = count3 + 1;
+        sum4 = sum4 + int2fl(tup0[0]) / int2fl(2);
+        found_tup1 = true;
+        cstart5 = cstart5 + 2;
+        i6 = i6 + 1;
     }
-    if (found_tup4) {
-        consume(tuple[int, fixed], (sum5 + 5, int2fl(count6) + sum7));
+    if (found_tup1) {
+        consume(tuple[int, fixed], (sum2 + 5, int2fl(count3) + sum4));
     } else {
          
     }

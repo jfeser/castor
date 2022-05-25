@@ -114,6 +114,46 @@ let join schema1 schema2 sql1 sql2 pred =
   in
   let spj1 = if needs_subquery then create_subquery sql1 else to_spj sql1 in
   let spj2 = if needs_subquery then create_subquery sql2 else to_spj sql2 in
+
+  let dup_subst =
+    List.map (spj1.relations @ spj2.relations) ~f:(fun (_, a, _) -> a)
+    |> List.find_all_dups ~compare:[%compare: string]
+    |> List.map ~f:(fun r -> (r, sprintf "%s_%d" r (Fresh.int Global.fresh)))
+    |> Map.of_alist_exn (module String)
+  in
+
+  let rec subst_rel ctx = function
+    | `Name n ->
+        let n' =
+          match Name.rel n with
+          | Some rel -> (
+              match Map.find ctx rel with
+              | Some rel' -> Name.copy ~scope:(Some rel') n
+              | None -> n)
+          | None -> n
+        in
+        `Name n'
+    | p -> V.Map.pred (subst_rel_annot ctx) (subst_rel ctx) p
+  and subst_rel_annot ctx r =
+    V.Map.annot (V.Map.query (subst_rel_annot ctx) (subst_rel ctx)) r
+  in
+
+  let spj2 =
+    {
+      spj2 with
+      conds = List.map spj2.conds ~f:(subst_rel dup_subst);
+      group = List.map spj2.group ~f:(subst_rel dup_subst);
+      order = List.map spj2.order ~f:(fun (p, o) -> (subst_rel dup_subst p, o));
+      relations =
+        List.map spj2.relations ~f:(fun (r, a, j) ->
+            let a' = Map.find dup_subst a |> Option.value ~default:a in
+            (r, a', j));
+      select =
+        List.map spj2.select ~f:(fun e ->
+            { e with pred = subst_rel dup_subst e.pred });
+    }
+  in
+
   (* The where clause is evaluated before the select clause so we can't use the
      aliases in the select clause here. *)
   let select_list = spj1.select @ spj2.select in
@@ -253,13 +293,12 @@ let dep_join of_ralgebra q1 scope q2 =
        select_list)
 
 let relation Relation.({ r_name = tbl; _ } as rel) =
-  let tbl_alias = tbl ^ Fresh.name Global.fresh "_%d" in
   (* Add table alias to all fields to generate a select list. *)
   let select_list =
     List.map (Relation.schema_exn rel) ~f:(fun (n, _) ->
-        create_entry_n (Name.copy n ~scope:(Some tbl_alias)))
+        create_entry_n (Name.copy n ~scope:(Some tbl)))
   in
-  let relations = [ (`Table rel, tbl_alias, `Left) ] in
+  let relations = [ (`Table rel, tbl, `Left) ] in
   `Query (create_spj ~relations select_list)
 
 let of_ralgebra_open f r =

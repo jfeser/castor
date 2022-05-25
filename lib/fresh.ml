@@ -1,6 +1,6 @@
 open Core
 
-type t = int Hashtbl.M(String).t
+type t = int Hashtbl.M(String).t [@@deriving sexp]
 
 let create () = Hashtbl.create (module String)
 

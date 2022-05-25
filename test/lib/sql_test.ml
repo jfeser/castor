@@ -19,24 +19,24 @@ let%expect_test "select-agg" =
     {|
     SELECT (0.2) * (avg(t0."f")) AS "test"
     FROM
-      (SELECT r_0."f" AS "f",
-              r_0."g" AS "g"
-       FROM "r" AS "r_0") AS "t0" |}]
+      (SELECT r."f" AS "f",
+              r."g" AS "g"
+       FROM "r") AS "t0" |}]
 
 let%expect_test "project" =
   run_test "Select([f], r)";
   [%expect {|
-    SELECT r_0."f" AS "f"
-    FROM "r" AS "r_0" |}]
+    SELECT r."f" AS "f"
+    FROM "r" |}]
 
 let%expect_test "filter" =
   run_test "Filter(f = g, r)";
   [%expect
     {|
-      SELECT r_0."f" AS "f",
-             r_0."g" AS "g"
-      FROM "r" AS "r_0"
-      WHERE ((r_0."f") = (r_0."g")) |}]
+      SELECT r."f" AS "f",
+             r."g" AS "g"
+      FROM "r"
+      WHERE ((r."f") = (r."g")) |}]
 
 let%expect_test "eqjoin" =
   run_test
@@ -44,21 +44,21 @@ let%expect_test "eqjoin" =
      s_g], s))";
   [%expect
     {|
-      SELECT r_1."f" AS "r_f",
-             r_1."g" AS "r_g",
-             s_0."f" AS "s_f",
-             s_0."g" AS "s_g"
-      FROM "r" AS "r_1",
-           "s" AS "s_0"
-      WHERE ((r_1."f") = (s_0."g")) |}]
+      SELECT r."f" AS "r_f",
+             r."g" AS "r_g",
+             s."f" AS "s_f",
+             s."g" AS "s_g"
+      FROM "r",
+           "s"
+      WHERE ((r."f") = (s."g")) |}]
 
 let%expect_test "join-select" =
   run_test "join(true, select([id as p_id], log), select([id as c_id], log))";
   [%expect
     {|
-        SELECT log_1."id" AS "p_id",
+        SELECT log."id" AS "p_id",
                log_0."id" AS "c_id"
-        FROM "log" AS "log_1",
+        FROM "log",
              "log" AS "log_0"
         WHERE (TRUE) |}]
 
@@ -66,43 +66,43 @@ let%expect_test "order-by" =
   run_test "OrderBy([f desc], Dedup(Select([f], r1)))";
   [%expect
     {|
-    SELECT DISTINCT r1_0."f" AS "f"
-    FROM "r1" AS "r1_0"
-    ORDER BY r1_0."f" DESC |}]
+    SELECT DISTINCT r1."f" AS "f"
+    FROM "r1"
+    ORDER BY r1."f" DESC |}]
 
 let%expect_test "order-by" =
   run_test "OrderBy([0 desc], Dedup(Select([f], r1)))";
   [%expect {|
-    SELECT DISTINCT r1_0."f" AS "f"
-    FROM "r1" AS "r1_0" |}]
+    SELECT DISTINCT r1."f" AS "f"
+    FROM "r1" |}]
 
 let%expect_test "dedup" =
   run_test "dedup(r)";
   [%expect
     {|
-    SELECT DISTINCT r_0."f" AS "f",
-                    r_0."g" AS "g"
-    FROM "r" AS "r_0" |}]
+    SELECT DISTINCT r."f" AS "f",
+                    r."g" AS "g"
+    FROM "r" |}]
 
 let%expect_test "dedup" =
   run_test "Dedup(Select([f], r1))";
   [%expect {|
-    SELECT DISTINCT r1_0."f" AS "f"
-    FROM "r1" AS "r1_0" |}]
+    SELECT DISTINCT r1."f" AS "f"
+    FROM "r1" |}]
 
 let%expect_test "select" =
   run_test "Select([f], r1)";
   [%expect {|
-    SELECT r1_0."f" AS "f"
-    FROM "r1" AS "r1_0" |}]
+    SELECT r1."f" AS "f"
+    FROM "r1" |}]
 
 let%expect_test "scan" =
   run_test "r1";
   [%expect
     {|
-    SELECT r1_0."f" AS "f",
-           r1_0."g" AS "g"
-    FROM "r1" AS "r1_0" |}]
+    SELECT r1."f" AS "f",
+           r1."g" AS "g"
+    FROM "r1" |}]
 
 let%expect_test "join" =
   run_test
@@ -111,13 +111,13 @@ let%expect_test "join" =
     \          select([counter as c_counter], log))";
   [%expect
     {|
-      SELECT log_1."counter" AS "p_counter",
-             log_1."succ" AS "p_succ",
+      SELECT log."counter" AS "p_counter",
+             log."succ" AS "p_succ",
              log_0."counter" AS "c_counter"
-      FROM "log" AS "log_1",
+      FROM "log",
            "log" AS "log_0"
-      WHERE (((log_1."counter") < (log_0."counter"))
-             AND ((log_0."counter") < (log_1."succ"))) |}]
+      WHERE (((log."counter") < (log_0."counter"))
+             AND ((log_0."counter") < (log."succ"))) |}]
 
 let%expect_test "join-groupby" =
   run_test
@@ -132,17 +132,17 @@ let%expect_test "join-groupby" =
       (SELECT t1."f" AS "f",
               sum((t1."f") * (t1."g")) AS "x"
        FROM
-         (SELECT r1_1."f" AS "f",
-                 r1_1."g" AS "g"
-          FROM "r1" AS "r1_1") AS "t1"
+         (SELECT r1."f" AS "f",
+                 r1."g" AS "g"
+          FROM "r1") AS "t1"
        GROUP BY t1."f") AS "t2",
 
       (SELECT t0."g" AS "g",
               sum((t0."f") * (t0."g")) AS "y"
        FROM
-         (SELECT r1_0."f" AS "f",
-                 r1_0."g" AS "g"
-          FROM "r1" AS "r1_0") AS "t0"
+         (SELECT r1."f" AS "f",
+                 r1."g" AS "g"
+          FROM "r1") AS "t0"
        GROUP BY t0."g") AS "t3"
     WHERE (((t2."f") = (t3."g"))
            OR ((t2."x") = (t3."y"))) |}]
@@ -152,10 +152,10 @@ let%expect_test "join-cond" =
     {|filter(true||false, join(true&&false, select([f], r1), select([g], r)))|};
   [%expect
     {|
-    SELECT r1_1."f" AS "f",
-           r_0."g" AS "g"
-    FROM "r1" AS "r1_1",
-         "r" AS "r_0"
+    SELECT r1."f" AS "f",
+           r."g" AS "g"
+    FROM "r1",
+         "r"
     WHERE ((TRUE)
            OR (FALSE))
       AND ((TRUE)
@@ -170,9 +170,9 @@ let%expect_test "select-groupby" =
         (SELECT t0."f" AS "f",
                 sum((t0."f") * (t0."g")) AS "x"
          FROM
-           (SELECT r1_0."f" AS "f",
-                   r1_0."g" AS "g"
-            FROM "r1" AS "r1_0") AS "t0"
+           (SELECT r1."f" AS "f",
+                   r1."g" AS "g"
+            FROM "r1") AS "t0"
          GROUP BY t0."f") AS "t1" |}]
 
 let%expect_test "select-fusion-1" =
@@ -183,9 +183,9 @@ let%expect_test "select-fusion-1" =
       FROM
         (SELECT min(t0."f") AS "x"
          FROM
-           (SELECT r1_0."f" AS "f",
-                   r1_0."g" AS "g"
-            FROM "r1" AS "r1_0") AS "t0") AS "t1" |}]
+           (SELECT r1."f" AS "f",
+                   r1."g" AS "g"
+            FROM "r1") AS "t0") AS "t1" |}]
 
 let%expect_test "select-fusion-2" =
   run_test "select([max(x) as m], select([f as x], r1))";
@@ -193,8 +193,8 @@ let%expect_test "select-fusion-2" =
     {|
     SELECT max(t0."x") AS "m"
     FROM
-      (SELECT r1_0."f" AS "x"
-       FROM "r1" AS "r1_0") AS "t0" |}]
+      (SELECT r1."f" AS "x"
+       FROM "r1") AS "t0" |}]
 
 let%expect_test "filter-fusion" =
   run_test "filter((x = 0), groupby([sum(f) as x], [g], r1))";
@@ -204,9 +204,9 @@ let%expect_test "filter-fusion" =
       FROM
         (SELECT sum(t0."f") AS "x"
          FROM
-           (SELECT r1_0."f" AS "f",
-                   r1_0."g" AS "g"
-            FROM "r1" AS "r1_0") AS "t0"
+           (SELECT r1."f" AS "f",
+                   r1."g" AS "g"
+            FROM "r1") AS "t0"
          GROUP BY t0."g") AS "t1"
       WHERE ((t1."x") = (0)) |}]
 
@@ -216,9 +216,9 @@ let%expect_test "groupby-dedup" =
     {|
     SELECT sum(t0."f") AS "x"
     FROM
-      (SELECT DISTINCT r1_0."f" AS "f",
-                       r1_0."g" AS "g"
-       FROM "r1" AS "r1_0") AS "t0"
+      (SELECT DISTINCT r1."f" AS "f",
+                       r1."g" AS "g"
+       FROM "r1") AS "t0"
     GROUP BY t0."g" |}]
 
 let%expect_test "hash-idx" =
@@ -229,14 +229,14 @@ let%expect_test "hash-idx" =
     SELECT t0."f" AS "f",
            t0."g" AS "g"
     FROM
-      (SELECT r1_0."f" AS "f"
-       FROM "r1" AS "r1_0") AS "t1",
+      (SELECT r1."f" AS "f"
+       FROM "r1") AS "t1",
          LATERAL
       (SELECT "f",
-              r1_1."g" AS "g"
-       FROM "r1" AS "r1_1"
+              r1."g" AS "g"
+       FROM "r1"
        WHERE (("f") = (NULL))
-         AND ((r1_1."f") = (r1_1."f"))) AS "t0" |}]
+         AND ((r1."f") = (r1."f"))) AS "t0" |}]
 
 let%expect_test "ordered-idx" =
   run_test
@@ -247,15 +247,15 @@ let%expect_test "ordered-idx" =
     SELECT t0."f" AS "f",
            t0."g" AS "g"
     FROM
-      (SELECT r1_0."f" AS "f"
-       FROM "r1" AS "r1_0") AS "t1",
+      (SELECT r1."f" AS "f"
+       FROM "r1") AS "t1",
          LATERAL
       (SELECT "f",
-              r1_1."g" AS "g"
-       FROM "r1" AS "r1_1"
+              r1."g" AS "g"
+       FROM "r1"
        WHERE ((("f") >= (NULL))
               AND (("f") < (NULL)))
-         AND ((r1_1."f") = (r1_1."f"))) AS "t0" |}]
+         AND ((r1."f") = (r1."f"))) AS "t0" |}]
 
 let%expect_test "depjoin-agg-1" =
   run_test
@@ -266,9 +266,9 @@ let%expect_test "depjoin-agg-1" =
     SELECT t2."l" AS "l",
            t2."h" AS "h"
     FROM
-      (SELECT r_0."f" AS "f",
-              r_0."g" AS "g"
-       FROM "r" AS "r_0") AS "t3",
+      (SELECT r."f" AS "f",
+              r."g" AS "g"
+       FROM "r") AS "t3",
          LATERAL
       (SELECT min("f") AS "l",
               max("g") AS "h"
@@ -288,9 +288,9 @@ let%expect_test "depjoin-agg-2" =
     SELECT t1."c" AS "c",
            t1."f" AS "f"
     FROM
-      (SELECT r_0."f" AS "f",
-              r_0."g" AS "g"
-       FROM "r" AS "r_0") AS "t2",
+      (SELECT r."f" AS "f",
+              r."g" AS "g"
+       FROM "r") AS "t2",
          LATERAL
       (SELECT count(*) AS "c",
               min(t0."f") AS "f"
@@ -306,9 +306,9 @@ let%expect_test "select-agg-window" =
            min(t0."f") AS "m",
            row_number() OVER () AS "n"
     FROM
-      (SELECT r_0."f" AS "f",
-              r_0."g" AS "g"
-       FROM "r" AS "r_0") AS "t0"
+      (SELECT r."f" AS "f",
+              r."g" AS "g"
+       FROM "r") AS "t0"
 |}]
 
 (* FIXME *)
@@ -362,9 +362,9 @@ let%expect_test "select-fusion-window" =
                                 t2."f" AS "bnd0",
                                 t2."g" AS "bnd1"
        FROM
-         (SELECT r1_1."f" AS "f",
-                 r1_1."g" AS "g"
-          FROM "r1" AS "r1_1") AS "t2") AS "t3",
+         (SELECT r1."f" AS "f",
+                 r1."g" AS "g"
+          FROM "r1") AS "t2") AS "t3",
 
       (SELECT t1."k1_rn0" AS "x0",
               t1."k1_f" AS "x1",
@@ -378,9 +378,9 @@ let%expect_test "select-fusion-window" =
                           t0."g" AS "k1_g",
                           row_number() OVER () AS "k1_rn0"
           FROM
-            (SELECT r1_0."f" AS "f",
-                    r1_0."g" AS "g"
-             FROM "r1" AS "r1_0") AS "t0") AS "t1") AS "t4"
+            (SELECT r1."f" AS "f",
+                    r1."g" AS "g"
+             FROM "r1") AS "t0") AS "t1") AS "t4"
     WHERE (((t4."k1_f") = (t3."bnd0"))
            AND (((t4."k1_g") = (t3."bnd1"))
                 AND ((t4."k1_rn0") = (t3."bnd2")))) |}]

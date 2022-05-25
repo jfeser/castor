@@ -1,46 +1,45 @@
 // Locals:
 // hoisted0 : fixed (persists=false)
 // hoisted1 : fixed (persists=false)
-// i30 : int (persists=true)
-// cstart29 : int (persists=true)
-// max28 : fixed (persists=false)
-// min27 : fixed (persists=false)
-// sum26 : fixed (persists=false)
-// tup21 : tuple[fixed] (persists=false)
-// found_tup22 : bool (persists=false)
-// avg_num24 : fixed (persists=false)
-// count25 : int (persists=false)
-// avg_dem23 : int (persists=false)
-// count31 : int (persists=true)
+// found_tup1 : bool (persists=false)
+// min6 : fixed (persists=false)
+// avg_num3 : fixed (persists=false)
+// sum5 : fixed (persists=false)
+// count4 : int (persists=false)
+// tup0 : tuple[fixed] (persists=false)
+// cstart8 : int (persists=true)
+// count10 : int (persists=true)
+// i9 : int (persists=true)
+// max7 : fixed (persists=false)
+// avg_dem2 : int (persists=false)
 fun printer () : void {
     hoisted0 = int2fl(100);
     hoisted1 = 1.0 + 2.0;
-    found_tup22 = false;
-    avg_dem23 = 0;
-    avg_num24 = 0.0;
-    count25 = 0;
-    sum26 = 0.0;
-    min27 = 4611686018427387903.0;
-    max28 = -4611686018427387904.0;
-    cstart29 = 0;
-    i30 = 0;
-    count31 = 5;
-    loop (i30 < count31) {
-        tup21 = (int2fl(buf[cstart29 : 2]) / hoisted0);
-        avg_num24 = avg_num24 + tup21[0];
-        avg_dem23 = avg_dem23 + 1;
-        count25 = count25 + 1;
-        sum26 = sum26 + tup21[0];
-        min27 = tup21[0] < min27 ? tup21[0] : min27;
-        max28 = tup21[0] < max28 ? max28 : tup21[0];
-        found_tup22 = true;
-        cstart29 = cstart29 + 2;
-        i30 = i30 + 1;
+    found_tup1 = false;
+    avg_dem2 = 0;
+    avg_num3 = 0.0;
+    count4 = 0;
+    sum5 = 0.0;
+    min6 = 4611686018427387903.0;
+    max7 = -4611686018427387904.0;
+    cstart8 = 0;
+    i9 = 0;
+    count10 = 5;
+    loop (i9 < count10) {
+        tup0 = (int2fl(buf[cstart8 : 2]) / hoisted0);
+        avg_num3 = avg_num3 + tup0[0];
+        avg_dem2 = avg_dem2 + 1;
+        count4 = count4 + 1;
+        sum5 = sum5 + tup0[0];
+        min6 = tup0[0] < min6 ? tup0[0] : min6;
+        max7 = tup0[0] < max7 ? max7 : tup0[0];
+        found_tup1 = true;
+        cstart8 = cstart8 + 2;
+        i9 = i9 + 1;
     }
-    if (found_tup22) {
+    if (found_tup1) {
         print(tuple[fixed, fixed, int, fixed, fixed, fixed],
-        (hoisted1, avg_num24 / int2fl(avg_dem23), count25, sum26, min27,
-         max28));
+        (hoisted1, avg_num3 / int2fl(avg_dem2), count4, sum5, min6, max7));
     } else {
          
     }
@@ -48,45 +47,45 @@ fun printer () : void {
 // Locals:
 // hoisted2 : fixed (persists=false)
 // hoisted3 : fixed (persists=false)
-// avg_dem7 : int (persists=false)
-// count9 : int (persists=false)
-// i14 : int (persists=true)
-// max12 : fixed (persists=false)
-// count15 : int (persists=true)
-// avg_num8 : fixed (persists=false)
-// sum10 : fixed (persists=false)
-// cstart13 : int (persists=true)
-// tup5 : tuple[fixed] (persists=false)
-// found_tup6 : bool (persists=false)
-// min11 : fixed (persists=false)
+// found_tup1 : bool (persists=false)
+// min6 : fixed (persists=false)
+// avg_num3 : fixed (persists=false)
+// sum5 : fixed (persists=false)
+// count4 : int (persists=false)
+// tup0 : tuple[fixed] (persists=false)
+// cstart8 : int (persists=true)
+// count10 : int (persists=true)
+// i9 : int (persists=true)
+// max7 : fixed (persists=false)
+// avg_dem2 : int (persists=false)
 fun consumer () : void {
     hoisted2 = int2fl(100);
     hoisted3 = 1.0 + 2.0;
-    found_tup6 = false;
-    avg_dem7 = 0;
-    avg_num8 = 0.0;
-    count9 = 0;
-    sum10 = 0.0;
-    min11 = 4611686018427387903.0;
-    max12 = -4611686018427387904.0;
-    cstart13 = 0;
-    i14 = 0;
-    count15 = 5;
-    loop (i14 < count15) {
-        tup5 = (int2fl(buf[cstart13 : 2]) / hoisted2);
-        avg_num8 = avg_num8 + tup5[0];
-        avg_dem7 = avg_dem7 + 1;
-        count9 = count9 + 1;
-        sum10 = sum10 + tup5[0];
-        min11 = tup5[0] < min11 ? tup5[0] : min11;
-        max12 = tup5[0] < max12 ? max12 : tup5[0];
-        found_tup6 = true;
-        cstart13 = cstart13 + 2;
-        i14 = i14 + 1;
+    found_tup1 = false;
+    avg_dem2 = 0;
+    avg_num3 = 0.0;
+    count4 = 0;
+    sum5 = 0.0;
+    min6 = 4611686018427387903.0;
+    max7 = -4611686018427387904.0;
+    cstart8 = 0;
+    i9 = 0;
+    count10 = 5;
+    loop (i9 < count10) {
+        tup0 = (int2fl(buf[cstart8 : 2]) / hoisted2);
+        avg_num3 = avg_num3 + tup0[0];
+        avg_dem2 = avg_dem2 + 1;
+        count4 = count4 + 1;
+        sum5 = sum5 + tup0[0];
+        min6 = tup0[0] < min6 ? tup0[0] : min6;
+        max7 = tup0[0] < max7 ? max7 : tup0[0];
+        found_tup1 = true;
+        cstart8 = cstart8 + 2;
+        i9 = i9 + 1;
     }
-    if (found_tup6) {
+    if (found_tup1) {
         consume(tuple[fixed, fixed, int, fixed, fixed, fixed],
-        (hoisted3, avg_num8 / int2fl(avg_dem7), count9, sum10, min11, max12));
+        (hoisted3, avg_num3 / int2fl(avg_dem2), count4, sum5, min6, max7));
     } else {
          
     }

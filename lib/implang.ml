@@ -327,6 +327,7 @@ module Builder = struct
        global variables. *)
     type_ctx : Prim_type.t Hashtbl.M(String).t;
     body : stmt RevList.t ref;
+    fresh : Fresh.t;
   }
   [@@deriving sexp]
 
@@ -351,7 +352,15 @@ module Builder = struct
       | `Ok l -> l
       | `Duplicate_key _ -> fail (Error.of_string "Duplicate argument.")
     in
-    { name; args; ret; locals; body = ref RevList.empty; type_ctx }
+    {
+      name;
+      args;
+      ret;
+      locals;
+      body = ref RevList.empty;
+      type_ctx;
+      fresh = Fresh.create ();
+    }
 
   (** Create a function builder with an empty body and a copy of the locals
       table. *)
@@ -422,7 +431,7 @@ module Builder = struct
              })
 
   let build_var ?persistent n t b =
-    let n = n ^ Fresh.name Global.fresh "%d" in
+    let n = n ^ Fresh.name b.fresh "%d" in
     build_var ?persistent n t b
 
   let build_defn ?persistent v e b =
