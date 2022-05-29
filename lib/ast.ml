@@ -25,7 +25,6 @@ module Unop = struct
   [@@deriving compare, equal, hash, sexp]
 end
 
-type scope = string [@@deriving compare, equal, hash, sexp]
 type tuple = Cross | Zip | Concat [@@deriving compare, equal, hash, sexp]
 type order = Asc | Desc [@@deriving compare, equal, hash, sexp]
 
@@ -56,7 +55,7 @@ type 'r pred = ('r pred, 'r) ppred [@@deriving compare, equal, hash, sexp]
 type ('p, 'r) hash_idx = {
   hi_keys : 'r;
   hi_values : 'r;
-  hi_scope : scope;
+  hi_scope : string;
   hi_key_layout : 'r option; [@sexp.option]
   hi_lookup : 'p list;
 }
@@ -67,16 +66,16 @@ type 'p bound = 'p * [ `Open | `Closed ] [@@deriving compare, equal, hash, sexp]
 type ('p, 'r) ordered_idx = {
   oi_keys : 'r;
   oi_values : 'r;
-  oi_scope : scope;
+  oi_scope : string;
   oi_key_layout : 'r option; [@sexp.option]
   oi_lookup : ('p bound option * 'p bound option) list;
 }
 [@@deriving compare, equal, hash, sexp]
 
-type 'r list_ = { l_keys : 'r; l_values : 'r; l_scope : scope }
+type 'r list_ = { l_keys : 'r; l_values : 'r; l_scope : string }
 [@@deriving compare, equal, hash, sexp]
 
-type 'r depjoin = { d_lhs : 'r; d_alias : scope; d_rhs : 'r }
+type 'r depjoin = { d_lhs : 'r; d_alias : string; d_rhs : 'r }
 [@@deriving compare, equal, hash, sexp]
 
 type ('p, 'r) join = { pred : 'p; r1 : 'r; r2 : 'r }

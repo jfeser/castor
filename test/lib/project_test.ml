@@ -102,8 +102,7 @@ let%expect_test "" =
                         supplier)),
                     part)))) as k0,
         select([o_year,
-                (sum((if (nation_name = param1) then volume else 0.0)) /
-                sum(volume)) as mkt_share],
+                (sum((if (nation_name = param1) then volume else 0.0)) / sum(volume)) as mkt_share],
           atuple([ascalar(k0.o_year),
                   select([volume, nation_name],
                     filter((o_year = k0.o_year),

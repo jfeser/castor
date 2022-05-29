@@ -7,6 +7,7 @@ end
 module type LANG = sig
   type 'a t [@@deriving compare, hash, sexp_of]
 
+  val pp : 'a t Fmt.t
   val match_func : 'a t -> 'b t -> bool
   val args : 'a t -> 'a list
   val map_args : ('a -> 'b) -> 'a t -> 'b t
@@ -40,6 +41,7 @@ module type EGRAPH = sig
   val merge : t -> Id.t -> Id.t -> Id.t
   val rebuild : t -> unit
   val classes : t -> Id.t Iter.t
+  val pp_dot : t Fmt.t
 
   type pat = [ `Apply of pat lang | `Var of int ]
 
@@ -52,6 +54,8 @@ module Make (L : LANG) (A : ANALYSIS with type 'a lang = 'a L.t) :
 
 module SymbolLang (S : sig
   type t [@@deriving compare, equal, hash, sexp_of]
+
+  val pp : t Fmt.t
 end) : sig
   type 'a t = { func : S.t; args : 'a list }
 

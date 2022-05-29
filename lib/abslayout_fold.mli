@@ -6,10 +6,10 @@ val src : Logs.Src.t
 module Data : sig
   type t
 
-  val of_ralgebra : ?dir:scope -> Db.t -> < Equiv.meta ; .. > annot -> t
+  val of_ralgebra : ?dir:string -> Db.t -> < Equiv.meta ; .. > annot -> t
 
   val annotate :
-    ?dir:scope ->
+    ?dir:string ->
     Db.t ->
     (< Equiv.meta ; .. > as 'm) annot ->
     < Equiv.meta ; fold_stream : t ; set_fold_stream : t -> unit ; meta : 'm >

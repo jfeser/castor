@@ -3,6 +3,16 @@ open Collections
 open Ast
 open Sql
 
+module Foreign_key_join_graph = struct
+  module Edge = struct
+    type t = { l_attr : string; r_attr : string } [@@deriving compare]
+
+    let default = { l_attr = ""; r_attr = "" }
+  end
+
+  include Graph.Persistent.Digraph.ConcreteLabeled (String) (Edge)
+end
+
 (* split conjunction into column equality and other predicates *)
 let split p =
   let ps = Pred.conjuncts p in

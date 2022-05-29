@@ -171,8 +171,7 @@ let%expect_test "" =
                                               select([k1_hi, k1_lo],
                                                 select([lo as k1_lo, hi as k1_hi],
                                                   select([min(o_orderdate) as lo,
-                                                          max((o_orderdate +
-                                                              month(3))) as hi],
+                                                          max((o_orderdate + month(3))) as hi],
                                                     orders)))))))))) |}]
 
 let%expect_test "" =

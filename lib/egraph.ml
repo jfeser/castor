@@ -17,6 +17,7 @@ end
 module type LANG = sig
   type 'a t [@@deriving compare, hash, sexp_of]
 
+  val pp : 'a t Fmt.t
   val match_func : 'a t -> 'b t -> bool
   val args : 'a t -> 'a list
   val map_args : ('a -> 'b) -> 'a t -> 'b t
@@ -50,6 +51,7 @@ module type EGRAPH = sig
   val merge : t -> Id.t -> Id.t -> Id.t
   val rebuild : t -> unit
   val classes : t -> Id.t Iter.t
+  val pp_dot : t Fmt.t
 
   type pat = [ `Apply of pat lang | `Var of int ]
 
@@ -57,19 +59,7 @@ module type EGRAPH = sig
   val rewrite : t -> pat -> pat -> unit
 end
 
-module Make (L : sig
-  type 'a t [@@deriving compare, hash, sexp_of]
-
-  val match_func : 'a t -> 'b t -> bool
-  val args : 'a t -> 'a list
-  val map_args : ('a -> 'b) -> 'a t -> 'b t
-end) (A : sig
-  type t [@@deriving equal, sexp_of]
-
-  val of_enode : 'a L.t -> t
-  val merge : t -> t -> t
-end) =
-struct
+module Make (L : LANG) (A : ANALYSIS with type 'a lang := 'a L.t) = struct
   module ENode = struct
     type t = Id.t L.t [@@deriving compare, hash, sexp_of]
   end
@@ -108,6 +98,34 @@ struct
         (g.classes : EClass.t H.M(Id).t)
         (g.worklist : (ENode.t * Id.t) list)
         (g.max_id : int)]
+
+  let pp_dot fmt g =
+    let pp_id fmt (id : Id.t) = Fmt.pf fmt "c%d" id.id in
+    Fmt.pf fmt "@[<v>digraph {@ ";
+    H.iteri g.classes ~f:(fun ~key ~data ->
+        Fmt.pf fmt "subgraph cluster_%d {@ label=\"Class %d\"@ " key.id key.id;
+        Fmt.pf fmt "%a [shape=point];@ " pp_id key;
+
+        let keys_iter f = H.iter_keys data.nodes ~f in
+        Iter.iteri
+          (fun eid enode ->
+            let enode_dot_id = sprintf "n%d_%d" key.id eid in
+            Fmt.pf fmt "%s [label=\"@[<h>%a@]\"];@ " enode_dot_id L.pp enode)
+          keys_iter;
+
+        Fmt.pf fmt "}@,");
+
+    H.iteri g.classes ~f:(fun ~key ~data ->
+        let keys_iter f = H.iter_keys data.nodes ~f in
+        Iter.iteri
+          (fun eid enode ->
+            let enode_dot_id = sprintf "n%d_%d" key.id eid in
+            Fmt.pf fmt "%s -> {@[<h>%a@]};@ " enode_dot_id
+              (Fmt.list ~sep:Fmt.sp pp_id)
+              (L.args enode))
+          keys_iter);
+
+    Fmt.pf fmt "}@,@]"
 
   let create () =
     {
@@ -273,6 +291,8 @@ end
 
 module SymbolLang (S : sig
   type t [@@deriving compare, equal, hash, sexp_of]
+
+  val pp : t Fmt.t
 end) =
 struct
   type 'a t = { func : S.t; args : 'a list } [@@deriving compare, hash, sexp_of]
@@ -280,11 +300,16 @@ struct
   let map_args f x = { x with args = List.map x.args ~f }
   let args x = x.args
   let match_func x y = [%equal: S.t] x.func y.func
+  let pp fmt x = Fmt.pf fmt "%a" S.pp x.func
 end
 
 module AstLang = struct
   type 'a t = Query of ('a, 'a) Ast.query | Pred of ('a, 'a) Ast.ppred
   [@@deriving compare, hash, sexp_of]
+
+  let pp fmt = function
+    | Query q -> Abslayout_pp.pp_query_open Fmt.nop Fmt.nop fmt q
+    | Pred p -> Abslayout_pp.pp_pred_open Fmt.nop Fmt.nop fmt p
 
   let map_args f = function
     | Query q -> Query (V.Map.query f f q)

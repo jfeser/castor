@@ -105,17 +105,15 @@ let pp_upper_bound pp_pred fmt (p, b) =
   let op = match b with `Closed -> Binop.Le | `Open -> Binop.Lt in
   Fmt.pf fmt "%a %a" pp_op (op_to_str op) pp_pred p
 
-let pp_select_pred pp_pred fmt (p, n) =
-  match p with
-  | `Name n' when [%equal: string] (Name.name n') n -> pp_pred fmt p
-  | _ -> Fmt.pf fmt "%a as %s" pp_pred p n
+let pp_select_pred pp_pred fmt (p, alias) =
+  let s = Fmt.str "%a" pp_pred p in
+  match String.split s ~on:'.' with
+  | ([ _; n ] | [ n ]) when [%equal: string] alias n -> Fmt.pf fmt "%s" s
+  | _ -> Fmt.pf fmt "%s as %s" s alias
 
 let pp_select_list pp_pred fmt sl = pp_list (pp_select_pred pp_pred) fmt sl
 
-let pp_query_open pp_query pp_pred pp_meta fmt { node; meta } =
-  Fmt.pf fmt "@[<hv 2>";
-  Option.iter pp_meta ~f:(fun ppm -> Fmt.pf fmt "@[<hv 2>%a@]#@," ppm meta);
-  (match node with
+let pp_query_open pp_query pp_pred fmt = function
   | Select (ps, r) ->
       Fmt.pf fmt "select(%a,@ %a)" (pp_select_list pp_pred) ps pp_query r
   | Filter (p, r) -> Fmt.pf fmt "filter(%a,@ %a)" pp_pred p pp_query r
@@ -152,16 +150,21 @@ let pp_query_open pp_query pp_pred pp_meta fmt { node; meta } =
                (pp_option (pp_upper_bound pp_pred))
                ub))
         oi_lookup
-  | _ -> ());
+  | _ -> ()
+
+let pp_annot_open pp_annot pp_pred pp_meta fmt { node; meta } =
+  Fmt.pf fmt "@[<hv 2>";
+  Option.iter pp_meta ~f:(fun ppm -> Fmt.pf fmt "@[<hv 2>%a@]#@," ppm meta);
+  pp_query_open pp_annot pp_pred fmt node;
   Fmt.pf fmt "@]"
 
 let rec pp_with_meta pp_meta fmt q =
-  pp_query_open (pp_with_meta pp_meta)
+  pp_annot_open (pp_with_meta pp_meta)
     (pp_pred_with_meta pp_meta)
     (Some pp_meta) fmt q
 
 and pp_pred_with_meta pp_meta fmt p =
   pp_pred_open (pp_with_meta pp_meta) (pp_pred_with_meta pp_meta) fmt p
 
-let rec pp fmt q = pp_query_open pp pp_pred None fmt q
+let rec pp fmt q = pp_annot_open pp pp_pred None fmt q
 and pp_pred fmt p = pp_pred_open pp pp_pred fmt p
