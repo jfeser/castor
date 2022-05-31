@@ -1,0 +1,4 @@
+(library
+ (name castor_eopt)
+ (libraries core castor)
+ (preprocess (pps ppx_compare ppx_sexp_conv ppx_let)))

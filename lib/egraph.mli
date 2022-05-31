@@ -41,6 +41,7 @@ module type EGRAPH = sig
   val merge : t -> Id.t -> Id.t -> Id.t
   val rebuild : t -> unit
   val classes : t -> Id.t Iter.t
+  val all_enodes : t -> ENode.t Iter.t
   val enodes : t -> Id.t -> ENode.t Iter.t
   val pp_dot : t Fmt.t
 

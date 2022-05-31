@@ -72,12 +72,12 @@ module Make (C : Config.S) = struct
   (*   let%bind p, r = to_filter in *)
   (*   return (filter p r) *)
 
-  let hoist_filter_orderby r =
-    let open E in
-    (let%bind { key; rel } = m_orderby g r in
-     let%bind p, r = m_filter g rel in
-     return @@ filter p (order_by key r))
-    |> Iter.iter (fun r' -> ignore (Egraph.AstEGraph.merge g r r'))
+  (* let hoist_filter_orderby r = *)
+  (*   let open E in *)
+  (*   (let%bind { key; rel } = m_orderby g r in *)
+  (*    let%bind p, r = m_filter g rel in *)
+  (*    return @@ filter p (order_by key r)) *)
+  (*   |> Iter.iter (fun r' -> ignore (Egraph.AstEGraph.merge g r r')) *)
 
   let hoist_filter r =
     let open Option.Let_syntax in
