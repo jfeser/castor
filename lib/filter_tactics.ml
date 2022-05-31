@@ -47,6 +47,38 @@ module Make (C : Config.S) = struct
   let filter_many ps r =
     if List.is_empty ps then r else A.filter (Pred.conjoin ps) r
 
+  (* module E = struct *)
+  (*   module Let_syntax = struct *)
+  (*     type 'a t = { *)
+  (*         pattern : Egraph.AstEGraph.pat; *)
+  (*         extractor : Egraph.Id.t Map.M(Int).t -> 'a; *)
+  (*       } *)
+
+  (*     let bind x ~f = *)
+  (*     let map _ ~f:_ = failwith "" *)
+
+  (*     (\* ( `Apply (Filter (`Var 0, `Var 1)), *\) *)
+  (*     (\*   fun ctx -> f (Map.find_exn ctx 0, Map.find_exn ctx 1) ) *\) *)
+  (*   end *)
+
+  (*   let return _ = failwith "" *)
+  (*   let to_filter id = *)
+  (*   let filter _ _ = failwith "" *)
+  (* end *)
+
+  (* let test_filter : *)
+  (*     Egraph.AstEGraph.pat * (Egraph.Id.t Map.M(Int).t -> Egraph.Id.t option) = *)
+  (*   let open E in *)
+  (*   let%bind p, r = to_filter in *)
+  (*   return (filter p r) *)
+
+  let hoist_filter_orderby r =
+    let open E in
+    (let%bind { key; rel } = m_orderby g r in
+     let%bind p, r = m_filter g rel in
+     return @@ filter p (order_by key r))
+    |> Iter.iter (fun r' -> ignore (Egraph.AstEGraph.merge g r r'))
+
   let hoist_filter r =
     let open Option.Let_syntax in
     match r.node with
@@ -100,19 +132,15 @@ module Make (C : Config.S) = struct
 
   let hoist_filter_agg r =
     let open Option.Let_syntax in
-    match r.node with
-    | Select (ps, r) -> (
-        let%bind p, r = to_filter r in
-        match Abslayout.select_kind ps with
-        | `Scalar -> None
-        | `Agg ->
-            if
-              Tactics_util.select_contains
-                (Set.diff (Free.pred_free p) params)
-                ps r
-            then Some (A.filter p (A.select ps r))
-            else None)
-    | _ -> None
+    let%bind ps, r = to_select r in
+    let%bind p, r = to_filter r in
+    match Abslayout.select_kind ps with
+    | `Scalar -> None
+    | `Agg ->
+        if
+          Tactics_util.select_contains (Set.diff (Free.pred_free p) params) ps r
+        then Some (A.filter p (A.select ps r))
+        else None
 
   let hoist_filter_agg = of_func hoist_filter_agg ~name:"hoist-filter-agg"
 
@@ -170,19 +198,18 @@ module Make (C : Config.S) = struct
   let split_filter = of_func split_filter ~name:"split-filter"
 
   let split_filter_params r =
-    match r.node with
-    | Filter (p, r) ->
-        let has_params, no_params =
-          Pred.conjuncts p
-          |> List.partition_tf ~f:(fun p ->
-                 Set.inter (Free.pred_free p) params |> Set.is_empty |> not)
-        in
-        if List.is_empty has_params || List.is_empty no_params then None
-        else
-          Some
-            (A.filter (Pred.conjoin has_params)
-            @@ A.filter (Pred.conjoin no_params) r)
-    | _ -> None
+    let open Option.Let_syntax in
+    let%bind p, r = to_filter r in
+    let has_params, no_params =
+      Pred.conjuncts p
+      |> List.partition_tf ~f:(fun p ->
+             Set.inter (Free.pred_free p) params |> Set.is_empty |> not)
+    in
+    if List.is_empty has_params || List.is_empty no_params then None
+    else
+      Some
+        (A.filter (Pred.conjoin has_params)
+        @@ A.filter (Pred.conjoin no_params) r)
 
   let split_filter_params =
     of_func split_filter_params ~name:"split-filter-params"

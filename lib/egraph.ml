@@ -51,6 +51,7 @@ module type EGRAPH = sig
   val merge : t -> Id.t -> Id.t -> Id.t
   val rebuild : t -> unit
   val classes : t -> Id.t Iter.t
+  val enodes : t -> Id.t -> ENode.t Iter.t
   val pp_dot : t Fmt.t
 
   type pat = [ `Apply of pat lang | `Var of int ]
@@ -138,6 +139,7 @@ module Make (L : LANG) (A : ANALYSIS with type 'a lang := 'a L.t) = struct
 
   let classes g f = H.iter_keys g.classes ~f
   let find (id : Id.t) = { id with id = Union_find.get id.Id.canon }
+  let enodes g id f = H.iter_keys (H.find_exn g.classes (find id)).nodes ~f
   let eclass_id_equiv id1 id2 = [%equal: Id.t] (find id1) (find id2)
 
   let enode_equiv g n1 n2 =
