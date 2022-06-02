@@ -23,6 +23,10 @@ let parse_test sexp =
 
 let run_test () =
   let ctx = Univ_map.empty in
+  let ctx =
+    Univ_map.set ctx ~key:Ops.params
+      ~data:(Set.of_list (module Name) [ Name.create "param0" ])
+  in
   let testcase = Sexp.input_sexp In_channel.stdin in
   let queries, transforms = parse_test testcase in
 

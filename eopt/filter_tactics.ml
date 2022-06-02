@@ -151,118 +151,125 @@ module EPred = struct
   include Comparator.Make (T)
 end
 
-(* let elim_cmp_filter g ctx = *)
-(*   let params = ctx#params in *)
-(*   let%bind root, (p, r') = M.any_filter g in *)
-(*   let orig_schema = Schema.schema (to_annot g r') in *)
+let elim_cmp_filter g ctx =
+  let params = Univ_map.find_exn ctx Ops.params in
+  let%bind root, (p, r') = M.any_filter g in
+  let orig_schema = Schema.schema (to_annot g r') in
 
-(*   (\* Select the comparisons which have a parameter on exactly one side and *)
-(*      partition by the unparameterized side of the comparison. *\) *)
-(*   let cmps, rest = *)
-(*     Pred.conjuncts p *)
-(*     |> List.partition_map ~f:(function *)
-(*          | (`Binop (Binop.Gt, p1, p2) | `Binop (Lt, p2, p1)) as p -> *)
-(*              if *)
-(*                is_candidate_key params p1 orig_schema *)
-(*                && is_candidate_match p2 orig_schema *)
-(*              then First (p2, (`Lt, p1)) *)
-(*              else if *)
-(*                is_candidate_key params p2 orig_schema *)
-(*                && is_candidate_match p1 orig_schema *)
-(*              then First (p1, (`Gt, p2)) *)
-(*              else Second p *)
-(*          | (`Binop (Ge, p1, p2) | `Binop (Le, p2, p1)) as p -> *)
-(*              if *)
-(*                is_candidate_key params p1 orig_schema *)
-(*                && is_candidate_match p2 orig_schema *)
-(*              then First (p2, (`Le, p1)) *)
-(*              else if *)
-(*                is_candidate_key params p2 orig_schema *)
-(*                && is_candidate_match p1 orig_schema *)
-(*              then First (p1, (`Ge, p2)) *)
-(*              else Second p *)
-(*          | p -> Second p) *)
-(*   in *)
-(*   let cmps, rest' = *)
-(*     Map.of_alist_multi (module EPred) cmps *)
-(*     |> Map.to_alist *)
-(*     |> List.map ~f:(fun (key, bounds) -> *)
-(*            let lb, rest = *)
-(*              let open_lb = *)
-(*                List.filter_map bounds ~f:(fun (f, p) -> *)
-(*                    match f with `Gt -> Some p | _ -> None) *)
-(*              in *)
-(*              let closed_lb = *)
-(*                List.filter_map bounds ~f:(fun (f, p) -> *)
-(*                    match f with `Ge -> Some p | _ -> None) *)
-(*              in *)
-(*              match (List.length open_lb = 0, List.length closed_lb = 0) with *)
-(*              | true, true -> (None, []) *)
-(*              | _, true -> *)
-(*                  ( Option.map (List.reduce ~f:Pred.max_of open_lb) *)
-(*                      ~f:(fun max -> (max, `Open)), *)
-(*                    [] ) *)
-(*              | _ -> *)
-(*                  ( Option.map *)
-(*                      (List.reduce ~f:Pred.max_of (open_lb @ closed_lb)) *)
-(*                      ~f:(fun max -> (max, `Closed)), *)
-(*                    List.map open_lb ~f:(fun v -> Pred.Infix.(key > v)) ) *)
-(*            in *)
-(*            let ub, rest' = *)
-(*              let open_ub = *)
-(*                List.filter_map bounds ~f:(fun (f, p) -> *)
-(*                    match f with `Lt -> Some p | _ -> None) *)
-(*              in *)
-(*              let closed_ub = *)
-(*                List.filter_map bounds ~f:(fun (f, p) -> *)
-(*                    match f with `Le -> Some p | _ -> None) *)
-(*              in *)
-(*              match (List.length open_ub = 0, List.length closed_ub = 0) with *)
-(*              | true, true -> (None, []) *)
-(*              | _, true -> *)
-(*                  ( Option.map (List.reduce ~f:Pred.min_of open_ub) ~f:(fun p -> *)
-(*                        (p, `Open)), *)
-(*                    [] ) *)
-(*              | _ -> *)
-(*                  ( Option.map *)
-(*                      (List.reduce ~f:Pred.min_of (open_ub @ closed_ub)) *)
-(*                      ~f:(fun p -> (p, `Closed)), *)
-(*                    List.map open_ub ~f:(fun v -> Pred.Infix.(key > v)) ) *)
-(*            in *)
-(*            ((key, (lb, ub)), rest @ rest')) *)
-(*     |> List.unzip *)
-(*   in *)
-(*   let rest = rest @ List.concat rest' in *)
-(*   let key, cmps = List.unzip cmps in *)
-(*   let x = *)
-(*     let open Or_error.Let_syntax in *)
-(*     if List.is_empty key then Or_error.error_string "No candidate keys found." *)
-(*     else *)
-(*       let key = *)
-(*         List.map key ~f:(function *)
-(*           | `Name n -> n *)
-(*           | _ -> failwith "expected a name") *)
-(*       in *)
-(*       let%map all_keys = *)
-(*         Tactics_util.all_values (Select_list.of_names key) r' *)
-(*       in *)
-(*       let scope = Fresh.name Global.fresh "s%d" in *)
-(*       C.select g (Schema.to_select_list orig_schema) *)
-(*       @@ C.ordered_idx g all_keys scope *)
-(*            (C.filter g *)
-(*               (P.and_ *)
-(*               @@ List.map key ~f:(fun p -> *)
-(*                      P.(name p = name (Name.scoped scope p)))) *)
-(*               r') *)
-(*            cmps *)
-(*   in *)
-(*   match x with *)
-(*   | Ok r -> return (root, C.filter g (P.and_ rest) r) *)
-(*   | Error err -> *)
-(*       Logs.warn (fun m -> m "Elim-cmp: %a" Error.pp err); *)
-(*       empty *)
+  (* Select the comparisons which have a parameter on exactly one side and
+     partition by the unparameterized side of the comparison. *)
+  let cmps, rest =
+    Pred.conjuncts p
+    |> List.partition_map ~f:(function
+         | (`Binop (Binop.Gt, p1, p2) | `Binop (Lt, p2, p1)) as p ->
+             if
+               is_candidate_key params p1 orig_schema
+               && is_candidate_match p2 orig_schema
+             then First (p2, (`Lt, p1))
+             else if
+               is_candidate_key params p2 orig_schema
+               && is_candidate_match p1 orig_schema
+             then First (p1, (`Gt, p2))
+             else Second p
+         | (`Binop (Ge, p1, p2) | `Binop (Le, p2, p1)) as p ->
+             if
+               is_candidate_key params p1 orig_schema
+               && is_candidate_match p2 orig_schema
+             then First (p2, (`Le, p1))
+             else if
+               is_candidate_key params p2 orig_schema
+               && is_candidate_match p1 orig_schema
+             then First (p1, (`Ge, p2))
+             else Second p
+         | p -> Second p)
+  in
+  let cmps, rest' =
+    Map.of_alist_multi (module EPred) cmps
+    |> Map.to_alist
+    |> List.map ~f:(fun (key, bounds) ->
+           let lb, rest =
+             let open_lb =
+               List.filter_map bounds ~f:(fun (f, p) ->
+                   match f with `Gt -> Some p | _ -> None)
+             in
+             let closed_lb =
+               List.filter_map bounds ~f:(fun (f, p) ->
+                   match f with `Ge -> Some p | _ -> None)
+             in
+             match (List.length open_lb = 0, List.length closed_lb = 0) with
+             | true, true -> (None, [])
+             | _, true ->
+                 ( Option.map (List.reduce ~f:Pred.max_of open_lb)
+                     ~f:(fun max -> (max, `Open)),
+                   [] )
+             | _ ->
+                 ( Option.map
+                     (List.reduce ~f:Pred.max_of (open_lb @ closed_lb))
+                     ~f:(fun max -> (max, `Closed)),
+                   List.map open_lb ~f:(fun v -> Pred.Infix.(key > v)) )
+           in
+           let ub, rest' =
+             let open_ub =
+               List.filter_map bounds ~f:(fun (f, p) ->
+                   match f with `Lt -> Some p | _ -> None)
+             in
+             let closed_ub =
+               List.filter_map bounds ~f:(fun (f, p) ->
+                   match f with `Le -> Some p | _ -> None)
+             in
+             match (List.length open_ub = 0, List.length closed_ub = 0) with
+             | true, true -> (None, [])
+             | _, true ->
+                 ( Option.map (List.reduce ~f:Pred.min_of open_ub) ~f:(fun p ->
+                       (p, `Open)),
+                   [] )
+             | _ ->
+                 ( Option.map
+                     (List.reduce ~f:Pred.min_of (open_ub @ closed_ub))
+                     ~f:(fun p -> (p, `Closed)),
+                   List.map open_ub ~f:(fun v -> Pred.Infix.(key > v)) )
+           in
+           ((key, (lb, ub)), rest @ rest'))
+    |> List.unzip
+  in
+  let rest = rest @ List.concat rest' in
+  let key, cmps = List.unzip cmps in
+  let x =
+    let open Or_error.Let_syntax in
+    if List.is_empty key then Or_error.error_string "No candidate keys found."
+    else
+      let key =
+        List.map key ~f:(function
+          | `Name n -> n
+          | _ -> failwith "expected a name")
+      in
+      let%map all_keys =
+        Tactics_util.all_values_precise (Select_list.of_names key)
+          (to_annot g r')
+      in
+      let scope = Fresh.name Global.fresh "s%d" in
+      C.select g (Schema.to_select_list orig_schema)
+      @@ C.ordered_idx g
+           {
+             oi_keys = of_annot g all_keys;
+             oi_scope = scope;
+             oi_values =
+               C.filter g
+                 (P.and_
+                 @@ List.map key ~f:(fun p ->
+                        P.(name p = name (Name.scoped scope p))))
+                 r';
+             oi_key_layout = None;
+             oi_lookup = cmps;
+           }
+  in
+  match x with
+  | Ok r -> return (root, C.filter g (P.and_ rest) r)
+  | Error err ->
+      Logs.warn (fun m -> m "Elim-cmp: %a" Error.pp err);
+      empty
 
-(* let elim_cmp_filter = Ops.register elim_cmp_filter "elim-cmp-filter" *)
+let elim_cmp_filter = Ops.register elim_cmp_filter "elim-cmp-filter"
 
 (* (\** Eliminate a filter with one parameter and one attribute. *\) *)
 (* let elim_simple_filter r = *)

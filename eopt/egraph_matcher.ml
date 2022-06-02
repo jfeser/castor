@@ -46,3 +46,4 @@ module C = struct
 end
 
 let to_annot = G.choose_exn
+let of_annot = G.add_annot
