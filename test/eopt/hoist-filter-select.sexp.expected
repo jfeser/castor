@@ -1,0 +1,7 @@
+$4:
+  select([a, b], filter((a = b), atuple([ascalar(0 as a), ascalar(0 as b)], cross)))
+  filter((a = b), select([a, b], atuple([ascalar(0 as a), ascalar(0 as b)], cross)))
+  
+$5:
+  select([a], filter((a = b), atuple([ascalar(0 as a), ascalar(0 as b)], cross)))
+  

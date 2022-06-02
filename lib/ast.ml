@@ -48,7 +48,7 @@ type ('p, 'r) ppred =
   | `First of 'r
   | `Exists of 'r
   | `Substring of 'p * 'p * 'p ]
-[@@deriving compare, equal, hash, sexp]
+[@@deriving compare, equal, hash, sexp, variants]
 
 type 'r pred = ('r pred, 'r) ppred [@@deriving compare, equal, hash, sexp]
 

@@ -3,22 +3,13 @@ open Collections
 open Ast
 module V = Visitors
 
-let pred_free_open free p =
-  let singleton = Set.singleton (module Name) in
-  let visitor =
-    object (self : 'a)
-      inherit [_] V.reduce as super
-      inherit [_] Util.set_monoid (module Name)
-      method visit_subquery r = free r
-      method! visit_Name () n = singleton n
-
-      method! visit_pred () p =
-        match p with
-        | `Exists r | `First r -> self#visit_subquery r
-        | _ -> super#visit_pred () p
-    end
-  in
-  visitor#visit_pred () p
+let rec pred_free_open free = function
+  | `Name n -> Set.singleton (module Name) n
+  | `Exists r | `First r -> free r
+  | p ->
+      V.Reduce.pred
+        (Set.empty (module Name))
+        Set.union free (pred_free_open free) p
 
 let empty = Set.empty (module Name)
 let of_list = Set.of_list (module Name)
@@ -99,4 +90,3 @@ let annotate r =
         method free = x
       end)
     free_open r
-

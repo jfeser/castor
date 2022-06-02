@@ -9,43 +9,44 @@ include Comparator.S with type t := t
 module O : Comparable.Infix with type t := t
 
 module Infix : sig
-  val name : Name.t -> 'a annot pred
-  val name_s : string -> 'a annot pred
-  val int : int -> 'a annot pred
-  val fixed : Fixed_point.t -> 'a annot pred
-  val date : Date.t -> 'a annot pred
-  val bool : bool -> 'a annot pred
-  val string : string -> 'a annot pred
-  val null : Prim_type.t option -> 'a annot pred
-  val not : 'a annot pred -> 'a annot pred
-  val day : 'a annot pred -> 'a annot pred
-  val month : 'a annot pred -> 'a annot pred
-  val year : 'a annot pred -> 'a annot pred
-  val strlen : 'a annot pred -> 'a annot pred
-  val extract_y : 'a annot pred -> 'a annot pred
-  val extract_m : 'a annot pred -> 'a annot pred
-  val extract_d : 'a annot pred -> 'a annot pred
-  val ( + ) : 'a annot pred -> 'a annot pred -> 'a annot pred
-  val ( - ) : 'a annot pred -> 'a annot pred -> 'a annot pred
-  val ( / ) : 'a annot pred -> 'a annot pred -> 'a annot pred
-  val ( * ) : 'a annot pred -> 'a annot pred -> 'a annot pred
-  val ( = ) : 'a annot pred -> 'a annot pred -> 'a annot pred
-  val ( < ) : 'a annot pred -> 'a annot pred -> 'a annot pred
-  val ( <= ) : 'a annot pred -> 'a annot pred -> 'a annot pred
-  val ( > ) : 'a annot pred -> 'a annot pred -> 'a annot pred
-  val ( >= ) : 'a annot pred -> 'a annot pred -> 'a annot pred
-  val ( && ) : 'a annot pred -> 'a annot pred -> 'a annot pred
-  val ( || ) : 'a annot pred -> 'a annot pred -> 'a annot pred
-  val ( mod ) : 'a annot pred -> 'a annot pred -> 'a annot pred
-  val strpos : 'a annot pred -> 'a annot pred -> 'a annot pred
-  val exists : 'a annot -> 'a annot pred
-  val count : 'a annot pred
+  val name : Name.t -> _ pred
+  val name_s : string -> _ pred
+  val int : int -> _ pred
+  val fixed : Fixed_point.t -> _ pred
+  val date : Date.t -> _ pred
+  val bool : bool -> _ pred
+  val string : string -> _ pred
+  val null : Prim_type.t option -> _ pred
+  val not : 'a pred -> 'a pred
+  val day : 'a pred -> 'a pred
+  val month : 'a pred -> 'a pred
+  val year : 'a pred -> 'a pred
+  val strlen : 'a pred -> 'a pred
+  val extract_y : 'a pred -> 'a pred
+  val extract_m : 'a pred -> 'a pred
+  val extract_d : 'a pred -> 'a pred
+  val ( + ) : 'a pred -> 'a pred -> 'a pred
+  val ( - ) : 'a pred -> 'a pred -> 'a pred
+  val ( / ) : 'a pred -> 'a pred -> 'a pred
+  val ( * ) : 'a pred -> 'a pred -> 'a pred
+  val ( = ) : 'a pred -> 'a pred -> 'a pred
+  val ( < ) : 'a pred -> 'a pred -> 'a pred
+  val ( <= ) : 'a pred -> 'a pred -> 'a pred
+  val ( > ) : 'a pred -> 'a pred -> 'a pred
+  val ( >= ) : 'a pred -> 'a pred -> 'a pred
+  val ( && ) : 'a pred -> 'a pred -> 'a pred
+  val ( || ) : 'a pred -> 'a pred -> 'a pred
+  val ( mod ) : 'a pred -> 'a pred -> 'a pred
+  val and_ : 'a pred list -> 'a pred
+  val strpos : 'a pred -> 'a pred -> 'a pred
+  val exists : 'a -> 'a pred
+  val count : _ pred
 end
 
 val pp : 'a annot pred Fmt.t
 val of_lexbuf_exn : Lexing.lexbuf -> t
 val of_string_exn : string -> t
-val kind : _ annot pred -> [ `Agg | `Scalar | `Window ]
+val kind : _ pred -> [ `Agg | `Scalar | `Window ]
 val to_type : 'a annot pred -> Prim_type.t
 val eqs : 'a annot pred -> (Name.t * Name.t) list
 
@@ -59,23 +60,23 @@ val collect_aggs :
 
 val simplify : t -> t
 
-val scoped : Name.t list -> string -> 'a annot pred -> 'a annot pred
+val scoped : Name.t list -> string -> 'a pred -> 'a pred
 (** Apply a scope to each occurrence of a name in the list. Does not descend into
    subqueries. *)
 
-val unscoped : String.t -> 'a annot pred -> 'a annot pred
-val subst : 'a annot pred Map.M(Name).t -> 'a annot pred -> 'a annot pred
+val unscoped : String.t -> 'a pred -> 'a pred
+val subst : 'a pred Map.M(Name).t -> 'a pred -> 'a pred
 
 val subst_tree :
   ('a annot pred, 'a annot pred, _) Map.t -> 'a annot pred -> 'a annot pred
 
-val conjoin : 'a annot pred list -> 'a annot pred
-val conjuncts : 'a annot pred -> 'a annot pred list
-val disjuncts : 'a annot pred -> 'a annot pred list
-val sum_exn : 'a annot pred list -> 'a annot pred
-val pseudo_bool : 'a annot pred -> 'a annot pred
-val min_of : 'a annot pred -> 'a annot pred -> 'a annot pred
-val max_of : 'a annot pred -> 'a annot pred -> 'a annot pred
+val conjoin : 'a pred list -> 'a pred
+val conjuncts : 'a pred -> 'a pred list
+val disjuncts : 'a pred -> 'a pred list
+val sum_exn : 'a pred list -> 'a pred
+val pseudo_bool : 'a pred -> 'a pred
+val min_of : 'a pred -> 'a pred -> 'a pred
+val max_of : 'a pred -> 'a pred -> 'a pred
 val to_nnf : 'a annot pred -> 'a annot pred
 val to_static : params:Set.M(Name).t -> t -> t
 val strip_meta : < .. > annot pred -> t

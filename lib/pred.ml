@@ -16,6 +16,11 @@ include Comparator.Make (T)
 module C = Comparable.Make (T)
 module O : Comparable.Infix with type t := t = C
 
+let rec conjoin = function
+  | [] -> `Bool true
+  | [ p ] -> p
+  | p :: ps -> `Binop (Binop.And, p, conjoin ps)
+
 module Infix = struct
   open Ast.Unop
   open Ast.Binop
@@ -49,6 +54,7 @@ module Infix = struct
   let ( >= ) p p' = binop Ge p p'
   let ( && ) p p' = binop And p p'
   let ( || ) p p' = binop Or p p'
+  let and_ = conjoin
   let ( mod ) p p' = binop Mod p p'
   let strpos p p' = binop Strpos p p'
   let exists r = `Exists r
@@ -134,25 +140,14 @@ let equiv p =
       Union_find.union c c';
       acc)
 
-let kind p =
-  let visitor =
-    object
-      inherit [_] V.reduce
-      inherit [_] Util.disj_monoid
-      method! visit_Exists () _ = false
-      method! visit_First () _ = false
-      method! visit_Sum () _ = true
-      method! visit_Avg () _ = true
-      method! visit_Min () _ = true
-      method! visit_Max () _ = true
-      method! visit_Count () = true
-    end
-  in
-  match p with
-  | `Row_number -> `Window
-  | _ -> if visitor#visit_pred () p then `Agg else `Scalar
+let rec contains_agg = function
+  | `Sum _ | `Avg _ | `Min _ | `Max _ | `Count -> true
+  | `Exists _ | `First _ -> false
+  | p -> V.Reduce.pred false ( || ) (fun _ -> false) contains_agg p
 
-let%test "" = Poly.(kind `Row_number = `Window)
+let kind = function
+  | `Row_number -> `Window
+  | p -> if contains_agg p then `Agg else `Scalar
 
 let of_lexbuf_exn lexbuf =
   try Ralgebra_parser.expr_eof Ralgebra_lexer.token lexbuf
@@ -162,17 +157,9 @@ let of_lexbuf_exn lexbuf =
 
 let of_string_exn s = of_lexbuf_exn (Lexing.from_string s)
 
-class ['s, 'c] subst_visitor ctx =
-  object
-    inherit ['s] V.endo
-
-    method! visit_Name (_ : 'c) this v =
-      match Map.find ctx v with Some x -> x | None -> this
-  end
-
-let subst ctx p =
-  let v = new subst_visitor ctx in
-  v#visit_pred () p
+let rec subst ctx = function
+  | `Name n as this -> ( match Map.find ctx n with Some x -> x | None -> this)
+  | p -> V.Map.pred Fun.id (subst ctx) p
 
 let subst_tree ctx p =
   let v =
@@ -192,21 +179,15 @@ let scoped names scope p =
     List.map names ~f:(fun n -> (n, `Name (Name.scoped scope n)))
     |> Map.of_alist_exn (module Name)
   in
-  (new subst_visitor ctx)#visit_pred () p
+  subst ctx p
 
-let unscoped scope p =
-  let v =
-    object
-      inherit [_] V.endo
-
-      method! visit_Name _ this n =
-        match Name.rel n with
-        | Some s ->
-            if String.(s = scope) then `Name (Name.copy ~scope:None n) else this
-        | None -> this
-    end
-  in
-  v#visit_pred () p
+let rec unscoped scope = function
+  | `Name n as this -> (
+      match Name.rel n with
+      | Some s ->
+          if String.(s = scope) then `Name (Name.copy ~scope:None n) else this
+      | None -> this)
+  | p -> V.Map.pred Fun.id (unscoped scope) p
 
 let to_nnf p =
   let visitor =

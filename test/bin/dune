@@ -21,3 +21,11 @@
  (preprocess
   (pps ppx_sexp_conv ppx_let))
  (modules Type))
+
+(executable
+ (name eopt)
+ (libraries castor castor_test castor_eopt core core_unix.command_unix)
+ (flags -open Core)
+ (preprocess
+  (pps ppx_sexp_conv ppx_let))
+ (modules Eopt))

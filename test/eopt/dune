@@ -1,0 +1,10 @@
+(include dune.inc)
+
+(rule
+ (alias runtest)
+ (action (with-stdout-to dune.inc.gen (run ./gen_dune.py %{deps})))
+ (deps (glob_files *.sexp)))
+
+(rule
+ (alias runtest)
+ (action (diff dune.inc dune.inc.gen)))

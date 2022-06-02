@@ -1,0 +1,8 @@
+$1:
+  filter((a = b), $2)
+  filter(((a = b) && ((b = c) && (c = d))), r)
+  
+$2:
+  filter((b = c), filter((c = d), r))
+  filter(((b = c) && (c = d)), r)
+  

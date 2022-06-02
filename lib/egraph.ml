@@ -5,19 +5,21 @@ module H = Hashtbl
 (** Nearly direct port of https://github.com/egraphs-good/egg/blob/main/src/eclass.rs *)
 
 module Id = struct
-  type t = { id : int; canon : int Union_find.t [@ignore] }
-  [@@deriving compare, equal, hash]
+  module T = struct
+    type t = { id : int; canon : int Union_find.t [@ignore] }
+    [@@deriving compare, equal, hash]
 
-  let sexp_of_t { id; canon } =
-    let canon = Union_find.get canon in
-    if id = canon then [%sexp_of: int] id
-    else [%message (id : int) (canon : int)]
+    let sexp_of_t x = [%sexp_of: int] x.id
+  end
+
+  include T
+  include Comparator.Make (T)
 end
 
 module type LANG = sig
   type 'a t [@@deriving compare, hash, sexp_of]
 
-  val pp : 'a t Fmt.t
+  val pp : 'a Fmt.t -> 'a t Fmt.t
   val match_func : 'a t -> 'b t -> bool
   val args : 'a t -> 'a list
   val map_args : ('a -> 'b) -> 'a t -> 'b t
@@ -52,7 +54,10 @@ module type EGRAPH = sig
   val rebuild : t -> unit
   val classes : t -> Id.t Iter.t
   val enodes : t -> Id.t -> ENode.t Iter.t
+  val n_enodes : t -> int
+  val n_classes : t -> int
   val pp_dot : t Fmt.t
+  val pp : t Fmt.t
 
   type pat = [ `Apply of pat lang | `Var of int ]
 
@@ -62,12 +67,17 @@ end
 
 module Make (L : LANG) (A : ANALYSIS with type 'a lang := 'a L.t) = struct
   module ENode = struct
-    type t = Id.t L.t [@@deriving compare, hash, sexp_of]
+    module T = struct
+      type t = Id.t L.t [@@deriving compare, hash, sexp_of]
+    end
+
+    include T
+    include Comparator.Make (T)
   end
 
   module EClass = struct
     type t = {
-      nodes : unit H.M(ENode).t;
+      mutable nodes : Set.M(ENode).t;
       parents : Id.t H.M(ENode).t;
       mutable data : A.t;
     }
@@ -76,48 +86,43 @@ module Make (L : LANG) (A : ANALYSIS with type 'a lang := 'a L.t) = struct
     let create_singleton node =
       let class_ =
         {
-          nodes = H.create (module ENode);
+          nodes = Set.empty (module ENode);
           parents = H.create (module ENode);
           data = A.of_enode node;
         }
       in
-      H.set class_.nodes ~key:node ~data:();
+      class_.nodes <- Set.add class_.nodes node;
       class_
   end
 
   type t = {
     memo : Id.t H.M(ENode).t;
-    classes : EClass.t H.M(Id).t;
+    mutable classes : EClass.t Map.M(Id).t;
     mutable worklist : (ENode.t * Id.t) list;
     mutable analysis_worklist : (ENode.t * Id.t) list;
     mutable max_id : int;
   }
-
-  let sexp_of_t g =
-    [%message
-      (g.memo : Id.t H.M(ENode).t)
-        (g.classes : EClass.t H.M(Id).t)
-        (g.worklist : (ENode.t * Id.t) list)
-        (g.max_id : int)]
+  [@@deriving sexp_of]
 
   let pp_dot fmt g =
     let pp_id fmt (id : Id.t) = Fmt.pf fmt "c%d" id.id in
     Fmt.pf fmt "@[<v>digraph {@ ";
-    H.iteri g.classes ~f:(fun ~key ~data ->
+    Map.iteri g.classes ~f:(fun ~key ~data ->
         Fmt.pf fmt "subgraph cluster_%d {@ label=\"Class %d\"@ " key.id key.id;
         Fmt.pf fmt "%a [shape=point];@ " pp_id key;
 
-        let keys_iter f = H.iter_keys data.nodes ~f in
+        let keys_iter f = Set.iter data.nodes ~f in
         Iter.iteri
           (fun eid enode ->
             let enode_dot_id = sprintf "n%d_%d" key.id eid in
-            Fmt.pf fmt "%s [label=\"@[<h>%a@]\"];@ " enode_dot_id L.pp enode)
+            Fmt.pf fmt "%s [label=\"@[<h>%a@]\"];@ " enode_dot_id (L.pp Fmt.nop)
+              enode)
           keys_iter;
 
         Fmt.pf fmt "}@,");
 
-    H.iteri g.classes ~f:(fun ~key ~data ->
-        let keys_iter f = H.iter_keys data.nodes ~f in
+    Map.iteri g.classes ~f:(fun ~key ~data ->
+        let keys_iter f = Set.iter data.nodes ~f in
         Iter.iteri
           (fun eid enode ->
             let enode_dot_id = sprintf "n%d_%d" key.id eid in
@@ -128,19 +133,46 @@ module Make (L : LANG) (A : ANALYSIS with type 'a lang := 'a L.t) = struct
 
     Fmt.pf fmt "}@,@]"
 
+  let pp fmt g =
+    let roots =
+      List.fold (Map.data g.classes)
+        ~init:(Set.of_list (module Id) (Map.keys g.classes))
+        ~f:(fun roots eclass ->
+          Set.fold eclass.nodes ~init:roots ~f:(fun roots enode ->
+              L.args enode |> List.fold_left ~init:roots ~f:Set.remove))
+    in
+
+    let rec pp_class_ref fmt id =
+      let eclass = Map.find_exn g.classes id in
+      if Set.length eclass.nodes = 1 then
+        let enode = Set.choose_exn eclass.nodes in
+        Fmt.pf fmt "%a" (L.pp pp_class_ref) enode
+      else Fmt.pf fmt "$%d" id.id
+    in
+
+    Fmt.pf fmt "@[<v>";
+    Map.iteri g.classes ~f:(fun ~key ~data ->
+        if Set.length data.nodes > 1 || Set.mem roots key then (
+          Fmt.pf fmt "@[<v 2>";
+          Fmt.pf fmt "$%d:@," key.id;
+          Set.iter data.nodes ~f:(Fmt.pf fmt "@[<h>%a@]@," (L.pp pp_class_ref));
+          Fmt.pf fmt "@]@,"));
+    Fmt.pf fmt "@]"
+
   let create () =
     {
       memo = H.create (module ENode);
-      classes = H.create (module Id);
+      classes = Map.empty (module Id);
       worklist = [];
       analysis_worklist = [];
       max_id = 0;
     }
 
-  let classes g f = H.iter_keys g.classes ~f
+  let n_enodes g = H.length g.memo
+  let n_classes g = Map.length g.classes
+  let classes g f = Map.iter_keys g.classes ~f
   let find (id : Id.t) = { id with id = Union_find.get id.Id.canon }
-  let enodes g id f = H.iter_keys (H.find_exn g.classes (find id)).nodes ~f
-  let all_enodes g f = H.iter_keys g.memo ~f
+  let enodes g id f = Set.iter (Map.find_exn g.classes (find id)).nodes ~f
   let eclass_id_equiv id1 id2 = [%equal: Id.t] (find id1) (find id2)
 
   let enode_equiv g n1 n2 =
@@ -159,11 +191,12 @@ module Make (L : LANG) (A : ANALYSIS with type 'a lang := 'a L.t) = struct
         in
         g.max_id <- g.max_id + 1;
 
-        H.add_exn g.classes ~key:eclass_id ~data:(EClass.create_singleton n);
+        g.classes <-
+          Map.add_exn g.classes ~key:eclass_id ~data:(EClass.create_singleton n);
 
         L.args n
         |> List.iter ~f:(fun arg_eclass_id ->
-               let arg_eclass = H.find_exn g.classes arg_eclass_id in
+               let arg_eclass = Map.find_exn g.classes arg_eclass_id in
                H.add_exn arg_eclass.parents ~key:n ~data:eclass_id);
 
         H.set g.memo ~key:n ~data:eclass_id;
@@ -176,17 +209,16 @@ module Make (L : LANG) (A : ANALYSIS with type 'a lang := 'a L.t) = struct
     else
       (* use the class with more parents as the canonical class *)
       let class1, id2, class2 =
-        let class1 = H.find_exn g.classes id1
-        and class2 = H.find_exn g.classes id2 in
+        let class1 = Map.find_exn g.classes id1
+        and class2 = Map.find_exn g.classes id2 in
         if H.length class1.parents < H.length class2.parents then
           (class2, id1, class1)
         else (class1, id2, class2)
       in
 
       (* class 2 gets removed and merged into class 1 *)
-      H.remove g.classes id2;
-      H.merge_into ~src:class2.nodes ~dst:class1.nodes ~f:(fun ~key:_ _ _ ->
-          Set_to ());
+      g.classes <- Map.remove g.classes id2;
+      class1.nodes <- Set.union class1.nodes class2.nodes;
       H.merge_into ~src:class2.parents ~dst:class2.parents ~f:(fun ~key pid1 ->
         function
         | Some pid2 ->
@@ -232,7 +264,7 @@ module Make (L : LANG) (A : ANALYSIS with type 'a lang := 'a L.t) = struct
       g.analysis_worklist <- [];
       List.iter analysis_worklist ~f:(fun (enode, eclass_id) ->
           let eclass_id = find eclass_id in
-          let class_ = H.find_exn g.classes eclass_id in
+          let class_ = Map.find_exn g.classes eclass_id in
           let class_data = class_.data in
           class_.data <- A.merge class_data (A.of_enode enode);
           if not ([%equal: A.t] class_.data class_data) then
@@ -241,11 +273,8 @@ module Make (L : LANG) (A : ANALYSIS with type 'a lang := 'a L.t) = struct
       process_unions g)
 
   let rebuild_classes g =
-    H.iter g.classes ~f:(fun eclass ->
-        let enodes = H.keys eclass.nodes in
-        H.clear eclass.nodes;
-        List.iter enodes ~f:(fun enode ->
-            ignore (H.add eclass.nodes ~key:(lookup enode) ~data:())))
+    Map.iter g.classes ~f:(fun eclass ->
+        eclass.nodes <- Set.map (module ENode) eclass.nodes ~f:lookup)
 
   let rebuild g =
     process_unions g;
@@ -255,9 +284,9 @@ module Make (L : LANG) (A : ANALYSIS with type 'a lang := 'a L.t) = struct
     match p with
     | `Var v -> [ Map.singleton (module Int) v id ]
     | `Apply pat ->
-        let eclass = H.find_exn g.classes id in
+        let eclass = Map.find_exn g.classes id in
         let matching_enodes =
-          H.keys eclass.nodes |> List.filter ~f:(L.match_func pat)
+          Set.filter eclass.nodes ~f:(L.match_func pat) |> Set.to_list
         in
         List.concat_map matching_enodes ~f:(fun enode ->
             List.map2_exn (L.args pat) (L.args enode) ~f:(search_eclass g)
@@ -273,7 +302,7 @@ module Make (L : LANG) (A : ANALYSIS with type 'a lang := 'a L.t) = struct
   type pat = [ `Apply of pat L.t | `Var of int ]
 
   let search g p =
-    H.keys g.classes
+    Map.keys g.classes
     |> List.filter_map ~f:(fun id ->
            let matches = search_eclass g p id in
            if List.is_empty matches then None else Some (id, matches))
@@ -303,40 +332,37 @@ struct
   let map_args f x = { x with args = List.map x.args ~f }
   let args x = x.args
   let match_func x y = [%equal: S.t] x.func y.func
-  let pp fmt x = Fmt.pf fmt "%a" S.pp x.func
+
+  let pp pp_a fmt x =
+    Fmt.pf fmt "%a(%a)" S.pp x.func (Fmt.list ~sep:Fmt.comma pp_a) x.args
 end
 
 module AstLang = struct
-  type 'a t = Query of ('a, 'a) Ast.query | Pred of ('a, 'a) Ast.ppred
-  [@@deriving compare, hash, sexp_of]
+  type 'a t = ('a Ast.pred, 'a) Ast.query [@@deriving compare, hash, sexp_of]
 
-  let pp fmt = function
-    | Query q -> Abslayout_pp.pp_query_open Fmt.nop Fmt.nop fmt q
-    | Pred p -> Abslayout_pp.pp_pred_open Fmt.nop Fmt.nop fmt p
+  let rec pp : 'a Fmt.t -> 'a t Fmt.t =
+   fun pp_a fmt -> Abslayout_pp.pp_query_open pp_a (pp_pred pp_a) fmt
 
-  let map_args f = function
-    | Query q -> Query (V.Map.query f f q)
-    | Pred p -> Pred (V.Map.pred f f p)
+  and pp_pred pp_a fmt = Abslayout_pp.pp_pred_open pp_a (pp_pred pp_a) fmt
 
-  let args x =
-    Iter.to_list (fun f ->
-        match x with
-        | Query q -> V.Iter.query f f q
-        | Pred p -> V.Iter.pred f f p)
+  let rec map_args : ('a -> 'b) -> 'a t -> 'b t =
+   fun f q -> V.Map.query f (map_args_pred f) q
 
-  let match_func x y =
-    match (x, y) with
-    | Query q, Query q' -> (
-        try
-          ignore (V.Map2.query () () q q');
-          true
-        with V.Map2.Mismatch -> false)
-    | Pred p, Pred p' -> (
-        try
-          ignore (V.Map2.pred () () p p');
-          true
-        with V.Map2.Mismatch -> false)
-    | _ -> false
+  and map_args_pred f p = V.Map.pred f (map_args_pred f) p
+
+  let rec args_iter : ('a -> unit) -> 'a t -> unit =
+   fun f x -> V.Iter.query f (pred_args_iter f) x
+
+  and pred_args_iter : ('a -> unit) -> 'a Ast.pred -> unit =
+   fun f x -> V.Iter.pred f (pred_args_iter f) x
+
+  let args : 'a t -> 'a list = fun x -> Iter.to_list (fun f -> args_iter f x)
+
+  let match_func q q' =
+    try
+      ignore (V.Map2.query () () q q');
+      true
+    with V.Map2.Mismatch -> false
 end
 
 module UnitAnalysis = struct
@@ -351,35 +377,20 @@ module AstEGraph = struct
 
   let rec add_query g q =
     let q' = V.Map.query (add_annot g) (add_pred g) q in
-    add g (Query q')
+    add g q'
 
-  and add_pred g p =
-    let p' = V.Map.pred (add_annot g) (add_pred g) p in
-    add g (Pred p')
-
+  and add_pred g p = V.Map.pred (add_annot g) (add_pred g) p
   and add_annot g r = add_query g r.Ast.node
 
   let rec choose_exn g id =
-    let enode, _ = H.choose_exn (H.find_exn g.classes id).nodes in
-    match enode with
-    | Query q ->
-        `Annot
-          Ast.
-            {
-              node = V.Map.query (choose_annot_exn g) (choose_pred_exn g) q;
-              meta = object end;
-            }
-    | Pred p -> `Pred (V.Map.pred (choose_annot_exn g) (choose_pred_exn g) p)
+    let enode = Set.choose_exn (Map.find_exn g.classes id).nodes in
+    Ast.
+      {
+        node = V.Map.query (choose_exn g) (choose_pred_exn g) enode;
+        meta = object end;
+      }
 
-  and choose_annot_exn g id =
-    match choose_exn g id with
-    | `Annot q -> q
-    | `Pred _ -> failwith "expected query"
-
-  and choose_pred_exn g id =
-    match choose_exn g id with
-    | `Pred x -> x
-    | `Annot _ -> failwith "expected pred"
+  and choose_pred_exn g p = V.Map.pred (choose_exn g) (choose_pred_exn g) p
 end
 
 let%expect_test "" =
