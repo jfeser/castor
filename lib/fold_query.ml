@@ -2,9 +2,8 @@ open Core
 open Ast
 module V = Visitors
 open Schema
-module A = Abslayout
 module P = Pred.Infix
-module C = Constructors.Annot
+module A = Constructors.Annot
 
 [@@@warning "-17"]
 
@@ -14,7 +13,7 @@ type ('q, 'm) node =
   | Empty
   | Scalars of scalar list
   | Concat of ('q, 'm) t list
-  | For of ('q * string * ('q, 'm) t * bool)
+  | For of ('q * ('q, 'm) t * bool)
   | Let of ((string * ('q, 'm) t) list * ('q, 'm) t)
   | Var of string
 
@@ -43,8 +42,8 @@ let is_invariant ss q =
       inherit [_] Util.conj_monoid
 
       method! visit_Name () n =
-        match Name.rel n with
-        | Some s' -> not (List.mem ss s' ~equal:String.( = ))
+        match Name.scope n with
+        | Some s' -> not (List.mem ss s' ~equal:( = ))
         | None -> true
     end
   in
@@ -123,7 +122,7 @@ let to_width q =
   visitor#visit_t () q
 
 let total_order_key q =
-  let native_order = A.order_of q in
+  let native_order = Abslayout.order_of q in
   let total_order = List.map (schema q) ~f:(fun n -> (`Name n, Asc)) in
   native_order @ total_order
 
@@ -132,27 +131,26 @@ let to_scalars rs =
       match t.Ast.node with AScalar p -> Some p | _ -> None)
   |> Option.all
 
-let of_list of_ralgebra q { l_keys = q1; l_scope = scope; l_values = q2 } =
+let of_list of_ralgebra q { l_keys = q1; l_values = q2 } =
   let q1 =
     let order_key = total_order_key q1 in
-    C.order_by order_key q1
+    A.order_by order_key q1
   in
-  for_ q (q1, scope, of_ralgebra q2, false)
+  for_ q (q1, of_ralgebra q2, false)
 
 let of_hash_idx of_ralgebra q h =
   let q1 =
     let order_key = total_order_key h.hi_keys in
-    C.order_by order_key (C.dedup h.hi_keys)
+    A.order_by order_key (A.dedup h.hi_keys)
   in
-  for_ q (q1, h.hi_scope, of_ralgebra h.hi_values, true)
+  for_ q (q1, of_ralgebra h.hi_values, true)
 
-let of_ordered_idx of_ralgebra q
-    { oi_keys = q1; oi_values = q2; oi_scope = scope; _ } =
+let of_ordered_idx of_ralgebra q { oi_keys = q1; oi_values = q2; _ } =
   let q1 =
     let order_key = total_order_key q1 in
-    C.order_by order_key (C.dedup q1)
+    A.order_by order_key (A.dedup q1)
   in
-  for_ q (q1, scope, of_ralgebra q2, true)
+  for_ q (q1, of_ralgebra q2, true)
 
 (** Convert a query to the simplified fold query AST. *)
 let rec of_ralgebra q =
@@ -207,7 +205,7 @@ let rec to_ralgebra q =
   match q.node with
   | Var _ -> A.scalar (`Int 0) (Fresh.name Global.fresh "var%d")
   | Let (binds, q) -> to_ralgebra (to_concat binds q)
-  | For (q1, scope, q2, distinct) ->
+  | For (q1, q2, distinct) ->
       (* Extend the lhs query with a row number. Even if this query emits
          duplicate results, the row number will ensure that the duplicates
          remain distinct. *)
@@ -227,7 +225,7 @@ let rec to_ralgebra q =
       let o2, q2 = to_ralgebra q2 |> unwrap_order in
       (* Generate a renaming so that the upward exposed names are fresh. *)
       let sctx =
-        (schema q1 |> Schema.scoped scope) @ schema q2
+        Schema.zero (schema q1) @ schema q2
         |> List.map ~f:(fun n ->
                let n' = Fresh.name Global.fresh "x%d" in
                (n, n'))
@@ -246,7 +244,7 @@ let rec to_ralgebra q =
         in
         List.map (o1 @ o2) ~f:(fun (p, o) -> (Pred.subst sctx p, o))
       in
-      A.order_by order @@ A.dep_join q1 scope @@ A.select slist q2
+      A.order_by order @@ A.dep_join q1 @@ A.select slist q2
   | Concat qs ->
       let counter_name = Fresh.name Global.fresh "counter%d" in
       let orders, qs =
@@ -294,7 +292,7 @@ let rec width' q =
   match q.node with
   | Empty -> 0
   | Var _ -> 1
-  | For (n, _, q2, distinct) -> (if distinct then 0 else 1) + n + width' q2
+  | For (n, q2, distinct) -> (if distinct then 0 else 1) + n + width' q2
   | Scalars ps -> List.length ps
   | Concat qs -> 1 + List.sum (module Int) qs ~f:width'
   | Let (binds, q) -> width' (to_concat binds q)

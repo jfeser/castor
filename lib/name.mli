@@ -1,26 +1,23 @@
 open Core
 
-type t [@@deriving compare, equal, hash, sexp]
+type name = Simple of string | Bound of int * string | Attr of string * string
+[@@deriving compare, equal, hash, sexp]
+
+type t = { name : name; type_ : Prim_type.t option }
+[@@deriving compare, equal, hash, sexp]
 
 include Comparator.S with type t := t
 module O : Comparable.Infix with type t := t
 
-val create : ?scope:string -> ?type_:Prim_type.t -> string -> t
-
-val copy :
-  ?scope:string option -> ?type_:Prim_type.t option -> ?name:string -> t -> t
-
+val create : ?type_:Prim_type.t -> string -> t
 val name : t -> string
 val type_ : t -> Prim_type.t option
 val type_exn : t -> Prim_type.t
-val rel : t -> string option
-val rel_exn : t -> string
-val scope : t -> string option
-val scope_exn : t -> string
-val scoped : string -> t -> t
-val unscoped : t -> t
-val to_sql : t -> string
-val to_var : t -> string
+val incr : t -> t
+val decr : t -> t
+val zero : t -> t
 val pp : Formatter.t -> t -> unit
 val fresh : (int -> string, unit, string) format -> t
 val of_string_exn : string -> t
+val scope : t -> int option
+val unscoped : t -> t

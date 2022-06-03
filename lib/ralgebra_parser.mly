@@ -100,8 +100,8 @@ RPAREN { Ast.GroupBy (x, k, r) |> node $symbolstartpos $endpos }
   | FILTER; LPAREN; x = expr; COMMA; r = ralgebra; RPAREN
     { Ast.Filter (x, r) |> node $symbolstartpos $endpos }
 
-  | DEPJOIN; LPAREN; d_lhs = ralgebra; AS; d_alias = ID; COMMA; d_rhs = ralgebra; RPAREN
-    { Ast.DepJoin {d_lhs; d_alias; d_rhs} |> node $symbolstartpos $endpos }
+  | DEPJOIN; LPAREN; d_lhs = ralgebra; COMMA; d_rhs = ralgebra; RPAREN
+    { Ast.DepJoin {d_lhs; d_rhs} |> node $symbolstartpos $endpos }
 
   | JOIN; LPAREN; p = expr; COMMA; r1 = ralgebra; COMMA; r2 = ralgebra; RPAREN
     { Ast.Join({pred = p; r1; r2}) |> node $symbolstartpos $endpos }
@@ -124,26 +124,21 @@ RPAREN { Ast.OrderBy { key = List.map (fun (e, o) -> match o with
      Ast.AScalar { s_pred = p; s_name = n } |> node $symbolstartpos $endpos
     }
 
-  | ALIST; LPAREN; k = ralgebra; AS; s = ID; COMMA; v = ralgebra; RPAREN
+  | ALIST; LPAREN; k = ralgebra; COMMA; v = ralgebra; RPAREN
     {
-      Ast.AList { l_keys = k; l_scope = s; l_values = v } |> node $symbolstartpos $endpos
+      Ast.AList { l_keys = k; l_values = v } |> node $symbolstartpos $endpos
     }
 
   | ATUPLE; LPAREN; ls = bracket_list(ralgebra); COMMA; k = KIND; RPAREN
     { Ast.ATuple (ls, k) |> node $symbolstartpos $endpos }
 
-  | AHASHIDX; LPAREN;
-r = ralgebra; AS; s = ID; COMMA;
-x = ralgebra; COMMA;
-e = key;
-RPAREN { Ast.(AHashIdx {hi_keys= r; hi_values= x; hi_key_layout = None; hi_lookup=e; hi_scope=s}) |> node $symbolstartpos $endpos }
+  | AHASHIDX; LPAREN; r = ralgebra; COMMA; x = ralgebra; COMMA; e = key; RPAREN {
+      Ast.(AHashIdx {hi_keys= r; hi_values= x; hi_key_layout = None; hi_lookup=e}) |> node $symbolstartpos $endpos
+    }
 
-  | AORDEREDIDX; LPAREN;
-r = ralgebra; AS; s = ID; COMMA;
-x = ralgebra; COMMA;
-b = separated_list(COMMA, bound) RPAREN
+  | AORDEREDIDX; LPAREN; r = ralgebra; COMMA; x = ralgebra; COMMA; b = separated_list(COMMA, bound) RPAREN
     {
-      Ast.(AOrderedIdx ({ oi_keys = r; oi_scope = s; oi_values = x; oi_lookup = b; oi_key_layout = None }))
+      Ast.(AOrderedIdx ({ oi_keys = r; oi_values = x; oi_lookup = b; oi_key_layout = None }))
       |> node $symbolstartpos $endpos
     }
 
@@ -156,12 +151,15 @@ lower_bound: op = option(lb_op); e = expr { (e, Option.value op ~default:`Closed
 upper_bound: op = option(ub_op); e = expr { (e, Option.value op ~default:`Open) }
 bound: l = option(lower_bound); COMMA; u = option(upper_bound) { (l, u) }
 
+nname:
+  | r = INT; DOT; f = ID { Name.Bound (r, f) }
+  | r = ID; DOT; f = ID { Name.Attr (r, f) }
+  | f = ID { Name.Simple f }
+  | RANGE { Name.Simple "range" }
+
 name:
-  | r = ID; DOT; f = ID; { Name.create ~scope:r f }
-  | r = ID; DOT; f = ID; COLON; t = PRIMTYPE { Name.create ~scope:r ~type_:t f }
-  | f = ID; { Name.create f }
-  | f = ID; COLON; t = PRIMTYPE { Name.create ~type_:t f }
-  | RANGE { Name.create "range" }
+  | n = nname; { { type_ = None; name = n } }
+  | n = nname; COLON; t = PRIMTYPE { { type_ = Some t; name = n } }
 
 named_pred:
   | x = name { (`Name x, Name.name x) }

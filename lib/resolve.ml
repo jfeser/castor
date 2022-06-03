@@ -67,6 +67,8 @@ module Ctx = struct
     type t = private row list [@@deriving sexp_of]
 
     val of_list : row list -> t
+    val incr : t -> t
+    val zero : t -> t
   end = struct
     type row = { rname : N.t; rstage : [ `Run | `Compile ]; rref : Flag.t }
     [@@deriving sexp_of]
@@ -75,6 +77,8 @@ module Ctx = struct
 
     let compare_row r1 r2 = [%compare: N.t] r1.rname r2.rname
     let equal_row r1 r2 = [%equal: N.t] r1.rname r2.rname
+    let incr = List.map ~f:(fun row -> { row with rname = Name.incr row.rname })
+    let zero = List.map ~f:(fun row -> { row with rname = Name.zero row.rname })
 
     let of_list l =
       let dups =
@@ -98,14 +102,6 @@ module Ctx = struct
 
   let singleton n s =
     of_list [ { rname = n; rstage = s; rref = Flag.of_bool false } ]
-
-  let unscoped (c : t) =
-    List.map (c :> row list) ~f:(fun r -> { r with rname = N.unscoped r.rname })
-    |> of_list
-
-  let scoped s (c : t) =
-    List.map (c :> row list) ~f:(fun r -> { r with rname = N.scoped s r.rname })
-    |> of_list
 
   (** Bind c2 over c1. *)
   let bind (c1 : t) (c2 : t) =
@@ -197,7 +193,10 @@ let resolve_name ctx n =
       m.rname
   | None -> raise @@ Inner_resolve_error (`Unbound (n, Ctx.names ctx))
 
-let resolve_relation stage r = Relation.schema r |> Ctx.of_names stage
+let resolve_relation stage r =
+  Relation.schema r
+  |> List.map ~f:(fun n -> Name.{ n with name = Simple (Name.name n) })
+  |> Ctx.of_names stage
 
 let all_has_stage (ctx : Ctx.t) s =
   List.for_all (ctx :> Ctx.row list) ~f:(fun r -> Poly.(r.Ctx.rstage = s))
@@ -219,11 +218,10 @@ let rec resolve_pred resolve stage ctx =
 let resolve_hash_idx resolve stage outer_ctx h =
   let r, kctx = resolve `Compile outer_ctx h.hi_keys in
   assert (all_has_stage kctx `Compile);
-  let inner_ctx = Ctx.bind outer_ctx (Ctx.scoped h.hi_scope kctx) in
+  let inner_ctx = Ctx.bind (Ctx.incr outer_ctx) (Ctx.zero kctx) in
   let vl, vctx = resolve stage inner_ctx h.hi_values in
   let h =
     {
-      h with
       hi_keys = r;
       hi_values = vl;
       hi_key_layout =
@@ -238,14 +236,13 @@ let resolve_hash_idx resolve stage outer_ctx h =
 let resolve_ordered_idx resolve stage outer_ctx o =
   let r, kctx = resolve `Compile outer_ctx o.oi_keys in
   assert (all_has_stage kctx `Compile);
-  let inner_ctx = Ctx.bind outer_ctx (Ctx.scoped o.oi_scope kctx) in
+  let inner_ctx = Ctx.bind (Ctx.incr outer_ctx) (Ctx.zero kctx) in
   let vl, vctx = resolve stage inner_ctx o.oi_values in
   let resolve_bound b =
     Option.map ~f:(fun (p, b) -> (resolve_pred resolve stage outer_ctx p, b)) b
   in
   let o =
     {
-      o with
       oi_keys = r;
       oi_values = vl;
       oi_key_layout =
@@ -275,11 +272,11 @@ let resolve_open resolve stage outer_ctx =
       let r, value_ctx = rsame outer_ctx r in
       let pred = resolve_pred stage (Ctx.merge outer_ctx value_ctx) pred in
       (Filter (pred, r), value_ctx)
-  | DepJoin ({ d_lhs; d_rhs; d_alias } as d) ->
+  | DepJoin { d_lhs; d_rhs } ->
       let d_lhs, lctx = rsame outer_ctx d_lhs in
-      let lctx = Ctx.scoped d_alias lctx in
+      let lctx = Ctx.zero lctx in
       let d_rhs, rctx = rsame (Ctx.bind outer_ctx lctx) d_rhs in
-      (DepJoin { d with d_lhs; d_rhs }, rctx)
+      (DepJoin { d_lhs; d_rhs }, rctx)
   | Join { pred; r1; r2 } ->
       let r1, inner_ctx1 = rsame outer_ctx r1 in
       let r2, inner_ctx2 = rsame outer_ctx r2 in
@@ -309,10 +306,10 @@ let resolve_open resolve stage outer_ctx =
       let p = resolve_pred stage outer_ctx s.s_pred in
       let ctx = Ctx.of_select_list stage [ (p, s.s_name) ] in
       (AScalar { s with s_pred = p }, ctx)
-  | AList ({ l_keys = rk; l_scope = scope; l_values = rv } as l) ->
+  | AList { l_keys = rk; l_values = rv } ->
       let rk, kctx = resolve `Compile outer_ctx rk in
-      let rv, vctx = rsame (Ctx.bind outer_ctx (Ctx.scoped scope kctx)) rv in
-      (AList { l with l_keys = rk; l_values = rv }, vctx)
+      let rv, vctx = rsame (Ctx.bind (Ctx.incr outer_ctx) (Ctx.zero kctx)) rv in
+      (AList { l_keys = rk; l_values = rv }, vctx)
   | ATuple (ls, (Concat as t)) ->
       let ls, ctxs = List.map ls ~f:(rsame outer_ctx) |> List.unzip in
       (ATuple (ls, t), Ctx.concat ctxs)
@@ -331,7 +328,6 @@ let resolve_open resolve stage outer_ctx =
 
 let rec resolve stage outer_ctx r =
   let node, ctx = resolve_open resolve stage outer_ctx r.node in
-  let ctx = Ctx.unscoped ctx in
   let meta =
     object
       method outer = outer_ctx
@@ -395,4 +391,3 @@ let resolve_exn ~params r =
 
 let resolve ~params r =
   try Ok (resolve_exn ~params r) with Resolve_error (#error as x) -> Error x
-

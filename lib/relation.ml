@@ -3,7 +3,7 @@ open Core
 module T = struct
   type t = {
     r_name : string;
-    r_schema : (Name.t * Prim_type.t) list option; [@opaque]
+    r_schema : (string * Prim_type.t) list option; [@opaque]
   }
   [@@deriving compare, equal, hash, sexp]
 end
@@ -19,7 +19,8 @@ let schema_exn { r_schema; r_name } =
     r_schema
 
 let types_exn r = schema_exn r |> List.map ~f:(fun (_, t) -> t)
-let names_exn r = schema_exn r |> List.map ~f:(fun (n, _) -> n)
+(* let names_exn r = schema_exn r |> List.map ~f:(fun (n, _) -> n) *)
 
 let schema r =
-  schema_exn r |> List.map ~f:(fun (n, t) -> Name.copy ~type_:(Some t) n)
+  List.map (schema_exn r) ~f:(fun (n, t) ->
+      Name.{ type_ = Some t; name = Attr (r.r_name, n) })

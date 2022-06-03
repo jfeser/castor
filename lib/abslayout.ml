@@ -5,135 +5,9 @@ include Abslayout_pp
 module V = Visitors
 module O : Comparable.Infix with type t := Ast.t = Comparable.Make (Ast)
 open Schema
+module A = Constructors.Annot
 
 let pp = Abslayout_pp.pp
-
-let scopes r =
-  let visitor =
-    object
-      inherit [_] V.reduce
-      inherit [_] Util.set_monoid (module String)
-      method! visit_scope () s = Set.singleton (module String) s
-    end
-  in
-  visitor#visit_t () r
-
-let alpha_scopes r =
-  let map =
-    scopes r |> Set.to_list
-    |> List.map ~f:(fun s -> (s, Fresh.name Global.fresh "s%d"))
-    |> Map.of_alist_exn (module String)
-  in
-  let visitor =
-    object
-      inherit [_] V.endo
-
-      method! visit_Name () p n =
-        let open Option.Let_syntax in
-        let name =
-          let%bind s = Name.rel n in
-          let%map s' = Map.find map s in
-          `Name (Name.copy ~scope:(Some s') n)
-        in
-        Option.value name ~default:p
-
-      method! visit_scope () s = Map.find_exn map s
-    end
-  in
-  visitor#visit_t () r
-
-let wrap x = { node = x; meta = object end }
-let select a b = wrap (Select (Select_list.of_list_exn a, strip_meta b))
-
-let ensure_no_overlap_2 r1 r2 ss =
-  if
-    Set.inter (scopes r1)
-      (Set.union (scopes r2) (Set.of_list (module String) ss))
-    |> Set.is_empty
-  then (r1, r2)
-  else (alpha_scopes r1, r2)
-
-let ensure_no_overlap_k rs =
-  let open Collections in
-  let all_scopes = List.map ~f:scopes rs in
-  if Set.any_overlap (module String) all_scopes then List.map rs ~f:alpha_scopes
-  else rs
-
-let range a b = wrap (Range (a, b))
-
-let dep_join a b c =
-  let a, c = ensure_no_overlap_2 a c [ b ] in
-  wrap (DepJoin { d_lhs = strip_meta a; d_alias = b; d_rhs = strip_meta c })
-
-let dep_join' d = dep_join d.d_lhs d.d_alias d.d_rhs
-
-let join a b c =
-  let b, c = ensure_no_overlap_2 b c [] in
-  wrap (Join { pred = a; r1 = strip_meta b; r2 = strip_meta c })
-
-let filter a b =
-  match Pred.kind a with
-  | `Scalar -> wrap (Filter (a, strip_meta b))
-  | `Agg | `Window ->
-      Error.create "Aggregates not allowed in filter." a [%sexp_of: Pred.t]
-      |> Error.raise
-
-let group_by a b c = wrap (GroupBy (a, b, strip_meta c))
-let dedup a = wrap (Dedup (strip_meta a))
-let order_by a b = wrap (OrderBy { key = a; rel = strip_meta b })
-let relation r = wrap (Relation r)
-let empty = wrap AEmpty
-let scalar p n = wrap (AScalar { s_pred = p; s_name = n })
-let scalar' s = wrap (AScalar s)
-let scalar_name n = scalar (`Name n) (Name.name n)
-
-let list a b c =
-  let a, c = ensure_no_overlap_2 a c [ b ] in
-  wrap (AList { l_keys = strip_meta a; l_scope = b; l_values = strip_meta c })
-
-let list' l = list l.l_keys l.l_scope l.l_values
-
-let tuple a b =
-  let a = List.map ~f:strip_meta a in
-  let a = ensure_no_overlap_k a in
-  wrap (ATuple (a, b))
-
-let hash_idx ?key_layout a b c d =
-  let a, c = ensure_no_overlap_2 a c [ b ] in
-  wrap
-    (AHashIdx
-       {
-         hi_keys = strip_meta a;
-         hi_values = strip_meta c;
-         hi_scope = b;
-         hi_lookup = d;
-         hi_key_layout = key_layout;
-       })
-
-let hash_idx' h =
-  hash_idx ?key_layout:h.hi_key_layout h.hi_keys h.hi_scope h.hi_values
-    h.hi_lookup
-
-let ordered_idx ?key_layout a b c d =
-  let a, c = ensure_no_overlap_2 a c [ b ] in
-  wrap
-    (AOrderedIdx
-       {
-         oi_keys = strip_meta a;
-         oi_values = strip_meta c;
-         oi_scope = b;
-         oi_lookup = d;
-         oi_key_layout = key_layout;
-       })
-
-let ordered_idx' o =
-  ordered_idx ?key_layout:o.oi_key_layout o.oi_keys o.oi_scope o.oi_values
-    o.oi_lookup
-
-let rec and_ = function
-  | [] -> `Bool true
-  | [ x ] -> x
-  | x :: xs -> `Binop (Binop.And, x, and_ xs)
 
 let name r =
   match r.node with
@@ -236,10 +110,10 @@ let rec order_of r = order_open order_of r
 
 let annotate_key_layouts r =
   let key_layout schema =
-    match List.map schema ~f:(fun n -> scalar_name n) with
+    match List.map schema ~f:A.scalar_n with
     | [] -> failwith "empty schema"
     | [ x ] -> x
-    | xs -> tuple xs Cross
+    | xs -> A.tuple xs Cross
   in
   let annotator =
     object (self : 'a)
@@ -249,7 +123,7 @@ let annotate_key_layouts r =
         let h = self#visit_hash_idx () h in
         let hi_key_layout =
           Option.first_some h.hi_key_layout
-            (Some (key_layout @@ scoped h.hi_scope @@ schema h.hi_keys))
+            (Some (key_layout @@ Schema.zero @@ schema h.hi_keys))
         in
         AHashIdx { h with hi_key_layout }
 
@@ -257,7 +131,7 @@ let annotate_key_layouts r =
         let o = self#visit_ordered_idx () o in
         let oi_key_layout =
           Option.first_some o.oi_key_layout
-            (Some (key_layout @@ scoped o.oi_scope @@ schema o.oi_keys))
+            (Some (key_layout @@ Schema.zero @@ schema o.oi_keys))
         in
         AOrderedIdx { o with oi_key_layout }
     end
@@ -303,17 +177,6 @@ let annotate_key_layouts r =
 (*     end *)
 (*   in *)
 (*   visitor#visit_t () *)
-
-let h_key_layout { hi_key_layout; hi_keys; _ } =
-  match hi_key_layout with
-  | Some l -> strip_meta l
-  | None -> (
-      match
-        List.map (schema hi_keys) ~f:(fun n -> scalar (`Name n) (Name.name n))
-      with
-      | [] -> failwith "empty schema"
-      | [ x ] -> x
-      | xs -> tuple xs Cross)
 
 (* let o_key_layout (oi_keys, _, { oi_key_layout; _ }) = *)
 (*   match oi_key_layout with *)

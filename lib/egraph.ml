@@ -405,48 +405,46 @@ let%expect_test "" =
   [%expect
     {|
     (g
-     ((g.memo
+     ((memo
        ((((func +) (args (0 1))) 2) (((func x) (args ())) 0)
         (((func y) (args ())) 1)))
-      (g.classes
+      (classes
        ((0
-         ((nodes ((((func x) (args ())) ())))
-          (parents ((((func +) (args (0 1))) 2))) (data ())))
+         ((nodes (((func x) (args ())))) (parents ((((func +) (args (0 1))) 2)))
+          (data ())))
         (1
-         ((nodes ((((func y) (args ())) ())))
-          (parents ((((func +) (args (0 1))) 2))) (data ())))
-        (2 ((nodes ((((func +) (args (0 1))) ()))) (parents ()) (data ())))))
-      (g.worklist ()) (g.max_id 3))) |}];
+         ((nodes (((func y) (args ())))) (parents ((((func +) (args (0 1))) 2)))
+          (data ())))
+        (2 ((nodes (((func +) (args (0 1))))) (parents ()) (data ())))))
+      (worklist ()) (analysis_worklist ()) (max_id 3))) |}];
   ignore (E.merge g x y);
   print_s [%message (g : E.t)];
   [%expect
     {|
     (g
-     ((g.memo
-       ((((func +) (args (0 ((id 1) (canon 0))))) 2) (((func x) (args ())) 0)
-        (((func y) (args ())) ((id 1) (canon 0)))))
-      (g.classes
+     ((memo
+       ((((func +) (args (0 1))) 2) (((func x) (args ())) 0)
+        (((func y) (args ())) 1)))
+      (classes
        ((0
-         ((nodes ((((func x) (args ())) ()) (((func y) (args ())) ())))
-          (parents ((((func +) (args (0 ((id 1) (canon 0))))) 2))) (data ())))
-        (2
-         ((nodes ((((func +) (args (0 ((id 1) (canon 0))))) ()))) (parents ())
-          (data ())))))
-      (g.worklist ((((func +) (args (0 ((id 1) (canon 0))))) 2))) (g.max_id 3))) |}];
+         ((nodes (((func x) (args ())) ((func y) (args ()))))
+          (parents ((((func +) (args (0 1))) 2))) (data ())))
+        (2 ((nodes (((func +) (args (0 1))))) (parents ()) (data ())))))
+      (worklist ((((func +) (args (0 1))) 2))) (analysis_worklist ()) (max_id 3))) |}];
   E.rebuild g;
   print_s [%message (g : E.t)];
   [%expect
     {|
     (g
-     ((g.memo
+     ((memo
        ((((func +) (args (0 0))) 2) (((func x) (args ())) 0)
-        (((func y) (args ())) ((id 1) (canon 0)))))
-      (g.classes
+        (((func y) (args ())) 1)))
+      (classes
        ((0
-         ((nodes ((((func x) (args ())) ()) (((func y) (args ())) ())))
-          (parents ((((func +) (args (0 ((id 1) (canon 0))))) 2))) (data ())))
-        (2 ((nodes ((((func +) (args (0 0))) ()))) (parents ()) (data ())))))
-      (g.worklist ()) (g.max_id 3))) |}];
+         ((nodes (((func x) (args ())) ((func y) (args ()))))
+          (parents ((((func +) (args (0 1))) 2))) (data ())))
+        (2 ((nodes (((func +) (args (0 0))))) (parents ()) (data ())))))
+      (worklist ()) (analysis_worklist ()) (max_id 3))) |}];
   assert (E.eclass_id_equiv x y);
   assert (
     E.enode_equiv g

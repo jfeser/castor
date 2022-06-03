@@ -2,9 +2,8 @@ open Core
 open Collections
 open Ast
 open Schema
-open Abslayout
 module V = Visitors
-module A = Abslayout
+module A = Constructors.Annot
 module P = Pred.Infix
 include (val Log.make "castor.sql")
 
@@ -87,7 +86,7 @@ let create_subquery q =
   let alias = Fresh.name Global.fresh "t%d" in
   let select_list =
     List.map (to_schema q) ~f:(fun n ->
-        create_entry_n (Name.create ~scope:alias n))
+        create_entry_n { type_ = None; name = Attr (alias, n) })
   in
   create_spj ~relations:[ (`Subquery q, alias, `Left) ] select_list
 
@@ -123,16 +122,10 @@ let join schema1 schema2 sql1 sql2 pred =
   in
 
   let rec subst_rel ctx = function
-    | `Name n ->
-        let n' =
-          match Name.rel n with
-          | Some rel -> (
-              match Map.find ctx rel with
-              | Some rel' -> Name.copy ~scope:(Some rel') n
-              | None -> n)
-          | None -> n
-        in
-        `Name n'
+    | `Name (Name.{ name = Attr (rel, attr); _ } as n) as this -> (
+        match Map.find ctx rel with
+        | Some rel' -> `Name { n with name = Attr (rel', attr) }
+        | None -> this)
     | p -> V.Map.pred (subst_rel_annot ctx) (subst_rel ctx) p
   and subst_rel_annot ctx r =
     V.Map.annot (V.Map.query (subst_rel_annot ctx) (subst_rel ctx)) r
@@ -262,26 +255,26 @@ let filter of_ralgebra pred r =
   in
   `Query { spj with conds = pred :: spj.conds }
 
-let dep_join of_ralgebra q1 scope q2 =
+let dep_join of_ralgebra q1 q2 =
   let sql1 = `Query { (to_spj (of_ralgebra q1)) with order = [] } in
   let sql1_names = to_schema sql1 in
   let q2 =
     (* Create a context that maps the names emitted by q1 (scoped) to the
        names emitted by the q1 sql. *)
     let ctx =
-      List.zip_exn (schema q1 |> Schema.scoped scope) sql1_names
+      List.zip_exn (List.map (schema q1) ~f:Name.zero) sql1_names
       |> List.map ~f:(fun (n, n') ->
              (n, P.name Name.(create ?type_:(Name.type_ n) n')))
       |> Map.of_alist_exn (module Name)
     in
-    A.subst ctx q2
+    Abslayout.subst ctx q2
   in
   let sql2 = `Query { (of_ralgebra q2 |> to_spj) with order = [] } in
   let sql2_names = to_schema sql2 in
   let sql2_alias = Fresh.name Global.fresh "t%d" in
   let select_list =
     List.map sql2_names ~f:(fun n ->
-        create_entry_n (Name.create ~scope:sql2_alias n))
+        create_entry_n { type_ = None; name = Attr (sql2_alias, n) })
   in
   `Query
     (create_spj
@@ -295,8 +288,8 @@ let dep_join of_ralgebra q1 scope q2 =
 let relation Relation.({ r_name = tbl; _ } as rel) =
   (* Add table alias to all fields to generate a select list. *)
   let select_list =
-    List.map (Relation.schema_exn rel) ~f:(fun (n, _) ->
-        create_entry_n (Name.copy n ~scope:(Some tbl)))
+    List.map (Option.value_exn rel.r_schema) ~f:(fun (n, t) ->
+        create_entry_n { type_ = Some t; name = Attr (tbl, n) })
   in
   let relations = [ (`Table rel, tbl, `Left) ] in
   `Query (create_spj ~relations select_list)
@@ -314,7 +307,7 @@ let of_ralgebra_open f r =
   | Filter (pred, r) -> filter f pred r
   | OrderBy { key; rel = r } -> order_by f key r
   | Select (fs, r) -> select f fs r
-  | DepJoin { d_lhs; d_rhs; d_alias } -> dep_join f d_lhs d_alias d_rhs
+  | DepJoin { d_lhs; d_rhs } -> dep_join f d_lhs d_rhs
   | Join { pred; r1; r2 } -> join (schema r1) (schema r2) (f r1) (f r2) pred
   | GroupBy (ps, key, r) ->
       let key = List.map ~f:P.name key in
@@ -322,26 +315,32 @@ let of_ralgebra_open f r =
   | ATuple ([ r ], (Cross | Concat)) -> f r
   | ATuple (r :: rs, Cross) ->
       let q1 = r in
-      let q2 = tuple rs Cross in
+      let q2 = A.tuple rs Cross in
       join (schema q1) (schema q2) (f q1) (f q2) (`Bool true)
   | ATuple (rs, Concat) -> `Union_all (List.map ~f:(fun r -> to_spj (f r)) rs)
   | ATuple ([], _) | AEmpty -> `Query (create_spj ~limit:0 [])
   | AScalar p -> `Query (create_spj [ create_entry p.s_pred ~alias:p.s_name ])
   | ATuple (_, Zip) ->
       Error.(create "Unsupported." r [%sexp_of: _ annot] |> raise)
-  | AList l -> f @@ dep_join' (Layout_to_depjoin.list l)
-  | AHashIdx h -> f @@ dep_join' (Layout_to_depjoin.hash_idx h)
-  | AOrderedIdx o -> f @@ dep_join' (Layout_to_depjoin.ordered_idx o)
+  | AList l -> f @@ A.dep_join' (Layout_to_depjoin.list l)
+  | AHashIdx h -> f @@ A.dep_join' (Layout_to_depjoin.hash_idx h)
+  | AOrderedIdx o -> f @@ A.dep_join' (Layout_to_depjoin.ordered_idx o)
   | _ -> failwith "unsupported"
 
 let of_ralgebra x =
   let rec f x = of_ralgebra_open f x in
   f (strip_meta x)
 
+let name_to_sql (n : Name.t) =
+  match n.name with
+  | Simple n -> Fmt.str "\"%s\"" n
+  | Attr (r, x) -> Fmt.str "\"%s\".\"%s\"" r x
+  | Bound _ -> failwith "unexpected bound name"
+
 let rec pred_to_sql p =
   let p2s = pred_to_sql in
   match p with
-  | `Name n -> sprintf "%s" (Name.to_sql n)
+  | `Name n -> sprintf "%s" (name_to_sql n)
   | `Int x -> Int.to_string x
   | `Fixed x -> Fixed_point.to_string x
   | `Date x -> sprintf "date('%s')" (Date.to_string x)
@@ -440,8 +439,8 @@ and spj_to_sql { select; distinct; order; group; relations; conds; limit } =
                 | DateT _ ->
                     sprintf
                       {|
-(select range::date from
-generate_series(%s :: timestamp, %s :: timestamp, '1 day' :: interval) range) as "%s"|}
+   (select range::date from
+   generate_series(%s :: timestamp, %s :: timestamp, '1 day' :: interval) range) as "%s"|}
                       (pred_to_sql p) (pred_to_sql p') alias
                 | IntT _ ->
                     sprintf "generate_series(%s, %s) as %s(range)"

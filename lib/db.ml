@@ -146,11 +146,11 @@ let type_of_field =
                 run3 conn
                 @@ sprintf
                      {|
-select
-  min(round("%s")), max(round("%s")),
-  min(case when round("%s") = "%s" then 1 else 0 end)
-from "%s"
-|}
+   select
+     min(round("%s")), max(round("%s")),
+     min(case when round("%s") = "%s" then 1 else 0 end)
+   from "%s"
+   |}
                      fname fname fname fname rname
               in
               match List.hd result with
@@ -206,8 +206,8 @@ let relation conn r_name =
     |> Or_error.ok_exn
     |> List.map ~f:(fun fname ->
            let type_ = type_of_field conn fname r_name |> Or_error.ok_exn in
-           (Name.create fname, type_))
-    |> List.sort ~compare:[%compare: Name.t * Prim_type.t]
+           (fname, type_))
+    |> List.sort ~compare:[%compare: string * Prim_type.t]
     |> Option.some
   in
   Relation.{ r_name; r_schema }
@@ -290,7 +290,7 @@ let relation_has_field conn f =
   let rels = all_relations conn in
   List.find rels ~f:(fun r ->
       List.exists (Option.value_exn r.Relation.r_schema) ~f:(fun (n, _) ->
-          String.(Name.name n = f)))
+          String.(n = f)))
 
 let exec_cursor_exn ?(count = 4096) db schema query =
   let declare_query = sprintf "declare cur cursor for %s" query
@@ -444,8 +444,8 @@ module Async = struct
     async exec;
     stream
 
-  let exec ?timeout ?bound db r =
-    info (fun m -> m "Running query:@ %a" Abslayout_pp.pp r);
-    exec_sql ?timeout ?bound db
-      (Schema_types.types r, Sql.of_ralgebra r |> Sql.to_string)
+  (* let exec ?timeout ?bound db r = *)
+  (*   info (fun m -> m "Running query:@ %a" Abslayout_pp.pp r); *)
+  (*   exec_sql ?timeout ?bound db *)
+  (*     (Schema_types.types r, Sql.of_ralgebra r |> Sql.to_string) *)
 end

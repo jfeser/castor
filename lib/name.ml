@@ -1,75 +1,72 @@
 open Core
 
 module T = struct
-  type t = {
-    scope : string option; [@sexp.option]
-    name : string;
-    type_ : Prim_type.t option; [@sexp.option] [@ignore]
-  }
+  type name =
+    | Simple of string
+    | Bound of int * string
+    | Attr of string * string
+  [@@deriving compare, equal, hash, sexp]
+
+  type t = { name : name; type_ : Prim_type.t option [@sexp.option] [@ignore] }
   [@@deriving compare, equal, hash, sexp]
 end
 
 include T
-
-let name n = n.name
-let scope n = n.scope
-let rel = scope
-
 include Comparator.Make (T)
 module C = Comparable.Make (T)
 
 module O : Comparable.Infix with type t := t = struct
-  include Comparable.Make (T)
+  include C
 
   let ( = ) = equal
   let ( <> ) x y = not (equal x y)
 end
 
-let create ?scope ?type_ name = { scope; name; type_ }
+let type_ n = n.type_
+let name n = match n.name with Simple x | Bound (_, x) | Attr (_, x) -> x
+let create ?type_ name = { name = Simple name; type_ }
+
+let scope n =
+  match n.name with Simple _ | Attr _ -> None | Bound (i, _) -> Some i
+
+let unscoped n =
+  match n.name with
+  | Simple _ | Attr _ -> n
+  | Bound (_, x) -> { n with name = Simple x }
 
 let of_string_exn s =
   match String.split s ~on:'.' with
   | [ n ] -> create n
-  | [ s; n ] -> create ~scope:s n
-  | _ -> raise_s [%message "unexpected name" s]
+  | [ s; n ] -> (
+      try { type_ = None; name = Bound (Int.of_string s, n) }
+      with _ -> { type_ = None; name = Attr (s, n) })
+  | _ -> raise_s [%message "unexpected scope" s]
 
-let type_ n = n.type_
+let incr n =
+  match n.name with
+  | Bound (i, x) -> { n with name = Bound (i + 1, x) }
+  | _ -> n
 
-let copy ?scope:s ?type_:t ?name:n nm =
-  let s = Option.value s ~default:(scope nm) in
-  let t = Option.value t ~default:(type_ nm) in
-  let n = Option.value n ~default:(name nm) in
-  create ?scope:s ?type_:t n
+let decr n =
+  match n.name with
+  | Bound (0, _) -> failwith "trying to decrease zero index"
+  | Bound (i, x) -> { n with name = Bound (i - 1, x) }
+  | _ -> n
+
+let zero n =
+  match n.name with
+  | Attr (_, x) | Simple x -> { n with name = Bound (0, x) }
+  | Bound _ -> failwith "name already has index"
 
 let type_exn n =
   match type_ n with
   | Some t -> t
   | None -> Error.create "Missing type." n [%sexp_of: t] |> Error.raise
 
-let scope_exn n =
-  match rel n with
-  | Some t -> t
-  | None -> Error.create "Missing scope." n [%sexp_of: t] |> Error.raise
-
-let rel_exn = scope_exn
-
-let to_var n =
-  let name = name n in
-  match rel n with Some r -> sprintf "%s_%s" r name | None -> name
-
-let to_sql n =
-  match rel n with
-  | Some r -> sprintf "%s.\"%s\"" r (name n)
-  | None -> sprintf "\"%s\"" (name n)
-
-let scoped s n = copy ~scope:(Some s) n
-let unscoped n = copy ~scope:None n
-
 let pp fmt n =
-  let open Format in
-  let name = name n in
-  match rel n with
-  | Some r -> fprintf fmt "%s.%s" r name
-  | None -> fprintf fmt "%s" name
+  match n.name with
+  | Simple x -> Fmt.pf fmt "%s" x
+  | Attr (r, x) -> Fmt.pf fmt "%s.%s" r x
+  | Bound (i, x) -> Fmt.pf fmt "%d.%s" i x
 
 let fresh fmt = create (Fresh.name Global.fresh fmt)

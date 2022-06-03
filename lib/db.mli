@@ -43,5 +43,5 @@ module Async : sig
     (Value.t list list, error) result Lwt_stream.t
 
   val exec_sql : (Prim_type.t list * string) exec
-  val exec : < resolved : Resolve.resolved ; .. > Ast.annot exec
+  (* val exec : < resolved : Resolve.resolved ; .. > Ast.annot exec *)
 end

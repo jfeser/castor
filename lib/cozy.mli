@@ -1,4 +1,4 @@
-open Ast
+(* open Ast *)
 
 type binop = [ `Le | `Lt | `Ge | `Gt | `Add | `Sub | `Mul | `Div | `Eq | `And ]
 [@@deriving sexp]
@@ -29,8 +29,8 @@ and query =
   | `Empty ]
 [@@deriving sexp]
 
-val cost : query -> Big_o.t
+(* val cost : query -> Big_o.t *)
 
-val to_string : string -> Name.t List.t -> t -> string
-(** Convert a layout to a cozy query. Takes the name for the benchmark, a list
-   of parameters, and a layout. *)
+(* val to_string : string -> Name.t List.t -> t -> string *)
+(* (\** Convert a layout to a cozy query. Takes the name for the benchmark, a list *)
+(*    of parameters, and a layout. *\) *)

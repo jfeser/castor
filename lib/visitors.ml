@@ -22,10 +22,8 @@ module Map = struct
     | `Exists q -> `Exists (annot q)
     | `Substring (p, p', p'') -> `Substring (pred p, pred p', pred p'')
 
-  let ordered_idx query pred
-      ({ oi_keys; oi_values; oi_key_layout; oi_lookup; _ } as o) =
+  let ordered_idx query pred { oi_keys; oi_values; oi_key_layout; oi_lookup } =
     {
-      o with
       oi_keys = query oi_keys;
       oi_values = query oi_values;
       oi_key_layout = Option.map oi_key_layout ~f:query;
@@ -34,19 +32,16 @@ module Map = struct
             (Option.map ~f:(bound pred) b, Option.map ~f:(bound pred) b'));
     }
 
-  let hash_idx query pred
-      ({ hi_keys; hi_values; hi_key_layout; hi_lookup; _ } as h) =
+  let hash_idx query pred { hi_keys; hi_values; hi_key_layout; hi_lookup } =
     {
-      h with
       hi_keys = query hi_keys;
       hi_values = query hi_values;
       hi_key_layout = Option.map hi_key_layout ~f:query;
       hi_lookup = List.map hi_lookup ~f:pred;
     }
 
-  let list query l =
-    { l with l_keys = query l.l_keys; l_values = query l.l_values }
-
+  let dep_join annot x = { d_lhs = annot x.d_lhs; d_rhs = annot x.d_rhs }
+  let list query l = { l_keys = query l.l_keys; l_values = query l.l_values }
   let scalar pred x = { x with s_pred = pred x.s_pred }
   let select_list pred ps = Select_list.map ps ~f:(fun p _ -> pred p)
 
@@ -55,8 +50,7 @@ module Map = struct
     | Filter (p, q) -> Filter (pred p, annot q)
     | Join { pred = p; r1; r2 } ->
         Join { pred = pred p; r1 = annot r1; r2 = annot r2 }
-    | DepJoin ({ d_lhs; d_rhs; _ } as d) ->
-        DepJoin { d with d_lhs = annot d_lhs; d_rhs = annot d_rhs }
+    | DepJoin x -> DepJoin (dep_join annot x)
     | GroupBy (ps, ns, q) -> GroupBy (select_list pred ps, ns, annot q)
     | OrderBy { key; rel } ->
         OrderBy

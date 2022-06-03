@@ -55,6 +55,12 @@ module Infix = struct
   let ( && ) p p' = binop And p p'
   let ( || ) p p' = binop Or p p'
   let and_ = conjoin
+
+  let rec or_ = function
+    | [] -> `Bool false
+    | [ p ] -> p
+    | p :: ps -> `Binop (Binop.Or, p, or_ ps)
+
   let ( mod ) p p' = binop Mod p p'
   let strpos p p' = binop Strpos p p'
   let exists r = `Exists r
@@ -174,21 +180,6 @@ let subst_tree ctx p =
   in
   v#visit_pred () p
 
-let scoped names scope p =
-  let ctx =
-    List.map names ~f:(fun n -> (n, `Name (Name.scoped scope n)))
-    |> Map.of_alist_exn (module Name)
-  in
-  subst ctx p
-
-let rec unscoped scope = function
-  | `Name n as this -> (
-      match Name.rel n with
-      | Some s ->
-          if String.(s = scope) then `Name (Name.copy ~scope:None n) else this
-      | None -> this)
-  | p -> V.Map.pred Fun.id (unscoped scope) p
-
 let to_nnf p =
   let visitor =
     object (self : 'self)
@@ -289,43 +280,39 @@ let min_of p1 p2 = Infix.(if_ (p1 < p2) p1 p2)
 let pseudo_bool p = Infix.(if_ p (int 1) (int 0))
 let sum_exn ps = List.reduce_exn ~f:Infix.( + ) ps
 
-type a = [ `Leaf of t | `And of b list ]
-and b = [ `Leaf of t | `Or of a list ]
+(* type a = [ `Leaf of t | `And of b list ] *)
+(* and b = [ `Leaf of t | `Or of a list ] *)
 
-let rec to_and_or : t -> [ a | b ] = function
-  | `Binop (And, p1, p2) -> (
-      match (to_and_or p1, to_and_or p2) with
-      | `And p1, `And p2 -> `And (p1 @ p2)
-      | `And p1, (#b as p2) | (#b as p2), `And p1 -> `And (p2 :: p1)
-      | (#b as p1), (#b as p2) -> `And [ p1; p2 ])
-  | `Binop (Or, p1, p2) -> (
-      match (to_and_or p1, to_and_or p2) with
-      | `Or p1, `Or p2 -> `Or (p1 @ p2)
-      | `Or p1, (#a as p2) | (#a as p2), `Or p1 -> `Or (p2 :: p1)
-      | (#a as p1), (#a as p2) -> `Or [ p1; p2 ])
-  | p -> `Leaf p
+(* let rec to_and_or : t -> [ a | b ] = function *)
+(*   | `Binop (And, p1, p2) -> ( *)
+(*       match (to_and_or p1, to_and_or p2) with *)
+(*       | `And p1, `And p2 -> `And (p1 @ p2) *)
+(*       | `And p1, (#b as p2) | (#b as p2), `And p1 -> `And (p2 :: p1) *)
+(*       | (#b as p1), (#b as p2) -> `And [ p1; p2 ]) *)
+(*   | `Binop (Or, p1, p2) -> ( *)
+(*       match (to_and_or p1, to_and_or p2) with *)
+(*       | `Or p1, `Or p2 -> `Or (p1 @ p2) *)
+(*       | `Or p1, (#a as p2) | (#a as p2), `Or p1 -> `Or (p2 :: p1) *)
+(*       | (#a as p1), (#a as p2) -> `Or [ p1; p2 ]) *)
+(*   | p -> `Leaf p *)
 
-let is_static ~params p =
-  Set.for_all (names p) ~f:(fun n ->
-      (not (Set.mem params n)) && Option.is_none (Name.rel n))
-
-let to_static ~params p =
-  let p = to_nnf p in
-  let p = to_and_or p in
-  let rec to_static : [ a | b ] -> _ = function
-    | `And ps ->
-        List.filter_map ps ~f:(function
-          | `Leaf p -> if is_static ~params p then Some p else None
-          | `Or _ as p -> Some (to_static p))
-        |> conjoin
-    | `Or ps ->
-        List.filter_map ps ~f:(function
-          | `Leaf p -> if is_static ~params p then Some p else Some (`Bool true)
-          | `And _ as p -> Some (to_static p))
-        |> disjoin
-    | `Leaf p -> if is_static ~params p then p else `Bool true
-  in
-  to_static p
+let to_static ~params:_ _ = assert false
+(* let p = to_nnf p in *)
+(* let p = to_and_or p in *)
+(* let rec to_static : [ a | b ] -> _ = function *)
+(*   | `And ps -> *)
+(*       List.filter_map ps ~f:(function *)
+(*         | `Leaf p -> if is_static ~params p then Some p else None *)
+(*         | `Or _ as p -> Some (to_static p)) *)
+(*       |> conjoin *)
+(*   | `Or ps -> *)
+(*       List.filter_map ps ~f:(function *)
+(*         | `Leaf p -> if is_static ~params p then Some p else Some (`Bool true) *)
+(*         | `And _ as p -> Some (to_static p)) *)
+(*       |> disjoin *)
+(*   | `Leaf p -> if is_static ~params p then p else `Bool true *)
+(* in *)
+(* to_static p *)
 
 let strip_meta p = V.map_meta_pred (fun m -> (m :> < >)) p
 

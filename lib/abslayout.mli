@@ -17,43 +17,10 @@ val name : t -> string
 val names : t -> Set.M(Name).t
 (** The set of names in a `t`. *)
 
-val range : Pred.t -> Pred.t -> t
-val select : Pred.t Select_list.t -> t -> t
-val dep_join : t -> string -> t -> t
-val dep_join' : t depjoin -> t
-val join : Pred.t -> t -> t -> t
-val filter : Pred.t -> t -> t
-val group_by : Pred.t Select_list.t -> Name.t list -> t -> t
-val dedup : t -> t
-val order_by : (Pred.t * order) list -> t -> t
-val relation : Relation.t -> t
-val empty : t
-val scalar : Pred.t -> string -> t
-val scalar' : Pred.t scalar -> t
-val scalar_name : Name.t -> t
-val list : t -> string -> t -> t
-val list' : t list_ -> t
-val tuple : t list -> tuple -> t
-val hash_idx : ?key_layout:t -> t -> string -> t -> Pred.t list -> t
-val hash_idx' : (Pred.t, t) hash_idx -> t
-val h_key_layout : (_, < .. > annot) hash_idx -> t
-
-val ordered_idx :
-  ?key_layout:t ->
-  t ->
-  string ->
-  t ->
-  (Pred.t bound option * Pred.t bound option) list ->
-  t
-
-val ordered_idx' : (Pred.t, t) ordered_idx -> t
-
 (* val o_key_layout : *)
 (*   (< .. > as 'a) annot * 'a annot * ('a annot pred, 'a annot, scope) ordered_idx -> *)
 (*   < > annot *)
 
-val alpha_scopes : 'a annot -> 'a annot
-val and_ : Pred.t list -> Pred.t
 val of_string_exn : string -> t
 val name_of_string_exn : string -> Name.t
 val of_channel_exn : In_channel.t -> t

@@ -117,8 +117,8 @@ let pp_query_open pp_query pp_pred fmt = function
   | Select (ps, r) ->
       Fmt.pf fmt "select(%a,@ %a)" (pp_select_list pp_pred) ps pp_query r
   | Filter (p, r) -> Fmt.pf fmt "filter(%a,@ %a)" pp_pred p pp_query r
-  | DepJoin { d_lhs; d_alias; d_rhs } ->
-      Fmt.pf fmt "depjoin(%a as %s,@ %a)" pp_query d_lhs d_alias pp_query d_rhs
+  | DepJoin { d_lhs; d_rhs } ->
+      Fmt.pf fmt "depjoin(%a,@ %a)" pp_query d_lhs pp_query d_rhs
   | Join { pred; r1; r2 } ->
       Fmt.pf fmt "join(%a,@ %a,@ %a)" pp_pred pred pp_query r1 pp_query r2
   | GroupBy (a, k, r) ->
@@ -134,15 +134,15 @@ let pp_query_open pp_query pp_pred fmt = function
   | AEmpty -> Fmt.pf fmt "aempty"
   | AScalar p ->
       Fmt.pf fmt "ascalar(%a)" (pp_select_pred pp_pred) (p.s_pred, p.s_name)
-  | AList { l_keys = r1; l_scope; l_values = r2 } ->
-      Fmt.pf fmt "alist(%a as %s,@ %a)" pp_query r1 l_scope pp_query r2
+  | AList { l_keys = r1; l_values = r2 } ->
+      Fmt.pf fmt "alist(%a,@ %a)" pp_query r1 pp_query r2
   | ATuple (rs, kind) ->
       Fmt.pf fmt "atuple(%a,@ %a)" (pp_list pp_query) rs pp_kind kind
-  | AHashIdx { hi_keys = r1; hi_scope = s; hi_values = r2; hi_lookup; _ } ->
-      Fmt.pf fmt "ahashidx(%a as %s,@ %a,@ %a)" pp_query r1 s pp_query r2
+  | AHashIdx { hi_keys = r1; hi_values = r2; hi_lookup; _ } ->
+      Fmt.pf fmt "ahashidx(%a,@ %a,@ %a)" pp_query r1 pp_query r2
         (pp_key pp_pred) hi_lookup
-  | AOrderedIdx { oi_keys = r1; oi_scope = s; oi_values = r2; oi_lookup; _ } ->
-      Fmt.pf fmt "aorderedidx(%a as %s,@ %a,@ %a)" pp_query r1 s pp_query r2
+  | AOrderedIdx { oi_keys = r1; oi_values = r2; oi_lookup; _ } ->
+      Fmt.pf fmt "aorderedidx(%a,@ %a,@ %a)" pp_query r1 pp_query r2
         (pp_list ~bracket:("", "") (fun fmt (lb, ub) ->
              Fmt.pf fmt "%a, %a"
                (pp_option (pp_lower_bound pp_pred))

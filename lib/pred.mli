@@ -38,6 +38,7 @@ module Infix : sig
   val ( || ) : 'a pred -> 'a pred -> 'a pred
   val ( mod ) : 'a pred -> 'a pred -> 'a pred
   val and_ : 'a pred list -> 'a pred
+  val or_ : 'a pred list -> 'a pred
   val strpos : 'a pred -> 'a pred -> 'a pred
   val exists : 'a -> 'a pred
   val count : _ pred
@@ -59,12 +60,6 @@ val collect_aggs :
   'a annot pred -> 'a annot pred * ('a annot pred * string) list
 
 val simplify : t -> t
-
-val scoped : Name.t list -> string -> 'a pred -> 'a pred
-(** Apply a scope to each occurrence of a name in the list. Does not descend into
-   subqueries. *)
-
-val unscoped : String.t -> 'a pred -> 'a pred
 val subst : 'a pred Map.M(Name).t -> 'a pred -> 'a pred
 
 val subst_tree :

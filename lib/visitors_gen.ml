@@ -110,26 +110,16 @@ class virtual ['self] base_endo =
       | `Substring (c0, c1, c2) as this ->
           self#visit_Substring env this c0 c1 c2
 
-    method visit_scope env = self#visit_string env
-
     method visit_hash_idx env this =
       let r0 = self#visit_'r env this.hi_keys in
       let r1 = self#visit_'r env this.hi_values in
-      let r2 = self#visit_scope env this.hi_scope in
       let r3 = self#visit_option self#visit_'r env this.hi_key_layout in
       let r4 = self#visit_list self#visit_'p env this.hi_lookup in
       if
-        this.hi_keys == r0 && this.hi_values == r1 && this.hi_scope == r2
-        && this.hi_key_layout == r3 && this.hi_lookup == r4
+        this.hi_keys == r0 && this.hi_values == r1 && this.hi_key_layout == r3
+        && this.hi_lookup == r4
       then this
-      else
-        {
-          hi_keys = r0;
-          hi_values = r1;
-          hi_scope = r2;
-          hi_key_layout = r3;
-          hi_lookup = r4;
-        }
+      else { hi_keys = r0; hi_values = r1; hi_key_layout = r3; hi_lookup = r4 }
 
     method visit_bound env ((c0, c1) as this) =
       let r0 = self#visit_'p env c0 in
@@ -139,7 +129,6 @@ class virtual ['self] base_endo =
     method visit_ordered_idx env this =
       let r0 = self#visit_'r env this.oi_keys in
       let r1 = self#visit_'r env this.oi_values in
-      let r2 = self#visit_scope env this.oi_scope in
       let r3 = self#visit_option self#visit_'r env this.oi_key_layout in
       let r4 =
         self#visit_list
@@ -150,32 +139,22 @@ class virtual ['self] base_endo =
           env this.oi_lookup
       in
       if
-        this.oi_keys == r0 && this.oi_values == r1 && this.oi_scope == r2
-        && this.oi_key_layout == r3 && this.oi_lookup == r4
+        this.oi_keys == r0 && this.oi_values == r1 && this.oi_key_layout == r3
+        && this.oi_lookup == r4
       then this
-      else
-        {
-          oi_keys = r0;
-          oi_values = r1;
-          oi_scope = r2;
-          oi_key_layout = r3;
-          oi_lookup = r4;
-        }
+      else { oi_keys = r0; oi_values = r1; oi_key_layout = r3; oi_lookup = r4 }
 
     method visit_list_ env this =
       let r0 = self#visit_'r env this.l_keys in
       let r1 = self#visit_'r env this.l_values in
-      let r2 = self#visit_scope env this.l_scope in
-      if this.l_keys == r0 && this.l_values == r1 && this.l_scope == r2 then
-        this
-      else { l_keys = r0; l_values = r1; l_scope = r2 }
+      if this.l_keys == r0 && this.l_values == r1 then this
+      else { l_keys = r0; l_values = r1 }
 
     method visit_depjoin env this =
       let r0 = self#visit_'r env this.d_lhs in
-      let r1 = self#visit_scope env this.d_alias in
       let r2 = self#visit_'r env this.d_rhs in
-      if this.d_lhs == r0 && this.d_alias == r1 && this.d_rhs == r2 then this
-      else { d_lhs = r0; d_alias = r1; d_rhs = r2 }
+      if this.d_lhs == r0 && this.d_rhs == r2 then this
+      else { d_lhs = r0; d_rhs = r2 }
 
     method visit_join env this =
       let r0 = self#visit_'p env this.pred in
@@ -437,21 +416,12 @@ class virtual ['self] base_map =
       | `Exists c0 -> self#visit_Exists env c0
       | `Substring (c0, c1, c2) -> self#visit_Substring env c0 c1 c2
 
-    method visit_scope env = self#visit_string env
-
     method visit_hash_idx env this =
       let r0 = self#visit_'r env this.hi_keys in
       let r1 = self#visit_'r env this.hi_values in
-      let r2 = self#visit_scope env this.hi_scope in
       let r3 = self#visit_option self#visit_'r env this.hi_key_layout in
       let r4 = self#visit_list self#visit_'p env this.hi_lookup in
-      {
-        hi_keys = r0;
-        hi_values = r1;
-        hi_scope = r2;
-        hi_key_layout = r3;
-        hi_lookup = r4;
-      }
+      { hi_keys = r0; hi_values = r1; hi_key_layout = r3; hi_lookup = r4 }
 
     method visit_bound env (c0, c1) =
       let r0 = self#visit_'p env c0 in
@@ -461,7 +431,6 @@ class virtual ['self] base_map =
     method visit_ordered_idx env this =
       let r0 = self#visit_'r env this.oi_keys in
       let r1 = self#visit_'r env this.oi_values in
-      let r2 = self#visit_scope env this.oi_scope in
       let r3 = self#visit_option self#visit_'r env this.oi_key_layout in
       let r4 =
         self#visit_list
@@ -471,25 +440,17 @@ class virtual ['self] base_map =
             (r0, r1))
           env this.oi_lookup
       in
-      {
-        oi_keys = r0;
-        oi_values = r1;
-        oi_scope = r2;
-        oi_key_layout = r3;
-        oi_lookup = r4;
-      }
+      { oi_keys = r0; oi_values = r1; oi_key_layout = r3; oi_lookup = r4 }
 
     method visit_list_ env this =
       let r0 = self#visit_'r env this.l_keys in
       let r1 = self#visit_'r env this.l_values in
-      let r2 = self#visit_scope env this.l_scope in
-      { l_keys = r0; l_values = r1; l_scope = r2 }
+      { l_keys = r0; l_values = r1 }
 
     method visit_depjoin env this =
       let r0 = self#visit_'r env this.d_lhs in
-      let r1 = self#visit_scope env this.d_alias in
       let r2 = self#visit_'r env this.d_rhs in
-      { d_lhs = r0; d_alias = r1; d_rhs = r2 }
+      { d_lhs = r0; d_rhs = r2 }
 
     method visit_join env this =
       let r0 = self#visit_'p env this.pred in
@@ -747,12 +708,9 @@ class virtual ['self] base_iter =
       | `Exists c0 -> self#visit_Exists env c0
       | `Substring (c0, c1, c2) -> self#visit_Substring env c0 c1 c2
 
-    method visit_scope env = self#visit_string env
-
     method visit_hash_idx env this =
       let r0 = self#visit_'r env this.hi_keys in
       let r1 = self#visit_'r env this.hi_values in
-      let r2 = self#visit_scope env this.hi_scope in
       let r3 = self#visit_option self#visit_'r env this.hi_key_layout in
       let r4 = self#visit_list self#visit_'p env this.hi_lookup in
       ()
@@ -765,7 +723,6 @@ class virtual ['self] base_iter =
     method visit_ordered_idx env this =
       let r0 = self#visit_'r env this.oi_keys in
       let r1 = self#visit_'r env this.oi_values in
-      let r2 = self#visit_scope env this.oi_scope in
       let r3 = self#visit_option self#visit_'r env this.oi_key_layout in
       let r4 =
         self#visit_list
@@ -780,12 +737,10 @@ class virtual ['self] base_iter =
     method visit_list_ env this =
       let r0 = self#visit_'r env this.l_keys in
       let r1 = self#visit_'r env this.l_values in
-      let r2 = self#visit_scope env this.l_scope in
       ()
 
     method visit_depjoin env this =
       let r0 = self#visit_'r env this.d_lhs in
-      let r1 = self#visit_scope env this.d_alias in
       let r2 = self#visit_'r env this.d_rhs in
       ()
 
@@ -1043,15 +998,12 @@ class virtual ['self] base_reduce =
       | `Exists c0 -> self#visit_Exists env c0
       | `Substring (c0, c1, c2) -> self#visit_Substring env c0 c1 c2
 
-    method visit_scope env = self#visit_string env
-
     method visit_hash_idx env this =
       let s0 = self#visit_'r env this.hi_keys in
       let s1 = self#visit_'r env this.hi_values in
-      let s2 = self#visit_scope env this.hi_scope in
       let s3 = self#visit_option self#visit_'r env this.hi_key_layout in
       let s4 = self#visit_list self#visit_'p env this.hi_lookup in
-      self#plus (self#plus (self#plus (self#plus s0 s1) s2) s3) s4
+      self#plus (self#plus (self#plus s0 s1) s3) s4
 
     method visit_bound env (c0, c1) =
       let s0 = self#visit_'p env c0 in
@@ -1061,7 +1013,6 @@ class virtual ['self] base_reduce =
     method visit_ordered_idx env this =
       let s0 = self#visit_'r env this.oi_keys in
       let s1 = self#visit_'r env this.oi_values in
-      let s2 = self#visit_scope env this.oi_scope in
       let s3 = self#visit_option self#visit_'r env this.oi_key_layout in
       let s4 =
         self#visit_list
@@ -1071,19 +1022,17 @@ class virtual ['self] base_reduce =
             self#plus s0 s1)
           env this.oi_lookup
       in
-      self#plus (self#plus (self#plus (self#plus s0 s1) s2) s3) s4
+      self#plus (self#plus (self#plus s0 s1) s3) s4
 
     method visit_list_ env this =
       let s0 = self#visit_'r env this.l_keys in
       let s1 = self#visit_'r env this.l_values in
-      let s2 = self#visit_scope env this.l_scope in
-      self#plus (self#plus s0 s1) s2
+      self#plus s0 s1
 
     method visit_depjoin env this =
       let s0 = self#visit_'r env this.d_lhs in
-      let s1 = self#visit_scope env this.d_alias in
       let s2 = self#visit_'r env this.d_rhs in
-      self#plus (self#plus s0 s1) s2
+      self#plus s0 s2
 
     method visit_join env this =
       let s0 = self#visit_'p env this.pred in
@@ -1339,22 +1288,13 @@ class virtual ['self] base_mapreduce =
       | `Exists c0 -> self#visit_Exists env c0
       | `Substring (c0, c1, c2) -> self#visit_Substring env c0 c1 c2
 
-    method visit_scope env = self#visit_string env
-
     method visit_hash_idx env this =
       let r0, s0 = self#visit_'r env this.hi_keys in
       let r1, s1 = self#visit_'r env this.hi_values in
-      let r2, s2 = self#visit_scope env this.hi_scope in
       let r3, s3 = self#visit_option self#visit_'r env this.hi_key_layout in
       let r4, s4 = self#visit_list self#visit_'p env this.hi_lookup in
-      ( {
-          hi_keys = r0;
-          hi_values = r1;
-          hi_scope = r2;
-          hi_key_layout = r3;
-          hi_lookup = r4;
-        },
-        self#plus (self#plus (self#plus (self#plus s0 s1) s2) s3) s4 )
+      ( { hi_keys = r0; hi_values = r1; hi_key_layout = r3; hi_lookup = r4 },
+        self#plus (self#plus (self#plus s0 s1) s3) s4 )
 
     method visit_bound env (c0, c1) =
       let r0, s0 = self#visit_'p env c0 in
@@ -1364,7 +1304,6 @@ class virtual ['self] base_mapreduce =
     method visit_ordered_idx env this =
       let r0, s0 = self#visit_'r env this.oi_keys in
       let r1, s1 = self#visit_'r env this.oi_values in
-      let r2, s2 = self#visit_scope env this.oi_scope in
       let r3, s3 = self#visit_option self#visit_'r env this.oi_key_layout in
       let r4, s4 =
         self#visit_list
@@ -1374,27 +1313,18 @@ class virtual ['self] base_mapreduce =
             ((r0, r1), self#plus s0 s1))
           env this.oi_lookup
       in
-      ( {
-          oi_keys = r0;
-          oi_values = r1;
-          oi_scope = r2;
-          oi_key_layout = r3;
-          oi_lookup = r4;
-        },
-        self#plus (self#plus (self#plus (self#plus s0 s1) s2) s3) s4 )
+      ( { oi_keys = r0; oi_values = r1; oi_key_layout = r3; oi_lookup = r4 },
+        self#plus (self#plus (self#plus s0 s1) s3) s4 )
 
     method visit_list_ env this =
       let r0, s0 = self#visit_'r env this.l_keys in
       let r1, s1 = self#visit_'r env this.l_values in
-      let r2, s2 = self#visit_scope env this.l_scope in
-      ( { l_keys = r0; l_values = r1; l_scope = r2 },
-        self#plus (self#plus s0 s1) s2 )
+      ({ l_keys = r0; l_values = r1 }, self#plus s0 s1)
 
     method visit_depjoin env this =
       let r0, s0 = self#visit_'r env this.d_lhs in
-      let r1, s1 = self#visit_scope env this.d_alias in
       let r2, s2 = self#visit_'r env this.d_rhs in
-      ({ d_lhs = r0; d_alias = r1; d_rhs = r2 }, self#plus (self#plus s0 s1) s2)
+      ({ d_lhs = r0; d_rhs = r2 }, self#plus s0 s2)
 
     method visit_join env this =
       let r0, s0 = self#visit_'p env this.pred in
