@@ -258,13 +258,16 @@ let filter of_ralgebra pred r =
 let dep_join of_ralgebra q1 q2 =
   let sql1 = `Query { (to_spj (of_ralgebra q1)) with order = [] } in
   let sql1_names = to_schema sql1 in
+  let sql1_alias = Fresh.name Global.fresh "t%d" in
   let q2 =
     (* Create a context that maps the names emitted by q1 (scoped) to the
        names emitted by the q1 sql. *)
     let ctx =
       List.zip_exn (List.map (schema q1) ~f:Name.zero) sql1_names
       |> List.map ~f:(fun (n, n') ->
-             (n, P.name Name.(create ?type_:(Name.type_ n) n')))
+             ( n,
+               P.name
+                 { Name.type_ = Name.type_ n; name = Attr (sql1_alias, n') } ))
       |> Map.of_alist_exn (module Name)
     in
     Abslayout.subst ctx q2
@@ -280,7 +283,7 @@ let dep_join of_ralgebra q1 q2 =
     (create_spj
        ~relations:
          [
-           (`Subquery sql1, Fresh.name Global.fresh "t%d", `Left);
+           (`Subquery sql1, sql1_alias, `Left);
            (`Subquery sql2, sql2_alias, `Lateral);
          ]
        select_list)
