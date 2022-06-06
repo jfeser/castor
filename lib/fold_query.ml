@@ -64,50 +64,50 @@ let is_invariant ss q =
   in
   visitor#visit_t () q
 
-let hoist_invariant ss q =
-  let visitor =
-    object (self : 'self)
-      inherit [_] mapreduce as super
-      inherit [_] Util.list_monoid
-      method visit_'m _ x = (x, self#zero)
-      method visit_pred _ x = (x, self#zero)
-      method visit_'q _ x = (x, self#zero)
-      method visit_scalar _ x = (x, self#zero)
+(* let hoist_invariant ss q = *)
+(*   let visitor = *)
+(*     object (self : 'self) *)
+(*       inherit [_] mapreduce as super *)
+(*       inherit [_] Util.list_monoid *)
+(*       method visit_'m _ x = (x, self#zero) *)
+(*       method visit_pred _ x = (x, self#zero) *)
+(*       method visit_'q _ x = (x, self#zero) *)
+(*       method visit_scalar _ x = (x, self#zero) *)
 
-      method! visit_For ss (r, s, q, x) =
-        let q', binds = self#visit_t (s :: ss) q in
-        (For (r, s, q', x), binds)
+(*       method! visit_For ss (r, s, q, x) = *)
+(*         let q', binds = self#visit_t (s :: ss) q in *)
+(*         (For (r, s, q', x), binds) *)
 
-      method! visit_t ss q =
-        if is_invariant ss q then
-          let n = Fresh.name Global.fresh "q%d" in
-          (var None n, [ (n, q) ])
-        else super#visit_t ss q
-    end
-  in
-  visitor#visit_t ss q
+(*       method! visit_t ss q = *)
+(*         if is_invariant ss q then *)
+(*           let n = Fresh.name Global.fresh "q%d" in *)
+(*           (var None n, [ (n, q) ]) *)
+(*         else super#visit_t ss q *)
+(*     end *)
+(*   in *)
+(*   visitor#visit_t ss q *)
 
-let hoist_all q =
-  let visitor =
-    object (self : 'self)
-      inherit [_] map as super
-      method visit_pred _ x = x
-      method visit_'q _ x = x
-      method visit_'m _ x = x
-      method visit_scalar _ x = x
+(* let hoist_all q = *)
+(*   let visitor = *)
+(*     object (self : 'self) *)
+(*       inherit [_] map as super *)
+(*       method visit_pred _ x = x *)
+(*       method visit_'q _ x = x *)
+(*       method visit_'m _ x = x *)
+(*       method visit_scalar _ x = x *)
 
-      method! visit_t ss q =
-        match q.node with
-        | For (r, s, q', x) -> (
-            let ss = s :: ss in
-            let q', binds = hoist_invariant ss q' in
-            match binds with
-            | [] -> for_ q.meta (r, s, self#visit_t ss q', x)
-            | _ -> let_ None (binds, for_ q.meta (r, s, self#visit_t ss q', x)))
-        | _ -> super#visit_t ss q
-    end
-  in
-  visitor#visit_t [] q
+(*       method! visit_t ss q = *)
+(*         match q.node with *)
+(*         | For (r, s, q', x) -> ( *)
+(*             let ss = s :: ss in *)
+(*             let q', binds = hoist_invariant ss q' in *)
+(*             match binds with *)
+(*             | [] -> for_ q.meta (r, s, self#visit_t ss q', x) *)
+(*             | _ -> let_ None (binds, for_ q.meta (r, s, self#visit_t ss q', x))) *)
+(*         | _ -> super#visit_t ss q *)
+(*     end *)
+(*   in *)
+(*   visitor#visit_t [] q *)
 
 let to_width q =
   let visitor =
@@ -223,26 +223,29 @@ let rec to_ralgebra q =
         (o1, q1)
       in
       let o2, q2 = to_ralgebra q2 |> unwrap_order in
-      (* Generate a renaming so that the upward exposed names are fresh. *)
-      let sctx =
-        Schema.zero (schema q1) @ schema q2
-        |> List.map ~f:(fun n ->
-               let n' = Fresh.name Global.fresh "x%d" in
-               (n, n'))
+      let schema_q1 = schema q1 and schema_q2 = schema q2 in
+      (* Generate a renaming so that q1 and q2 emit distinct attributes. *)
+      let q1_ctx =
+        List.map schema_q1 ~f:(fun n ->
+            (Name.zero n, Fresh.name Global.fresh "x%d"))
       in
-      let slist = List.map sctx ~f:(fun (n, n') -> (P.name n, n')) in
+      let q2_ctx =
+        List.map schema_q2 ~f:(fun n -> (n, Fresh.name Global.fresh "x%d"))
+      in
+      let slist = List.map (q1_ctx @ q2_ctx) ~f:(fun (n, a) -> (P.name n, a)) in
       (* Stick together the orders from the lhs and rhs queries. *)
       let order =
-        let sctx =
-          List.map sctx ~f:(fun (n, n') -> (n, P.name @@ Name.create n'))
+        let q1_ctx =
+          List.map q1_ctx ~f:(fun (n, a) ->
+              (Name.unscoped n, P.name (Name.create a)))
           |> Map.of_alist_exn (module Name)
         in
-        (* The renaming refers to the scoped names from q1, so scope before
-           renaming. *)
-        let o1 =
-          List.map o1 ~f:(fun (p, o) -> (Pred.scoped (schema q1) scope p, o))
+        let q2_ctx =
+          List.map q2_ctx ~f:(fun (n, a) -> (n, P.name (Name.create a)))
+          |> Map.of_alist_exn (module Name)
         in
-        List.map (o1 @ o2) ~f:(fun (p, o) -> (Pred.subst sctx p, o))
+        List.map o1 ~f:(fun (p, o) -> (Pred.subst q1_ctx p, o))
+        @ List.map o2 ~f:(fun (p, o) -> (Pred.subst q2_ctx p, o))
       in
       A.order_by order @@ A.dep_join q1 @@ A.select slist q2
   | Concat qs ->

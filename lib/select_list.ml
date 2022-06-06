@@ -6,7 +6,10 @@ let of_list ps =
   match
     List.find_a_dup ps ~compare:(fun (_, n) (_, n') -> [%compare: string] n n')
   with
-  | Some (_, n) -> Or_error.errorf "duplicate name: %s" n
+  | Some (_, n) ->
+      Error
+        (Error.create_s
+           [%message "duplicate name in select list" (ps : (_ * string) list) n])
   | None -> Ok ps
 
 let of_list_exn ps = Or_error.ok_exn @@ of_list ps

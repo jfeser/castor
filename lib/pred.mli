@@ -54,6 +54,8 @@ val eqs : 'a annot pred -> (Name.t * Name.t) list
 val equiv : 'a annot pred -> Name.t Union_find.t Map.M(Name).t
 (** [equiv p] returns the equivalence class for each name mentioned in [p]. *)
 
+val map_names : f:(Name.t -> 'a pred) -> 'a pred -> 'a pred
+val iter_names : 'a pred -> Name.t Iter.t
 val names : 'a annot pred -> Set.M(Name).t
 
 val collect_aggs :
@@ -77,4 +79,3 @@ val to_static : params:Set.M(Name).t -> t -> t
 val strip_meta : < .. > annot pred -> t
 val is_expensive : _ pred -> bool
 val cse : ?min_uses:int -> t -> t * (Name.t * t) list
-val map_names : f:(Name.t -> Name.t) -> 'a annot pred -> 'a annot pred

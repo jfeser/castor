@@ -76,8 +76,8 @@ module Demomatch = struct
 end
 
 let sum_complex =
-  "Select([(sum(f) + 5) as x, (count() + sum(f / 2)) as y], AList(r1 as k, \
-   ATuple([AScalar(k.f), AScalar((k.g - k.f) as v)], cross)))"
+  "Select([(sum(f) + 5) as x, (count() + sum(f / 2)) as y], AList(r1, \
+   ATuple([AScalar(0.f), AScalar((0.g - 0.f) as v)], cross)))"
 
 let test_db_conn =
   lazy

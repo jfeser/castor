@@ -83,15 +83,15 @@ module Data = struct
 
   let to_query r =
     (* Generate a query that enumerates the stream to fold over. *)
-    Q.of_ralgebra r |> Q.map_meta ~f:Option.some |> Q.hoist_all
+    Q.of_ralgebra r |> Q.map_meta ~f:Option.some (* |> Q.hoist_all *)
 
-  let to_sql conn q =
+  let to_sql _conn q =
     (* Convert that query to a ralgebra and simplify it. *)
     let r = Q.to_ralgebra q in
     info (fun m -> m "Pre-simplify ralgebra:@ %a" Abslayout.pp r);
     let r =
-      Simplify_tactic.simplify conn r
-      |> Resolve.resolve_exn ~params:(Set.empty (module Name))
+      (* Simplify_tactic.simplify conn r *)
+      r |> Resolve.resolve_exn ~params:(Set.empty (module Name))
     in
     info (fun m -> m "Post-simplify ralgebra:@ %a" Abslayout.pp r);
     (* Convert the ralgebra to sql. *)
@@ -255,8 +255,8 @@ class virtual ['a, 'm] abslayout_fold =
           self#key_layout q'
       | _ -> None
 
-    method private eval_for lctx tups (a : (_, _ option) Q.t)
-        (n, _, q2, distinct) : 'a =
+    method private eval_for lctx tups (a : (_, _ option) Q.t) (n, q2, distinct)
+        : 'a =
       let fold = self#for_ a in
       let extract_lhs t = List.take t n in
       let extract_rhs t = List.drop t n in

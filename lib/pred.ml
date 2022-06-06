@@ -71,7 +71,17 @@ end
 let to_type p = Schema.to_type p
 let to_type_opt p = Schema.to_type_opt p
 let pp fmt p = Abslayout_pp.pp_pred fmt p
-let names r = (new V.names_visitor)#visit_pred () r
+
+let rec map_names ~f = function
+  | `Name n -> f n
+  | p -> V.Map.pred Fun.id (map_names ~f) p
+
+let rec iter_names p k =
+  match p with
+  | `Name n -> k n
+  | p -> V.Iter.pred (fun _ -> ()) (fun p -> iter_names p k) p
+
+let names p = iter_names p |> Iter.to_list |> Set.of_list (module Name)
 
 let rec conjoin = function
   | [] -> `Bool true
@@ -350,7 +360,3 @@ let cse ?(min_uses = 3) p =
 
          let p_new = subst p_old p_k (`Name name) in
          if [%equal: t] p_new p_old then acc else (p_new, (name, p_k) :: m))
-
-let rec map_names ~f = function
-  | `Name n -> `Name (f n)
-  | p -> V.Map.pred Fun.id (map_names ~f) p
