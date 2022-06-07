@@ -76,6 +76,14 @@ let rec map_names ~f = function
   | `Name n -> f n
   | p -> V.Map.pred Fun.id (map_names ~f) p
 
+let unscoped scope =
+  map_names ~f:(fun (n : Name.t) ->
+      match n.name with
+      | Bound (s, x) when scope = s -> `Name { n with name = Simple x }
+      | _ -> `Name n)
+
+let decr p = map_names ~f:(fun n -> `Name (Name.decr n)) p
+
 let rec iter_names p k =
   match p with
   | `Name n -> k n

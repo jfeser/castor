@@ -60,17 +60,6 @@ let name_of_string s = name_of_lexbuf (Lexing.from_string s)
 let name_of_string_exn s = name_of_string s |> ok_exn
 let names r = (new V.names_visitor)#visit_t () r
 
-let subst ctx =
-  let v =
-    object
-      inherit [_] V.endo
-
-      method! visit_Name _ this v =
-        match Map.find ctx v with Some x -> x | None -> this
-    end
-  in
-  v#visit_t ()
-
 let select_kind l =
   if List.exists l ~f:(fun (p, _) -> Poly.(Pred.kind p = `Agg)) then `Agg
   else `Scalar

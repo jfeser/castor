@@ -15,6 +15,7 @@ val run : t -> string -> string list list Or_error.t
 val exec : t -> Prim_type.t list -> string -> Value.t list list Or_error.t
 val exec1 : t -> Prim_type.t -> string -> Value.t list Or_error.t
 val exec_exn : t -> Prim_type.t list -> string -> Value.t list list
+val scan_exn : t -> Relation.t -> Value.t list list
 
 val exec_cursor_exn :
   ?count:int -> t -> Prim_type.t list -> string -> Value.t list list Sequence.t
@@ -43,5 +44,5 @@ module Async : sig
     (Value.t list list, error) result Lwt_stream.t
 
   val exec_sql : (Prim_type.t list * string) exec
-  (* val exec : < resolved : Resolve.resolved ; .. > Ast.annot exec *)
+  val exec : < resolved : Resolve.resolved ; .. > Ast.annot exec
 end

@@ -27,7 +27,6 @@ val of_channel_exn : In_channel.t -> t
 val of_string : string -> (t, [> error ]) result
 val name_of_string : string -> (Name.t, [> error ]) result
 val of_channel : In_channel.t -> (t, [> error ]) result
-val subst : 'a annot pred Map.M(Name).t -> 'a annot -> 'a annot
 val select_kind : _ pred Select_list.t -> [ `Agg | `Scalar ]
 val order_of : (< Equiv.meta ; .. > as 'm) annot -> ('m annot pred * order) list
 val annotate_key_layouts : t -> t

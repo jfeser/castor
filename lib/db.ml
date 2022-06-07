@@ -273,6 +273,10 @@ let exec db schema query =
 
 let exec_exn db schema query = exec db schema query |> Or_error.ok_exn
 
+let scan_exn db (relation : Relation.t) =
+  exec_exn db (Option.value_exn relation.r_schema |> List.map ~f:Tuple.T2.get2)
+  @@ sprintf "select * from \"%s\"" relation.r_name
+
 let exec1 conn s query =
   let open Or_error.Let_syntax in
   let%map results = exec conn [ s ] query in
@@ -444,8 +448,8 @@ module Async = struct
     async exec;
     stream
 
-  (* let exec ?timeout ?bound db r = *)
-  (*   info (fun m -> m "Running query:@ %a" Abslayout_pp.pp r); *)
-  (*   exec_sql ?timeout ?bound db *)
-  (*     (Schema_types.types r, Sql.of_ralgebra r |> Sql.to_string) *)
+  let exec ?timeout ?bound db r =
+    info (fun m -> m "Running query:@ %a" Abslayout_pp.pp r);
+    exec_sql ?timeout ?bound db
+      (Schema_types.types r, Sql.of_ralgebra r |> Sql.to_string)
 end

@@ -33,18 +33,23 @@ let for_ c x = { node = For x; meta = c }
 let let_ c x = { node = Let x; meta = c }
 let var c x = { node = Var x; meta = c }
 
+(* let map_node map_q map_t = function *)
+(*   | (Empty | Scalars _ | Var _) as node -> node *)
+(*   | Concat x -> Concat (List.map x ~f:map_t) *)
+(*   | For (x1, x2, b) -> For (map_q x1, map_t x2, b) *)
+(*   | Let (xs, q) -> Let (List.map xs ~f:(fun (s, q') -> (s, map_t q')), map_t q) *)
+
+(* let map map_q map_t map_m { node; meta } = *)
+(*   { node = map_node map_q map_t node; meta = map_m meta } *)
+
 (** A query is invariant in a set of scopes if it doesn't refer to any name in
    one of the scopes. *)
-let is_invariant ss q =
+let is_invariant q =
   let names_visitor =
     object
       inherit [_] V.reduce
       inherit [_] Util.conj_monoid
-
-      method! visit_Name () n =
-        match Name.scope n with
-        | Some s' -> not (List.mem ss s' ~equal:( = ))
-        | None -> true
+      method! visit_Name () n = Option.is_none (Name.scope n)
     end
   in
   let visitor =
@@ -64,50 +69,49 @@ let is_invariant ss q =
   in
   visitor#visit_t () q
 
-(* let hoist_invariant ss q = *)
-(*   let visitor = *)
-(*     object (self : 'self) *)
-(*       inherit [_] mapreduce as super *)
-(*       inherit [_] Util.list_monoid *)
-(*       method visit_'m _ x = (x, self#zero) *)
-(*       method visit_pred _ x = (x, self#zero) *)
-(*       method visit_'q _ x = (x, self#zero) *)
-(*       method visit_scalar _ x = (x, self#zero) *)
+let hoist_invariant q =
+  let visitor =
+    object (self : 'self)
+      inherit [_] mapreduce as super
+      inherit [_] Util.list_monoid
+      method visit_'m _ x = (x, self#zero)
+      method visit_pred _ x = (x, self#zero)
+      method visit_'q _ x = (x, self#zero)
+      method visit_scalar _ x = (x, self#zero)
 
-(*       method! visit_For ss (r, s, q, x) = *)
-(*         let q', binds = self#visit_t (s :: ss) q in *)
-(*         (For (r, s, q', x), binds) *)
+      method! visit_For _ (r, q, x) =
+        let q', binds = self#visit_t () q in
+        (For (r, q', x), binds)
 
-(*       method! visit_t ss q = *)
-(*         if is_invariant ss q then *)
-(*           let n = Fresh.name Global.fresh "q%d" in *)
-(*           (var None n, [ (n, q) ]) *)
-(*         else super#visit_t ss q *)
-(*     end *)
-(*   in *)
-(*   visitor#visit_t ss q *)
+      method! visit_t _ q =
+        if is_invariant q then
+          let n = Fresh.name Global.fresh "q%d" in
+          (var None n, [ (n, q) ])
+        else super#visit_t () q
+    end
+  in
+  visitor#visit_t () q
 
-(* let hoist_all q = *)
-(*   let visitor = *)
-(*     object (self : 'self) *)
-(*       inherit [_] map as super *)
-(*       method visit_pred _ x = x *)
-(*       method visit_'q _ x = x *)
-(*       method visit_'m _ x = x *)
-(*       method visit_scalar _ x = x *)
+let hoist_all q =
+  let visitor =
+    object (self : 'self)
+      inherit [_] map as super
+      method visit_pred _ x = x
+      method visit_'q _ x = x
+      method visit_'m _ x = x
+      method visit_scalar _ x = x
 
-(*       method! visit_t ss q = *)
-(*         match q.node with *)
-(*         | For (r, s, q', x) -> ( *)
-(*             let ss = s :: ss in *)
-(*             let q', binds = hoist_invariant ss q' in *)
-(*             match binds with *)
-(*             | [] -> for_ q.meta (r, s, self#visit_t ss q', x) *)
-(*             | _ -> let_ None (binds, for_ q.meta (r, s, self#visit_t ss q', x))) *)
-(*         | _ -> super#visit_t ss q *)
-(*     end *)
-(*   in *)
-(*   visitor#visit_t [] q *)
+      method! visit_t ss q =
+        match q.node with
+        | For (r, q', x) -> (
+            let q', binds = hoist_invariant q' in
+            match binds with
+            | [] -> for_ q.meta (r, self#visit_t ss q', x)
+            | _ -> let_ None (binds, for_ q.meta (r, self#visit_t ss q', x)))
+        | _ -> super#visit_t ss q
+    end
+  in
+  visitor#visit_t [] q
 
 let to_width q =
   let visitor =

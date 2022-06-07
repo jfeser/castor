@@ -13,6 +13,76 @@ let run_test ?(conn = Test_util.test_db_conn) s =
   print_endline sql_str;
   Logs.Src.set_level src None
 
+let sexp_diff_display = Sexp_diff.Display.Display_options.create Two_column
+
+let run_eval_test ?(conn = Test_util.test_db_conn) s =
+  let conn = Lazy.force conn in
+  let r = load_string_exn conn s in
+
+  let sort_relation = List.sort ~compare:[%compare: Value.t list] in
+  let expected =
+    let scan r =
+      let names =
+        Relation.schema r |> List.map ~f:(fun n -> Name.create (Name.name n))
+      in
+      Db.scan_exn conn r |> List.map ~f:(List.zip_exn names)
+    in
+    Eval.eval scan [] r
+    |> List.map ~f:(List.map ~f:Tuple.T2.get2)
+    |> sort_relation
+  in
+
+  let schema = Schema.schema r in
+  let types = List.map schema ~f:Name.type_exn in
+
+  let sql = of_ralgebra r in
+  let sql_str = to_string sql in
+  (match Db.check conn sql_str with
+  | Ok () -> ()
+  | Error e ->
+      print_endline (to_string_hum sql);
+      print_endline (Error.to_string_hum e));
+
+  let actual = Db.exec_exn conn types sql_str |> sort_relation in
+  if not ([%equal: Value.t list list] expected actual) then (
+    let diff =
+      Sexp_diff.Algo.diff
+        ~original:([%sexp_of: Value.t list list] expected)
+        ~updated:([%sexp_of: Value.t list list] actual)
+        ()
+    in
+    print_endline
+    @@ Sexp_diff.Display.display_with_ansi_colors sexp_diff_display diff;
+    print_endline (to_string_hum sql);
+    raise_s
+      [%message (expected : Value.t list list) (actual : Value.t list list)])
+
+let%test_unit "" = run_eval_test "groupby([count() as ct1, f, g], [f, g], r1)"
+let%test_unit "" = run_eval_test "depjoin(r1, ascalar(0.f))"
+let%test_unit "" = run_eval_test "depjoin(r1, atuple([ascalar(0.f)], cross))"
+
+let%test_unit "" =
+  run_eval_test
+    "depjoin(groupby([count() as ct1, f, g], [f, g], r1),\n\
+    \  select([0.ct1 as x0, 0.f as x1, 0.g as x2, f as x3],\n\
+    \    atuple([ascalar(0.f)], cross)))"
+
+let%test_unit "" =
+  run_eval_test
+    "depjoin(r1, select([0.f as x5, x0 as x7],\n\
+    \  depjoin(r1, ascalar(0.f as x0))))"
+
+(* let%test_unit "" = *)
+(*   run_eval_test *)
+(* "orderby([x5, x6, x8, x9],\n\ *)
+   (*     \  dedup(\n\ *)
+   (*     \    depjoin(groupby([count() as ct0, f, g], [f, g], r1),\n\ *)
+   (*     \      select([0.ct0 as x4, 0.f as x5, 0.g as x6, x0 as x7, x1 as x8,\n\ *)
+   (*     \              x2 as x9, x3 as x10],\n\ *)
+   (*     \        depjoin(groupby([count() as ct1, f, g], [f, g], r1),\n\ *)
+   (*     \          select([0.ct1 as x0, 0.f as x1, 0.g as x2, f as x3],\n\ *)
+   (*     \            atuple([ascalar(0.f)], cross)))))))\n" *)
+
 let%expect_test "select-agg" =
   run_test "select([(0.2 * avg(f)) as test], r)";
   [%expect
@@ -328,7 +398,8 @@ depjoin(select([f], r),
         atuple([ascalar((0.f + 1) as x)], cross))],
       concat)))
 |};
-  [%expect {|
+  [%expect
+    {|
     SELECT "t2"."x1" AS "x1",
            "t2"."x4" AS "x4"
     FROM

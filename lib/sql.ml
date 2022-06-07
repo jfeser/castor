@@ -270,7 +270,7 @@ let dep_join of_ralgebra q1 q2 =
                  { Name.type_ = Name.type_ n; name = Attr (sql1_alias, n') } ))
       |> Map.of_alist_exn (module Name)
     in
-    Abslayout.subst ctx q2
+    Subst.subst ctx q2
   in
   let sql2 = `Query { (of_ralgebra q2 |> to_spj) with order = [] } in
   let sql2_names = to_schema sql2 in

@@ -1,6 +1,6 @@
 (library
- (name sql_test)
- (libraries castor castor_test str core sexp_diff)
+ (name abslayout_fold_test)
+ (libraries castor castor_test str core)
  (flags -open Core -open Castor -open Castor_test)
  (inline_tests
   (deps

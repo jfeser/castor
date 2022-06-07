@@ -15,10 +15,10 @@ let%expect_test "" =
   printf "%s" (Sql.to_string_hum sql);
   [%expect
     {|
-         SELECT DISTINCT "t1"."x0" AS "x0",
-                         "t1"."x1" AS "x1",
-                         "t1"."x2" AS "x2",
-                         "t1"."x3" AS "x3"
+         SELECT DISTINCT "t2"."x0" AS "x0",
+                         "t2"."x1" AS "x1",
+                         "t2"."x2" AS "x2",
+                         "t2"."x3" AS "x3"
          FROM
            (SELECT count(*) AS "ct0",
                    "t0"."f" AS "f",
@@ -28,14 +28,14 @@ let%expect_test "" =
                       "r1"."g" AS "g"
                FROM "r1") AS "t0"
             GROUP BY "t0"."f",
-                     "t0"."g") AS "t2",
+                     "t0"."g") AS "t1",
               LATERAL
-           (SELECT "ct0" AS "x0",
-                   "f" AS "x1",
-                   "g" AS "x2",
-                   "g" AS "x3") AS "t1"
-         ORDER BY "t1"."x1",
-                  "t1"."x2" |}]
+           (SELECT "t1"."ct0" AS "x0",
+                   "t1"."f" AS "x1",
+                   "t1"."g" AS "x2",
+                   "t1"."g" AS "x3") AS "t2"
+         ORDER BY "t2"."x1",
+                  "t2"."x2" |}]
 
 let%expect_test "" =
   let ralgebra =
@@ -66,10 +66,10 @@ let%expect_test "" =
                UNION ALL
                  (SELECT 1 AS "counter0",
                          (NULL::numeric) AS "f",
-                         "t4"."x4" AS "x4",
-                         "t4"."x5" AS "x5",
-                         "t4"."x6" AS "x6",
-                         "t4"."x7" AS "x7"
+                         "t5"."x4" AS "x4",
+                         "t5"."x5" AS "x5",
+                         "t5"."x6" AS "x6",
+                         "t5"."x7" AS "x7"
                   FROM
                     (SELECT count(*) AS "ct1",
                             "t3"."f" AS "f",
@@ -79,12 +79,12 @@ let%expect_test "" =
                                "r1"."g" AS "g"
                         FROM "r1") AS "t3"
                      GROUP BY "t3"."f",
-                              "t3"."g") AS "t5",
+                              "t3"."g") AS "t4",
                        LATERAL
-                    (SELECT "ct1" AS "x4",
-                            "f" AS "x5",
-                            "g" AS "x6",
-                            "g" AS "x7") AS "t4")) AS "t6"
+                    (SELECT "t4"."ct1" AS "x4",
+                            "t4"."f" AS "x5",
+                            "t4"."g" AS "x6",
+                            "t4"."g" AS "x7") AS "t5")) AS "t6"
          ORDER BY "t6"."counter0",
                   "t6"."x5",
                   "t6"."x6" |}]
@@ -105,11 +105,11 @@ let%expect_test "" =
   printf "%s" (Sql.to_string_hum sql);
   [%expect
     {|
-         SELECT DISTINCT "t8"."x8" AS "x8",
-                         "t8"."x9" AS "x9",
-                         "t8"."x10" AS "x10",
-                         "t8"."x11" AS "x11",
-                         "t8"."x12" AS "x12"
+         SELECT DISTINCT "t9"."x8" AS "x8",
+                         "t9"."x9" AS "x9",
+                         "t9"."x10" AS "x10",
+                         "t9"."x11" AS "x11",
+                         "t9"."x12" AS "x12"
          FROM
            (SELECT count(*) AS "ct2",
                    "t7"."f" AS "f",
@@ -119,16 +119,16 @@ let%expect_test "" =
                       "r1"."g" AS "g"
                FROM "r1") AS "t7"
             GROUP BY "t7"."f",
-                     "t7"."g") AS "t9",
+                     "t7"."g") AS "t8",
               LATERAL
-           (SELECT "ct2" AS "x8",
-                   "f" AS "x9",
-                   "g" AS "x10",
-                   "f" AS "x11",
-                   ("g") - ("f") AS "x12"
-            WHERE (TRUE)) AS "t8"
-         ORDER BY "t8"."x9",
-                  "t8"."x10" |}]
+           (SELECT "t8"."ct2" AS "x8",
+                   "t8"."f" AS "x9",
+                   "t8"."g" AS "x10",
+                   "t8"."f" AS "x11",
+                   ("t8"."g") - ("t8"."f") AS "x12"
+            WHERE (TRUE)) AS "t9"
+         ORDER BY "t9"."x9",
+                  "t9"."x10" |}]
 
 let%expect_test "" =
   let ralgebra =
@@ -152,13 +152,13 @@ let%expect_test "" =
   printf "%s" (Sql.to_string_hum sql);
   [%expect
     {|
-           SELECT DISTINCT "t14"."x17" AS "x17",
-                           "t14"."x18" AS "x18",
-                           "t14"."x19" AS "x19",
-                           "t14"."x20" AS "x20",
-                           "t14"."x21" AS "x21",
-                           "t14"."x22" AS "x22",
-                           "t14"."x23" AS "x23"
+           SELECT DISTINCT "t15"."x17" AS "x17",
+                           "t15"."x18" AS "x18",
+                           "t15"."x19" AS "x19",
+                           "t15"."x20" AS "x20",
+                           "t15"."x21" AS "x21",
+                           "t15"."x22" AS "x22",
+                           "t15"."x23" AS "x23"
            FROM
              (SELECT count(*) AS "ct3",
                      "t10"."f" AS "f",
@@ -168,31 +168,31 @@ let%expect_test "" =
                         "r1"."g" AS "g"
                  FROM "r1") AS "t10"
               GROUP BY "t10"."f",
-                       "t10"."g") AS "t15",
+                       "t10"."g") AS "t11",
                 LATERAL
-             (SELECT "ct3" AS "x17",
-                     "f" AS "x18",
-                     "g" AS "x19",
-                     "t12"."x13" AS "x20",
-                     "t12"."x14" AS "x21",
-                     "t12"."x15" AS "x22",
-                     "t12"."x16" AS "x23"
+             (SELECT "t11"."ct3" AS "x17",
+                     "t11"."f" AS "x18",
+                     "t11"."g" AS "x19",
+                     "t14"."x13" AS "x20",
+                     "t14"."x14" AS "x21",
+                     "t14"."x15" AS "x22",
+                     "t14"."x16" AS "x23"
               FROM
                 (SELECT count(*) AS "ct4",
-                        "t11"."f" AS "f",
-                        "t11"."g" AS "g"
+                        "t12"."f" AS "f",
+                        "t12"."g" AS "g"
                  FROM
                    (SELECT "r1"."f" AS "f",
                            "r1"."g" AS "g"
-                    FROM "r1") AS "t11"
-                 GROUP BY "t11"."f",
-                          "t11"."g") AS "t13",
+                    FROM "r1") AS "t12"
+                 GROUP BY "t12"."f",
+                          "t12"."g") AS "t13",
                    LATERAL
-                (SELECT "ct4" AS "x13",
-                        "f" AS "x14",
-                        "g" AS "x15",
-                        "f" AS "x16") AS "t12") AS "t14"
-           ORDER BY "t14"."x18",
-                    "t14"."x19",
-                    "t14"."x21",
-                    "t14"."x22" |}]
+                (SELECT "t13"."ct4" AS "x13",
+                        "t13"."f" AS "x14",
+                        "t13"."g" AS "x15",
+                        "t13"."f" AS "x16") AS "t14") AS "t15"
+           ORDER BY "t15"."x18",
+                    "t15"."x19",
+                    "t15"."x21",
+                    "t15"."x22" |}]
