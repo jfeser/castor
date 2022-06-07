@@ -1,11 +1,10 @@
 select([p_counter, c_counter],
-ahashidx(dedup(
-      join(true, select([id as p_id], log), select([id as c_id], log))) as k,
+ahashidx(dedup(join(true, select([id as p_id], log), select([id as c_id], log))),
   alist(select([p_counter, c_counter],
     join(p_counter < c_counter && c_counter < p_succ,
-      filter(p_id = k.p_id,
+      filter(p_id = 0.p_id,
         select([id as p_id, counter as p_counter, succ as p_succ], log)),
-      filter(c_id = k.c_id,
-        select([id as c_id, counter as c_counter], log)))) as lk,
-    atuple([ascalar(lk.p_counter), ascalar(lk.c_counter)], cross)),
+      filter(c_id = 0.c_id,
+        select([id as c_id, counter as c_counter], log)))),
+    atuple([ascalar(0.p_counter), ascalar(0.c_counter)], cross)),
   (id_p, id_c)))

@@ -1,5 +1,6 @@
-select([p_counter, c_counter], filter(c_id = id_c && p_id = id_p,
-alist(filter(succ > counter + 1, log) as lp,
-atuple([ascalar(lp.id as p_id), ascalar(lp.counter as p_counter),
-alist(filter(lp.counter < counter && counter < lp.succ, log) as lc,
-atuple([ascalar(lc.id as c_id), ascalar(lc.counter as c_counter)], cross))], cross))))
+select([p_counter, c_counter],
+  filter(c_id = id_c && p_id = id_p,
+    alist(filter(succ > counter + 1, log),
+      atuple([ascalar(0.id as p_id), ascalar(0.counter as p_counter),
+    alist(filter(0.counter < counter && counter < 0.succ, log),
+      atuple([ascalar(0.id as c_id), ascalar(0.counter as c_counter)], cross))], cross))))

@@ -1,1 +1,1 @@
-AOrderedIdx(dedup(select([f], r_date)) as k, ascalar(k.f as ff), date("2018-01-01"), date("2018-01-01"))
+AOrderedIdx(dedup(select([f], r_date)), ascalar(0.f as ff), date("2018-01-01"), date("2018-01-01"))
