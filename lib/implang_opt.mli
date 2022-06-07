@@ -1,1 +1,1 @@
-(* val opt : Irgen.ir_module -> Irgen.ir_module *)
+val opt : Irgen.ir_module -> Irgen.ir_module

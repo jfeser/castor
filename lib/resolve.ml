@@ -275,7 +275,7 @@ let resolve_open resolve stage outer_ctx =
   | DepJoin { d_lhs; d_rhs } ->
       let d_lhs, lctx = rsame outer_ctx d_lhs in
       let lctx = Ctx.zero lctx in
-      let d_rhs, rctx = rsame (Ctx.bind outer_ctx lctx) d_rhs in
+      let d_rhs, rctx = rsame (Ctx.bind (Ctx.incr outer_ctx) lctx) d_rhs in
       (DepJoin { d_lhs; d_rhs }, rctx)
   | Join { pred; r1; r2 } ->
       let r1, inner_ctx1 = rsame outer_ctx r1 in

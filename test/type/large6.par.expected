@@ -11,7 +11,7 @@
                    (StringT ((nchars Top))))
                   ((kind Cross)))))
                Child_sum))
-             ((count Top))))
+             ((count (Interval 0 0)))))
            ((key_count (Interval 23 23))))))
         (Width 2)))
       (ListT

@@ -407,347 +407,358 @@ let annotate r =
       end)
     r
 
-(* module Parallel = struct *)
-(*   type error = [ `Db_error of Db.Async.error ] *)
+module Parallel = struct
+  type error = [ `Db_error of Db.Async.error ]
 
-(*   let pp_err f fmt = function *)
-(*     | `Db_error e -> *)
-(*         Fmt.pf fmt "Database error: %a" Error.pp (Db.Async.to_error e) *)
-(*     | x -> f fmt x *)
+  let pp_err f fmt = function
+    | `Db_error e ->
+        Fmt.pf fmt "Database error: %a" Error.pp (Db.Async.to_error e)
+    | x -> f fmt x
 
-(*   module Type_builder = struct *)
-(*     open Option.Let_syntax *)
+  module Type_builder = struct
+    open Option.Let_syntax
 
-(*     type agg = *)
-(*       | Simple of (Pred.t * string) *)
-(*       | Subquery of (Ast.t * (Pred.t * string) list) *)
+    type agg =
+      | Simple of (Pred.t * string)
+      | Subquery of (Ast.t * (Pred.t * string) list)
 
-(*     type nonrec t = { *)
-(*       aggs : agg list; *)
-(*       build : Value.t Map.M(String).t -> t list -> t; *)
-(*     } *)
+    type nonrec t = {
+      aggs : agg list;
+      build : Value.t Map.M(String).t -> t list -> t;
+    }
 
-(*     let eval ctx (_, n) = Map.find ctx n *)
-(*     let wrap p = (p, Fresh.name Global.fresh "x%d") *)
-(*     let func_t t = { aggs = []; build = (fun _ ts -> FuncT (ts, t)) } *)
-(*     let empty_t = { aggs = []; build = (fun _ _ -> EmptyT) } *)
-(*     let null_t = { aggs = []; build = (fun _ _ -> NullT) } *)
+    let eval ctx (_, n) = Map.find ctx n
+    let wrap p = (p, Fresh.name Global.fresh "x%d")
+    let func_t t = { aggs = []; build = (fun _ ts -> FuncT (ts, t)) }
+    let empty_t = { aggs = []; build = (fun _ _ -> EmptyT) }
+    let null_t = { aggs = []; build = (fun _ _ -> NullT) }
 
-(*     let eval_interval ~to_int ctx lo hi = *)
-(*       let range = *)
-(*         let%bind lo = eval ctx lo and hi = eval ctx hi in *)
-(*         let%map lo = to_int lo and hi = to_int hi in *)
-(*         I.Interval (lo, hi) *)
-(*       in *)
-(*       Option.value range ~default:I.top *)
+    let eval_interval ~to_int ctx lo hi =
+      let range =
+        let%bind lo = eval ctx lo and hi = eval ctx hi in
+        let%map lo = to_int lo and hi = to_int hi in
+        I.Interval (lo, hi)
+      in
+      Option.value range ~default:I.top
 
-(*     let int_t p = *)
-(*       let min = wrap @@ `Min p and max = wrap @@ `Max p in *)
-(*       let build ctx _ = *)
-(*         let range = eval_interval ~to_int:Value.to_int ctx min max in *)
-(*         IntT { range; nullable = false (\* TODO *\) } *)
-(*       in *)
-(*       { aggs = [ Simple min; Simple max ]; build } *)
+    let int_t p =
+      let min = wrap @@ `Min p and max = wrap @@ `Max p in
+      let build ctx _ =
+        let range = eval_interval ~to_int:Value.to_int ctx min max in
+        IntT { range; nullable = false (* TODO *) }
+      in
+      { aggs = [ Simple min; Simple max ]; build }
 
-(*     let bool_t = *)
-(*       { aggs = []; build = (fun _ _ -> BoolT { nullable = false (\* TODO *\) }) } *)
+    let bool_t =
+      { aggs = []; build = (fun _ _ -> BoolT { nullable = false (* TODO *) }) }
 
-(*     let date_t p = *)
-(*       let min = wrap @@ `Min p and max = wrap @@ `Max p in *)
-(*       let build ctx _ = *)
-(*         let range = *)
-(*           eval_interval *)
-(*             ~to_int:(fun x -> Option.map ~f:Date.to_int @@ Value.to_date x) *)
-(*             ctx min max *)
-(*         in *)
-(*         DateT { range; nullable = false (\* TODO *\) } *)
-(*       in *)
-(*       { aggs = [ Simple min; Simple max ]; build } *)
+    let date_t p =
+      let min = wrap @@ `Min p and max = wrap @@ `Max p in
+      let build ctx _ =
+        let range =
+          eval_interval
+            ~to_int:(fun x -> Option.map ~f:Date.to_int @@ Value.to_date x)
+            ctx min max
+        in
+        DateT { range; nullable = false (* TODO *) }
+      in
+      { aggs = [ Simple min; Simple max ]; build }
 
-(*     let fixed_t _ = *)
-(*       { *)
-(*         aggs = []; *)
-(*         build = *)
-(*           (fun _ _ -> *)
-(*             FixedT { value = AbsFixed.top; nullable = false (\* TODO *\) }); *)
-(*       } *)
+    let fixed_t _ =
+      {
+        aggs = [];
+        build =
+          (fun _ _ ->
+            FixedT { value = AbsFixed.top; nullable = false (* TODO *) });
+      }
 
-(*     let string_t _ = *)
-(*       { *)
-(*         aggs = []; *)
-(*         build = *)
-(*           (fun _ _ -> StringT { nchars = I.top; nullable = false (\* TODO *\) }); *)
-(*       } *)
+    let string_t _ =
+      {
+        aggs = [];
+        build =
+          (fun _ _ -> StringT { nchars = I.top; nullable = false (* TODO *) });
+      }
 
-(*     let scalar_t p = *)
-(*       match Pred.to_type p with *)
-(*       | NullT -> null_t *)
-(*       | IntT _ -> int_t p *)
-(*       | BoolT _ -> bool_t *)
-(*       | DateT _ -> date_t p *)
-(*       | FixedT _ -> fixed_t p *)
-(*       | StringT _ -> string_t p *)
-(*       | VoidT | TupleT _ -> failwith "Invalid scalar types." *)
+    let scalar_t p =
+      match Pred.to_type p with
+      | NullT -> null_t
+      | IntT _ -> int_t p
+      | BoolT _ -> bool_t
+      | DateT _ -> date_t p
+      | FixedT _ -> fixed_t p
+      | StringT _ -> string_t p
+      | VoidT | TupleT _ -> failwith "Invalid scalar types."
 
-(*     let count_t q f = *)
-(*       let agg_name = Fresh.name Global.fresh "ct%d" in *)
-(*       let counts = A.group_by [ (`Count, agg_name) ] [] q in *)
-(*       let count = `Name (Name.create agg_name) in *)
-(*       let min = wrap @@ `Min count and max = wrap @@ `Max count in *)
-(*       let build ctx ts = *)
-(*         let range = eval_interval ~to_int:Value.to_int ctx min max in *)
-(*         f ts range *)
-(*       in *)
-(*       { aggs = [ Subquery (counts, [ min; max ]) ]; build } *)
+    let count_t q f =
+      let agg_name = Fresh.name Global.fresh "ct%d" in
+      let counts = A.group_by [ (`Count, agg_name) ] [] q in
+      let count = `Name (Name.create agg_name) in
+      let min = wrap @@ `Min count and max = wrap @@ `Max count in
+      let build ctx ts =
+        let range = eval_interval ~to_int:Value.to_int ctx min max in
+        f ts range
+      in
+      { aggs = [ Subquery (counts, [ min; max ]) ]; build }
 
-(*     let list_error l = *)
-(*       Error.create "Unexpected list." l [%sexp_of: t list] |> Error.raise *)
+    let list_error l =
+      Error.create "Unexpected list." l [%sexp_of: t list] |> Error.raise
 
-(*     let list_t x = *)
-(*       count_t x.l_keys @@ fun ts count -> *)
-(*       match ts with [ tv ] -> ListT (tv, { count }) | _ -> list_error ts *)
+    let list_t x =
+      count_t x.l_keys @@ fun ts count ->
+      match ts with [ tv ] -> ListT (tv, { count }) | _ -> list_error ts
 
-(*     let hash_idx_t x = *)
-(*       count_t x.hi_keys @@ fun ts key_count -> *)
-(*       match ts with *)
-(*       | [ tk; tv ] -> HashIdxT (tk, tv, { key_count }) *)
-(*       | _ -> list_error ts *)
+    let hash_idx_t x =
+      count_t x.hi_keys @@ fun ts key_count ->
+      match ts with
+      | [ tk; tv ] -> HashIdxT (tk, tv, { key_count })
+      | _ -> list_error ts
 
-(*     let ordered_idx_t x = *)
-(*       count_t x.oi_keys @@ fun ts key_count -> *)
-(*       match ts with *)
-(*       | [ tk; tv ] -> OrderedIdxT (tk, tv, { key_count }) *)
-(*       | _ -> list_error ts *)
+    let ordered_idx_t x =
+      count_t x.oi_keys @@ fun ts key_count ->
+      match ts with
+      | [ tk; tv ] -> OrderedIdxT (tk, tv, { key_count })
+      | _ -> list_error ts
 
-(*     let tuple_t kind = *)
-(*       let kind = *)
-(*         match kind with *)
-(*         | Cross -> `Cross *)
-(*         | Concat -> `Concat *)
-(*         | _ -> failwith "Unexpected tuple kind." *)
-(*       in *)
-(*       { aggs = []; build = (fun _ ts -> TupleT (ts, { kind })) } *)
+    let tuple_t kind =
+      let kind =
+        match kind with
+        | Cross -> `Cross
+        | Concat -> `Concat
+        | _ -> failwith "Unexpected tuple kind."
+      in
+      { aggs = []; build = (fun _ ts -> TupleT (ts, { kind })) }
 
-(*     let of_ralgebra = function *)
-(*       | Select (ps, _) | GroupBy (ps, _, _) -> func_t (`Width (List.length ps)) *)
-(*       | Join _ | DepJoin _ | Filter _ | OrderBy _ | Dedup _ -> func_t `Child_sum *)
-(*       | AEmpty -> empty_t *)
-(*       | AScalar p -> scalar_t p.s_pred *)
-(*       | AList x -> list_t x *)
-(*       | AHashIdx x -> hash_idx_t x *)
-(*       | AOrderedIdx x -> ordered_idx_t x *)
-(*       | ATuple (_, kind) -> tuple_t kind *)
-(*       | Relation _ | Range _ -> null_t *)
-(*       | _ -> failwith "unsupported" *)
+    let of_ralgebra = function
+      | Select (ps, _) | GroupBy (ps, _, _) -> func_t (`Width (List.length ps))
+      | Join _ | DepJoin _ | Filter _ | OrderBy _ | Dedup _ -> func_t `Child_sum
+      | AEmpty -> empty_t
+      | AScalar p -> scalar_t p.s_pred
+      | AList x -> list_t x
+      | AHashIdx x -> hash_idx_t x
+      | AOrderedIdx x -> ordered_idx_t x
+      | ATuple (_, kind) -> tuple_t kind
+      | Relation _ | Range _ -> null_t
+      | _ -> failwith "unsupported"
 
-(*     let rec annot r = *)
-(*       { *)
-(*         node = query r.node; *)
-(*         meta = *)
-(*           (let builder = of_ralgebra r.node in *)
-(*            object *)
-(*              method builder = builder *)
-(*            end); *)
-(*       } *)
+    let rec annot r =
+      {
+        node = query r.node;
+        meta =
+          (let builder = of_ralgebra r.node in
+           object
+             method builder = builder
+           end);
+      }
 
-(*     and query q = V.Map.query annot pred q *)
-(*     and pred p = V.Map.pred annot pred p *)
+    and query q = V.Map.query annot pred q
+    and pred p = V.Map.pred annot pred p
 
-(*     let type_of ctx r = *)
-(*       let rec annot r = *)
-(*         let ts = *)
-(*           match r.node with *)
-(*           | Select (_, r) *)
-(*           | GroupBy (_, _, r) *)
-(*           | Filter (_, r) *)
-(*           | OrderBy { rel = r; _ } *)
-(*           | Dedup r *)
-(*           | AList { l_values = r; _ } -> *)
-(*               [ annot r ] *)
-(*           | Join { r1; r2; _ } *)
-(*           | DepJoin { d_lhs = r1; d_rhs = r2; _ } *)
-(*           | AHashIdx { hi_key_layout = Some r1; hi_values = r2; _ } *)
-(*           | AOrderedIdx { oi_key_layout = Some r1; oi_values = r2; _ } -> *)
-(*               [ annot r1; annot r2 ] *)
-(*           | ATuple (rs, _) -> List.map rs ~f:annot *)
-(*           | AEmpty | AScalar _ | Relation _ | Range _ -> [] *)
-(*           | AOrderedIdx { oi_key_layout = None; _ } *)
-(*           | AHashIdx { hi_key_layout = None; _ } -> *)
-(*               failwith "Missing key layout." *)
-(*           | _ -> failwith "unsupported" *)
-(*         in *)
+    let type_of ctx r =
+      let rec annot r =
+        let ts =
+          match r.node with
+          | Select (_, r)
+          | GroupBy (_, _, r)
+          | Filter (_, r)
+          | OrderBy { rel = r; _ }
+          | Dedup r
+          | AList { l_values = r; _ } ->
+              [ annot r ]
+          | Join { r1; r2; _ }
+          | DepJoin { d_lhs = r1; d_rhs = r2; _ }
+          | AHashIdx { hi_key_layout = Some r1; hi_values = r2; _ }
+          | AOrderedIdx { oi_key_layout = Some r1; oi_values = r2; _ } ->
+              [ annot r1; annot r2 ]
+          | ATuple (rs, _) -> List.map rs ~f:annot
+          | AEmpty | AScalar _ | Relation _ | Range _ -> []
+          | AOrderedIdx { oi_key_layout = None; _ }
+          | AHashIdx { hi_key_layout = None; _ } ->
+              failwith "Missing key layout."
+          | _ -> failwith "unsupported"
+        in
 
-(*         r.meta#builder.build ctx ts *)
-(*       in *)
-(*       try annot r *)
-(*       with exn -> *)
-(*         Exn.reraise exn (Fmt.str "type_of failed on:@ %a" Abslayout_pp.pp r) *)
-(*   end *)
+        r.meta#builder.build ctx ts
+      in
+      try annot r
+      with exn ->
+        Exn.reraise exn (Fmt.str "type_of failed on:@ %a" Abslayout_pp.pp r)
+  end
 
-(*   let unscope n = *)
-(*     match Name.scope n with *)
-(*     | Some s -> *)
-(*         Name.copy ~scope:None *)
-(*           ~name:(sprintf "%s_%s_%d" s (Name.name n) (Fresh.int Global.fresh)) *)
-(*           n *)
-(*     | None -> n *)
+  let unscope n =
+    match Name.scope n with
+    | Some s ->
+        Name.create
+          (sprintf "%d_%s_%d" s (Name.name n) (Fresh.int Global.fresh))
+    | None -> n
 
-(*   module Context = struct *)
-(*     module T = struct *)
-(*       type t = (Ast.t * string) list [@@deriving compare, sexp] *)
-(*     end *)
+  module Context = struct
+    module T = struct
+      type t = Ast.t list [@@deriving compare, sexp]
+    end
 
-(*     include T *)
-(*     include Comparator.Make (T) *)
+    include T
+    include Comparator.Make (T)
 
-(*     let to_ralgebra_simple ctxs aggs = *)
-(*       if List.is_empty aggs then [] *)
-(*       else *)
-(*         let renaming = *)
-(*           List.concat_map ctxs ~f:(fun (r, s) -> *)
-(*               Schema.schema r *)
-(*               |> List.map ~f:(fun n -> *)
-(*                      let n = Name.scoped s n in *)
-(*                      (n, unscope n))) *)
-(*         in *)
-(*         let select_list = *)
-(*           List.map renaming ~f:(fun (n, n') -> (`Name n, Name.name n')) *)
-(*         in *)
-(*         let bindings = *)
-(*           let one = A.scalar (`Int 0) (Fresh.name Global.fresh "x%d") in *)
-(*           if List.is_empty select_list then one *)
-(*           else *)
-(*             let select = A.select select_list one in *)
-(*             let rec to_dep_join = function *)
-(*               | [] -> select *)
-(*               | (r, s) :: ctxs -> A.dep_join r s (to_dep_join ctxs) *)
-(*             in *)
-(*             to_dep_join ctxs *)
-(*         in *)
-(*         let aggs = *)
-(*           let subst = *)
-(*             List.map renaming ~f:(fun (n, n') -> (n, `Name n')) *)
-(*             |> Map.of_alist_exn (module Name) *)
-(*           in *)
-(*           List.map aggs ~f:(fun (p, n) -> (Pred.subst subst p, n)) *)
-(*         in *)
-(*         [ A.group_by aggs [] bindings ] *)
+    let to_ralgebra_simple ctxs aggs =
+      if List.is_empty aggs then []
+      else
+        let renaming =
+          List.rev ctxs
+          |> List.concat_mapi ~f:(fun i r ->
+                 Schema.schema r
+                 |> List.map ~f:(fun n ->
+                        let n = Name.set_index n i in
+                        (n, unscope n)))
+        in
+        let select_list =
+          List.map renaming ~f:(fun (n, n') -> (`Name n, Name.name n'))
+        in
+        let bindings =
+          let one = A.scalar (`Int 0) (Fresh.name Global.fresh "x%d") in
+          if List.is_empty select_list then one
+          else
+            let select = A.select select_list one in
+            let rec to_dep_join = function
+              | [] -> select
+              | r :: ctxs -> A.dep_join r (to_dep_join ctxs)
+            in
+            to_dep_join ctxs
+        in
+        let aggs =
+          let subst =
+            List.map renaming ~f:(fun (n, n') -> (n, `Name n'))
+            |> Map.of_alist_exn (module Name)
+          in
+          List.map aggs ~f:(fun (p, n) -> (Pred.subst subst p, n))
+        in
+        [ A.group_by aggs [] bindings ]
 
-(*     let to_ralgebra_subquery ctxs (subquery, aggs) = *)
-(*       let rec to_dep_join = function *)
-(*         | [] -> subquery *)
-(*         | (r, s) :: ctxs -> A.dep_join r s (to_dep_join ctxs) *)
-(*       in *)
-(*       A.group_by aggs [] (to_dep_join ctxs) *)
+    let to_ralgebra_subquery ctxs (subquery, aggs) =
+      let rec to_dep_join = function
+        | [] -> subquery
+        | r :: ctxs -> A.dep_join r (to_dep_join ctxs)
+      in
+      A.group_by aggs [] (to_dep_join ctxs)
 
-(*     let drop_orderby r = *)
-(*       let rec annot r = *)
-(*         match r.node with *)
-(*         | OrderBy { rel; _ } -> annot rel *)
-(*         | _ -> V.Map.annot query r *)
-(*       and query q = V.Map.query annot pred q *)
-(*       and pred p = V.Map.pred annot pred p in *)
-(*       annot r *)
+    let drop_orderby r =
+      let rec annot r =
+        match r.node with
+        | OrderBy { rel; _ } -> annot rel
+        | _ -> V.Map.annot query r
+      and query q = V.Map.query annot pred q
+      and pred p = V.Map.pred annot pred p in
+      annot r
 
-(*     (\** Convert a context to a query that selects all bindings in the context. *)
-(*        We don't care about the order that these bindings appear in. *\) *)
-(*     let to_ralgebra ctxs builders = *)
-(*       let simple, subquery = *)
-(*         List.map builders ~f:(fun b -> b.Type_builder.aggs) *)
-(*         |> List.concat *)
-(*         |> List.partition_map ~f:(function *)
-(*              | Type_builder.Simple ps -> First ps *)
-(*              | Subquery p -> Second p) *)
-(*       in *)
-(*       to_ralgebra_simple ctxs simple *)
-(*       @ List.map subquery ~f:(to_ralgebra_subquery ctxs) *)
-(*       |> List.map ~f:drop_orderby *)
-(*   end *)
+    (** Convert a context to a query that selects all bindings in the context.
+       We don't care about the order that these bindings appear in. *)
+    let to_ralgebra ctxs builders =
+      let simple, subquery =
+        List.map builders ~f:(fun b -> b.Type_builder.aggs)
+        |> List.concat
+        |> List.partition_map ~f:(function
+             | Type_builder.Simple ps -> First ps
+             | Subquery p -> Second p)
+      in
+      to_ralgebra_simple ctxs simple
+      @ List.map subquery ~f:(to_ralgebra_subquery ctxs)
+      |> List.map ~f:drop_orderby
+  end
 
-(*   let contexts r = *)
-(*     let empty q = [ ([], q) ] *)
-(*     and wrap (r, s) = *)
-(*       List.map ~f:(fun (ctxs, q) -> ((strip_meta r, s) :: ctxs, q)) *)
-(*     in *)
+  let contexts r =
+    let empty q = [ ([], q) ] in
+    let wrap r = List.map ~f:(fun (ctxs, q) -> (strip_meta r :: ctxs, q)) in
 
-(*     let plus = ( @ ) and zero = [] in *)
-(*     let rec annot r = *)
-(*       let this_ctx = empty r.meta in *)
-(*       let child_ctxs = *)
-(*         match r.node with *)
-(*         | AList { l_keys = qk; l_scope; l_values = qv } -> *)
-(*             wrap (qk, l_scope) (annot qv) *)
-(*         | AOrderedIdx *)
-(*             { oi_keys = qk; oi_values = qv; oi_scope; oi_key_layout; _ } -> *)
-(*             let wrap = wrap (qk, oi_scope) in *)
-(*             let qk = Option.value_exn oi_key_layout in *)
-(*             plus (wrap (annot qv)) (wrap (annot qk)) *)
-(*         | AHashIdx h -> *)
-(*             let wrap = wrap (h.hi_keys, h.hi_scope) in *)
-(*             let qk = Option.value_exn h.hi_key_layout in *)
-(*             let qv = h.hi_values in *)
-(*             plus (wrap (annot qv)) (wrap (annot qk)) *)
-(*         | q -> V.Reduce.query zero plus annot pred q *)
-(*       in *)
-(*       plus this_ctx child_ctxs *)
-(*     and pred _ = zero in *)
+    let plus = ( @ ) and zero = [] in
+    let rec annot r =
+      let this_ctx = empty r.meta in
+      let child_ctxs =
+        match r.node with
+        | AList { l_keys = qk; l_values = qv } -> wrap qk (annot qv)
+        | AOrderedIdx { oi_keys = qk; oi_values = qv; oi_key_layout; _ } ->
+            let wrap = wrap qk in
+            let qk = Option.value_exn oi_key_layout in
+            plus (wrap (annot qv)) (wrap (annot qk))
+        | AHashIdx h ->
+            let wrap = wrap h.hi_keys in
+            let qk = Option.value_exn h.hi_key_layout in
+            let qv = h.hi_values in
+            plus (wrap (annot qv)) (wrap (annot qk))
+        | q -> V.Reduce.query zero plus annot pred q
+      in
+      plus this_ctx child_ctxs
+    and pred _ = zero in
 
-(*     annot r *)
-(*     |> List.map ~f:(fun (k, v) -> (k, [ v ])) *)
-(*     |> Map.of_alist_reduce (module Context) ~f:( @ ) *)
+    annot r
+    |> List.map ~f:(fun (k, v) -> (k, [ v ]))
+    |> Map.of_alist_reduce (module Context) ~f:( @ )
 
-(*   let type_of ?timeout conn r = *)
-(*     let open Result.Let_syntax in *)
-(*     let r = (r :> < > annot) in *)
-(*     let r = Type_builder.annot r in *)
-(*     let%bind queries = *)
-(*       contexts r |> Map.to_alist *)
-(*       |> List.concat_map ~f:(fun (ctx, builders) -> *)
-(*              let builders = List.map ~f:(fun b -> b#builder) builders in *)
-(*              Context.to_ralgebra ctx builders) *)
-(*       |> List.map ~f:(fun r -> *)
-(*              debug (fun m -> m "Pre-opt:@ %a" A.pp r); *)
-(*              let%map r = *)
-(*                Simplify_tactic.simplify conn r *)
-(*                |> Resolve.resolve ~params:(Set.empty (module Name)) *)
-(*              in *)
-(*              debug (fun m -> m "Post-opt:@ %a" A.pp r); *)
-(*              r) *)
-(*       |> Result.all *)
-(*     in *)
+  let%expect_test "" =
+    let ctxs =
+      contexts
+        (Abslayout.of_string_exn "alist(r, alist(s, ascalar((1.x + 0.x) as v)))")
+    in
+    print_s [%message (ctxs : _ list Map.M(Context).t)];
+    [%expect
+      {|
+      (ctxs
+       ((() (_))
+        ((((node (Relation ((r_name r) (r_schema ())))) (meta <opaque>))) (_))
+        ((((node (Relation ((r_name r) (r_schema ())))) (meta <opaque>))
+          ((node (Relation ((r_name s) (r_schema ())))) (meta <opaque>)))
+         (_)))) |}]
 
-(*     let results = *)
-(*       let open Lwt in *)
-(*       Lwt_list.map_p *)
-(*         (fun r -> *)
-(*           let start_time = Time.now () in *)
-(*           let%lwt tup = Lwt_stream.get @@ Db.Async.exec ?timeout conn r in *)
-(*           let end_time = Time.now () in *)
-(*           let total_time = Time.diff end_time start_time in *)
-(*           match tup with *)
-(*           | Some (Ok t) -> *)
-(*               info (fun m -> *)
-(*                   m "Query succeeded after %a." Time.Span.pp total_time); *)
-(*               return *)
-(*                 (List.hd_exn t *)
-(*                 |> List.map2_exn (Schema.names r) ~f:(fun n v -> (n, v)) *)
-(*                 |> Option.return |> Result.return) *)
-(*           | Some (Error { info = `Timeout; _ }) -> *)
-(*               info (fun m -> *)
-(*                   m "Query timed out after %a." Time.Span.pp total_time); *)
-(*               return @@ Result.return None *)
-(*           | Some (Error e) -> return @@ Result.fail (`Db_error e) *)
-(*           | None -> failwith "BUG: expected a tuple.") *)
-(*         queries *)
-(*       |> Lwt_main.run *)
-(*     in *)
+  let type_of ?timeout conn r =
+    let open Result.Let_syntax in
+    let r = (r :> < > annot) in
+    let r = Type_builder.annot r in
+    let%bind queries =
+      contexts r |> Map.to_alist
+      |> List.concat_map ~f:(fun (ctx, builders) ->
+             let builders = List.map ~f:(fun b -> b#builder) builders in
+             Context.to_ralgebra ctx builders)
+      |> List.map ~f:(fun r ->
+             debug (fun m -> m "Pre-opt:@ %a" Abslayout_pp.pp r);
+             let%map r =
+               (* Simplify_tactic.simplify conn *)
+               r |> Resolve.resolve ~params:(Set.empty (module Name))
+             in
+             debug (fun m -> m "Post-opt:@ %a" Abslayout_pp.pp r);
+             r)
+      |> Result.all
+    in
 
-(*     Result.( *)
-(*       all results >>| fun results -> *)
-(*       let ctx = *)
-(*         List.filter_map results ~f:Fun.id *)
-(*         |> List.concat *)
-(*         |> Map.of_alist_exn (module String) *)
-(*       in *)
-(*       Type_builder.type_of ctx r) *)
-(* end *)
+    let results =
+      let open Lwt in
+      Lwt_list.map_p
+        (fun r ->
+          let start_time = Time.now () in
+          let%lwt tup = Lwt_stream.get @@ Db.Async.exec ?timeout conn r in
+          let end_time = Time.now () in
+          let total_time = Time.diff end_time start_time in
+          match tup with
+          | Some (Ok t) ->
+              info (fun m ->
+                  m "Query succeeded after %a." Time.Span.pp total_time);
+              return
+                (List.hd_exn t
+                |> List.map2_exn (Schema.names r) ~f:(fun n v -> (n, v))
+                |> Option.return |> Result.return)
+          | Some (Error { info = `Timeout; _ }) ->
+              info (fun m ->
+                  m "Query timed out after %a." Time.Span.pp total_time);
+              return @@ Result.return None
+          | Some (Error e) -> return @@ Result.fail (`Db_error e)
+          | None -> failwith "BUG: expected a tuple.")
+        queries
+      |> Lwt_main.run
+    in
+
+    Result.(
+      all results >>| fun results ->
+      let ctx =
+        List.filter_map results ~f:Fun.id
+        |> List.concat
+        |> Map.of_alist_exn (module String)
+      in
+      Type_builder.type_of ctx r)
+end

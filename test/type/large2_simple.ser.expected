@@ -1,0 +1,11 @@
+(OrderedIdxT
+ ((DateT ((range Bottom)))
+  (TupleT
+   (((ListT
+      ((TupleT
+        (((FixedT ((value ((range Bottom) (scale 1)))))
+          (FixedT ((value ((range Bottom) (scale 1))))))
+         ((kind Cross))))
+       ((count Bottom)))))
+    ((kind Cross))))
+  ((key_count (Interval 0 0)))))

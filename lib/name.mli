@@ -16,6 +16,7 @@ val type_exn : t -> Prim_type.t
 val incr : t -> t
 val decr : t -> t
 val zero : t -> t
+val set_index : t -> int -> t
 val pp : Formatter.t -> t -> unit
 val fresh : (int -> string, unit, string) format -> t
 val of_string_exn : string -> t

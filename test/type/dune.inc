@@ -96,6 +96,25 @@
 
 (rule
  (alias typetest)
+ (targets large2_simple.par.output large2_simple.cost.output large2_simple.ser.output)
+ (deps (alias ../test_db))
+ (action (with-stdin-from large2_simple (run ../bin/type.exe -p param0:date -db postgresql:///tpch_1k -parallel large2_simple.par.output -cost large2_simple.cost.output -serial large2_simple.ser.output))))
+
+(rule
+ (alias typetest)
+ (action (diff large2_simple.par.expected large2_simple.par.output)))
+(rule
+ (alias typetest)
+ (action (diff large2_simple.cost.expected large2_simple.cost.output)))
+
+(rule
+ (alias typetest)
+ (action (diff large2_simple.ser.expected large2_simple.ser.output)))
+
+
+
+(rule
+ (alias typetest)
  (targets large5.par.output large5.cost.output)
  (deps (alias ../test_db))
  (action (with-stdin-from large5 (run ../bin/type.exe  -db postgresql:///tpch_1k -parallel large5.par.output -cost large5.cost.output))))

@@ -172,13 +172,6 @@ let all r =
           Some (RevList.to_list p, q)
       | None -> None)
 
-let%test_unit "all-valid" =
-  let q =
-    {|atuple([alist(orderby([r1.f desc], r1) as r1, atuple([ascalar(r1.f), ascalar(r1.g)], cross)), atuple([ascalar(9 as x), ascalar(9 as y)], cross), alist(orderby([r1.f asc], r1) as r1, atuple([ascalar(r1.f), ascalar(r1.g)], cross))], concat)|}
-    |> Abslayout.of_string_exn
-  in
-  Seq.iter (all q) ~f:(fun p -> get_exn p q |> ignore)
-
 let rec is_run_time r p =
   match (p, r.node) with
   | [], _ -> true

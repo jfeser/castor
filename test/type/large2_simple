@@ -1,4 +1,5 @@
-    aorderedidx(select([o_orderdate], dedup(select([o_orderdate], orders))),
+    aorderedidx(atuple([ascalar(date("1998-01-01") as o_orderdate),
+                        ascalar(date("2005-01-01") as o_orderdate)], concat),
                       atuple([alist(select([l_extendedprice, l_discount],
                                       join(((o_orderdate = 0.o_orderdate) &&
                                            (((l_returnflag = "R")) &&

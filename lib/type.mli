@@ -84,14 +84,14 @@ val annotate :
   ; meta : 'a >
   annot
 
-(* module Parallel : sig *)
-(*   type error = [ `Db_error of Db.Async.error ] *)
+module Parallel : sig
+  type error = [ `Db_error of Db.Async.error ]
 
-(*   val pp_err : ([> error ] as 'a) Fmt.t -> 'a Fmt.t *)
+  val pp_err : ([> error ] as 'a) Fmt.t -> 'a Fmt.t
 
-(*   val type_of : *)
-(*     ?timeout:float -> *)
-(*     Db.t -> *)
-(*     < .. > annot -> *)
-(*     (t, [> error | Resolve.error ]) Result.t *)
-(* end *)
+  val type_of :
+    ?timeout:float ->
+    Db.t ->
+    < .. > annot ->
+    (t, [> error | Resolve.error ]) Result.t
+end

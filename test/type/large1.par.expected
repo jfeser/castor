@@ -11,7 +11,7 @@
                (FixedT ((value ((range Top) (scale 1)))))
                (StringT ((nchars Top))) (StringT ((nchars Top))))
               ((kind Cross))))
-            ((count (Interval 1 5))))))
+            ((count (Interval 0 5))))))
          (Width 6)))
        ((key_count (Interval 812 812))))))
     (Width 10)))

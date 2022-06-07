@@ -41,3 +41,4 @@ val hoist_meta_query :
   ('m annot pred, 'm annot) query
 
 val hoist_meta_pred : < meta : 'm ; .. > annot pred -> 'm annot pred
+val h_key_layout : ('a, < .. > annot) hash_idx -> t

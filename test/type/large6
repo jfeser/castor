@@ -8,22 +8,22 @@ select([sum((l_extendedprice * (1 - l_discount))) as revenue],
                                         ((l_shipmode = "AIR") ||
                                         (l_shipmode = "AIR REG"))),
                                    lineitem),
-                                 filter((p_size >= 1), part)))) as s6,
+                                 filter((p_size >= 1), part)))),
                  alist(select([l_extendedprice, l_discount, p_brand],
                          join(((((p_container = "SM CASE") ||
                                 ((p_container = "SM BOX") ||
                                 ((p_container = "SM PACK") ||
                                 (p_container = "SM PKG")))) &&
-                               ((p_size <= 5) && (l_quantity = s6.l_quantity)))
+                               ((p_size <= 5) && (l_quantity = 0.l_quantity)))
                               && ((p_partkey = l_partkey) && true)),
                            filter(((l_shipinstruct = "DELIVER IN PERSON") &&
                                   ((l_shipmode = "AIR") ||
                                   (l_shipmode = "AIR REG"))),
                              lineitem),
-                           filter((p_size >= 1), part))) as s3,
+                           filter((p_size >= 1), part))),
                    filter((p_brand = ""),
-                     atuple([ascalar(s3.l_extendedprice),
-                             ascalar(s3.l_discount), ascalar(s3.p_brand)],
+                     atuple([ascalar(0.l_extendedprice),
+                             ascalar(0.l_discount), ascalar(0.p_brand)],
                        cross))),
                  >= 0, <= (0 + 10))),
              alist(select([l_quantity, l_extendedprice, l_discount, p_brand],
@@ -35,11 +35,11 @@ select([sum((l_extendedprice * (1 - l_discount))) as revenue],
                        filter(((l_shipinstruct = "DELIVER IN PERSON") &&
                               ((l_shipmode = "AIR") || (l_shipmode = "AIR REG"))),
                          lineitem),
-                       filter((p_size >= 1), part))) as s4,
+                       filter((p_size >= 1), part))),
                filter(((p_brand = "") &&
                       ((l_quantity >= 0) && (l_quantity <= (0 + 10)))),
-                 atuple([ascalar(s4.l_quantity), ascalar(s4.l_extendedprice),
-                         ascalar(s4.l_discount), ascalar(s4.p_brand)],
+                 atuple([ascalar(0.l_quantity), ascalar(0.l_extendedprice),
+                         ascalar(0.l_discount), ascalar(0.p_brand)],
                    cross))),
              alist(select([l_quantity, l_extendedprice, l_discount, p_brand],
                      join(((((p_container = "LG CASE") ||
@@ -50,10 +50,10 @@ select([sum((l_extendedprice * (1 - l_discount))) as revenue],
                        filter(((l_shipinstruct = "DELIVER IN PERSON") &&
                               ((l_shipmode = "AIR") || (l_shipmode = "AIR REG"))),
                          lineitem),
-                       filter((p_size >= 1), part))) as s5,
+                       filter((p_size >= 1), part))),
                filter(((p_brand = "") &&
                       ((l_quantity >= 0) && (l_quantity <= (0 + 10)))),
-                 atuple([ascalar(s5.l_quantity), ascalar(s5.l_extendedprice),
-                         ascalar(s5.l_discount), ascalar(s5.p_brand)],
+                 atuple([ascalar(0.l_quantity), ascalar(0.l_extendedprice),
+                         ascalar(0.l_discount), ascalar(0.p_brand)],
                    cross)))],
        concat))

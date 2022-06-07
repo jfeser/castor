@@ -1,11 +1,11 @@
 (OrderedIdxT
- ((DateT ((range (Interval 8036 10437))))
+ ((DateT ((range (Interval 10227 12784))))
   (TupleT
    (((ListT
       ((TupleT
         (((FixedT ((value ((range Top) (scale 1)))))
           (FixedT ((value ((range Top) (scale 1))))))
          ((kind Cross))))
-       ((count (Interval 0 3))))))
+       ((count (Interval 0 0))))))
     ((kind Cross))))
-  ((key_count (Interval 822 822)))))
+  ((key_count (Interval 2 2)))))

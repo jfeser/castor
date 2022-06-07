@@ -53,10 +53,12 @@ let decr n =
   | Bound (i, x) -> { n with name = Bound (i - 1, x) }
   | _ -> n
 
-let zero n =
+let set_index n i =
   match n.name with
-  | Attr (_, x) | Simple x -> { n with name = Bound (0, x) }
+  | Attr (_, x) | Simple x -> { n with name = Bound (i, x) }
   | Bound _ -> failwith "name already has index"
+
+let zero n = set_index n 0
 
 let type_exn n =
   match type_ n with

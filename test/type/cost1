@@ -1,11 +1,11 @@
 select([s1_acctbal, s1_name, n1_name, p1_partkey, p1_mfgr, s1_address,
            s1_phone, s1_comment],
      ahashidx(depjoin(select([min(p_size) as lo, max(p_size) as hi],
-                        dedup(select([p_size], part))) as k1,
-                select([range as k0], range(k1.lo, k1.hi))) as s0,
+                        dedup(select([p_size], part))),
+                select([range as k0], range(0.lo, 0.hi))),
        select([s1_acctbal, s1_name, n1_name, p1_partkey, p1_mfgr, s1_address,
                s1_phone, s1_comment],
-         alist(filter((p1_size = s0.k0),
+         alist(filter((p1_size = 0.k0),
                  orderby([s1_acctbal desc, n1_name, s1_name, p1_partkey],
                    join((((r1_name = r_name) &&
                          (((ps_partkey = ps1_partkey) &&
@@ -41,23 +41,23 @@ select([s1_acctbal, s1_name, n1_name, p1_partkey, p1_mfgr, s1_address,
                                        nation,
                                        region),
                                      supplier),
-                                   partsupp))) as k2,
+                                   partsupp))),
                        select([r_name, ps_partkey,
                                min(ps_supplycost) as min_cost],
-                         join((((r_name = k2.r_name) &&
-                               (ps_partkey = k2.ps_partkey)) &&
+                         join((((r_name = 0.r_name) &&
+                               (ps_partkey = 0.ps_partkey)) &&
                               (s_suppkey = ps_suppkey)),
                            join((s_nationkey = n_nationkey),
                              join((n_regionkey = r_regionkey), nation, region),
                              supplier),
-                           partsupp)))))) as s1,
+                           partsupp)))))),
            filter(((r1_name = "") &&
                   (strpos(p1_type, "") =
                   ((strlen(p1_type) - strlen("")) + 1))),
-             atuple([ascalar(s1.r1_name), ascalar(s1.n1_name),
-                     ascalar(s1.s1_acctbal), ascalar(s1.s1_name),
-                     ascalar(s1.s1_address), ascalar(s1.s1_phone),
-                     ascalar(s1.s1_comment), ascalar(s1.p1_type),
-                     ascalar(s1.p1_partkey), ascalar(s1.p1_mfgr)],
+             atuple([ascalar(0.r1_name), ascalar(0.n1_name),
+                     ascalar(0.s1_acctbal), ascalar(0.s1_name),
+                     ascalar(0.s1_address), ascalar(0.s1_phone),
+                     ascalar(0.s1_comment), ascalar(0.p1_type),
+                     ascalar(0.p1_partkey), ascalar(0.p1_mfgr)],
                cross)))),
        0))

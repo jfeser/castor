@@ -181,3 +181,14 @@ let rec hoist_meta { node; meta } =
 
 and hoist_meta_query q = V.Map.query hoist_meta hoist_meta_pred q
 and hoist_meta_pred p = V.Map.pred hoist_meta hoist_meta_pred p
+
+let h_key_layout { hi_key_layout; hi_keys; _ } =
+  match hi_key_layout with
+  | Some l -> strip_meta l
+  | None -> (
+      match
+        List.map (schema hi_keys) ~f:(fun n -> A.scalar (`Name n) (Name.name n))
+      with
+      | [] -> failwith "empty schema"
+      | [ x ] -> x
+      | _ -> failwith "too many keys")
