@@ -1,29 +1,29 @@
-(* open Ast *)
+open Ast
 
-(* type 'a meta = *)
-(*   < type_ : Type.t *)
-(*   ; pos : int option *)
-(*   ; fold_stream : Abslayout_fold.Data.t *)
-(*   ; Equiv.meta *)
-(*   ; meta : 'a > *)
+type 'a meta =
+  < type_ : Type.t
+  ; pos : int option
+  ; fold_stream : Abslayout_fold.Data.t
+  ; Equiv.meta
+  ; meta : 'a >
 
-(* val serialize : *)
-(*   ?layout_file:string -> *)
-(*   string -> *)
-(*   (< fold_stream : Abslayout_fold.Data.t ; type_ : Type.t ; Equiv.meta ; .. > *)
-(*    as *)
-(*    'a) *)
-(*   annot -> *)
-(*   'a meta annot * int *)
-(* (\** Serialize a layout to a binary format. *)
+val serialize :
+  ?layout_file:string ->
+  string ->
+  (< fold_stream : Abslayout_fold.Data.t ; type_ : Type.t ; Equiv.meta ; .. >
+   as
+   'a)
+  annot ->
+  'a meta annot * int
+(** Serialize a layout to a binary format.
 
-(*       @return the layout, annotated with the byte position of each *)
-(*       single-appearing sub-layout. Also returns the number of bytes written. *\) *)
+      @return the layout, annotated with the byte position of each
+      single-appearing sub-layout. Also returns the number of bytes written. *)
 
-(* (\** Sentinal values for use when a value is null. *\) *)
+(** Sentinal values for use when a value is null. *)
 
-(* val string_sentinal : Type.string_ -> int *)
-(* val int_sentinal : Type.int_ -> int *)
-(* val date_sentinal : Type.date -> int *)
-(* val fixed_sentinal : Type.fixed -> int *)
-(* val bool_sentinal : int *)
+val string_sentinal : Type.string_ -> int
+val int_sentinal : Type.int_ -> int
+val date_sentinal : Type.date -> int
+val fixed_sentinal : Type.fixed -> int
+val bool_sentinal : int
