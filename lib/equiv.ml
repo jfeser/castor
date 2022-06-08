@@ -45,13 +45,18 @@ let closure eq =
                 else []))
   |> Set.of_list (module Eq)
 
+let rec eqs_pred = function
+  | `Binop (Binop.Eq, `Name n1, `Name n2) -> Set.singleton (module Eq) (n1, n2)
+  | `Binop (And, p, p') -> Set.union (eqs_pred p) (eqs_pred p')
+  | _ -> Set.empty (module Eq)
+
 (** Return the set of equivalent attributes in the output of a query.
 
     Two attributes are equivalent in a relation if in every tuple of that
    relation, they have the same value. *)
-let eqs_open (eqs : 'a annot -> Set.M(Eq).t) r : Set.M(Eq).t =
+let eqs_query_open ~schema eqs r : Set.M(Eq).t =
   match r with
-  | Filter (p, r) -> Pred.eqs p |> of_list || eqs r
+  | Filter (p, r) -> eqs_pred p || eqs r
   | Select (ps, r) | GroupBy (ps, _, r) ->
       eqs r
       || List.filter_map ps ~f:(function
@@ -60,17 +65,16 @@ let eqs_open (eqs : 'a annot -> Set.M(Eq).t) r : Set.M(Eq).t =
          |> of_list
   | Join { pred = p; r1; r2 } ->
       let e1 = eqs r1 and e2 = eqs r2 in
-      let peqs = Pred.eqs p |> of_list in
       (* `If the equalities don't overlap, both sets continue to hold after the join. *)
       let jeqs =
         if Set.inter (names e1) (names e2) |> Set.is_empty then e1 || e2
         else e1 && e2
       in
-      peqs || jeqs
+      eqs_pred p || jeqs
   | Dedup r | OrderBy { rel = r; _ } | DepJoin { d_rhs = r; _ } -> eqs r
   | AList { l_keys = rk; l_values = rv; _ } -> eqs rk || eqs rv
   | AHashIdx h -> (
-      match List.zip (Schema.schema h.hi_keys) h.hi_lookup with
+      match List.zip (schema h.hi_keys) h.hi_lookup with
       | Ok ls ->
           List.filter_map ls ~f:(fun (n, p) ->
               match p with `Name n' -> Some (n, n') | _ -> None)
@@ -88,9 +92,10 @@ let annotate r =
         method meta = m
         method eq = eq
       end)
-    eqs_open r
+    (eqs_query_open ~schema:Schema.schema)
+    r
 
-let rec eqs r = closure @@ eqs_open eqs r.node
+let rec eqs r = closure @@ eqs_query_open ~schema:Schema.schema eqs r.node
 
 (** Two attributes are equivalent in a context if they can be substituted
    without changing the final relation. *)
@@ -109,10 +114,10 @@ module Context = struct
 
   and query eqs = function
     | Filter (p, r) ->
-        let eqs = Pred.eqs p |> of_list || eqs in
+        let eqs = eqs_pred p || eqs in
         Filter (pred eqs p, annot eqs r)
     | Join { pred = p; r1; r2 } ->
-        let eqs = Pred.eqs p |> of_list || eqs in
+        let eqs = eqs_pred p || eqs in
         Join { pred = pred eqs p; r1 = annot eqs r1; r2 = annot eqs r2 }
     | q ->
         let eqs = empty in
@@ -122,4 +127,3 @@ module Context = struct
 
   let annotate r = annot empty r
 end
-

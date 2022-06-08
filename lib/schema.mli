@@ -8,8 +8,10 @@ val pp : t Fmt.t
 val to_type_open :
   ('a -> t) -> ('a pred -> Prim_type.t) -> 'a pred -> Prim_type.t
 
+val schema_query_open : ('r -> t) -> ('r pred, 'r) query -> t
 val schema_open : ('a annot -> t) -> 'a annot -> t
 val schema : _ annot -> t
+val annotate_schema : 'm annot -> < schema : t ; meta : 'm > annot
 val schema_set : _ annot -> Set.M(Name).t
 val names : _ annot -> string list
 val to_type : _ annot pred -> Prim_type.t

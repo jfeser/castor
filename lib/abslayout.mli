@@ -28,6 +28,14 @@ val of_string : string -> (t, [> error ]) result
 val name_of_string : string -> (Name.t, [> error ]) result
 val of_channel : In_channel.t -> (t, [> error ]) result
 val select_kind : _ pred Select_list.t -> [ `Agg | `Scalar ]
+
+val order_query_open :
+  schema:('r -> Name.t list) ->
+  eq:('r -> Set.M(Equiv.Eq).t) ->
+  ('r -> ('r pred * order) list) ->
+  ('r pred, 'r) query ->
+  ('r pred * order) list
+
 val order_of : (< Equiv.meta ; .. > as 'm) annot -> ('m annot pred * order) list
 val annotate_key_layouts : t -> t
 

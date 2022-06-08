@@ -1,6 +1,6 @@
-(* open Core *)
-(* open Ast *)
-(* module V = Visitors *)
+open Core
+open Ast
+module V = Visitors
 (* module A = Abslayout *)
 
 (* class ['a] stage_iter = *)
@@ -30,63 +30,67 @@
 (*     method! visit_AScalar (ctx, _) p = self#visit_pred (ctx, `Compile) p.s_pred *)
 (*   end *)
 
-(* let stage ?(params = Set.empty (module Name)) r = *)
-(*   let compile_scopes, run_scopes = *)
-(*     let empty = Set.empty (module String) *)
-(*     and single = Set.singleton (module String) in *)
-(*     let zero = (empty, empty) *)
-(*     and plus (c, r) (c', r') = (Set.union c c', Set.union r r') in *)
-(*     let rec annot stage r = V.Stage_reduce.annot zero plus query meta stage r *)
-(*     and query stage q = *)
-(*       let this = *)
-(*         match q with *)
-(*         | AHashIdx { hi_scope = r; _ } *)
-(*         | AOrderedIdx { oi_scope = r; _ } *)
-(*         | AList { l_scope = r; _ } -> *)
-(*             (single r, empty) *)
-(*         | DepJoin { d_alias; _ } -> ( *)
-(*             match stage with *)
-(*             | `Compile -> (single d_alias, empty) *)
-(*             | `Run -> (empty, single d_alias)) *)
-(*         | _ -> zero *)
-(*       and rest = V.Stage_reduce.query zero plus annot pred stage q in *)
-(*       plus this rest *)
-(*     and pred stage p = V.Stage_reduce.pred zero plus annot pred stage p *)
-(*     and meta _ _ = zero in *)
-(*     annot `Run r *)
-(*   in *)
-(*   fun n -> *)
-(*     if Set.mem params n then `Run *)
-(*     else *)
-(*       match Name.rel n with *)
-(*       | Some s -> *)
-(*           if Set.mem compile_scopes s then `Compile *)
-(*           else if Set.mem run_scopes s then `Run *)
-(*           else failwith (sprintf "Scope not found: %s" s) *)
-(*       | None -> `No_scope *)
+let annotate_stage r =
+  let incr = List.map ~f:(fun (n, s) -> (Name.incr n, s)) in
+  let schema r = r.meta#schema in
+  let comptime = List.map ~f:(fun n -> (Name.zero n, `Compile)) in
+  let runtime = List.map ~f:(fun n -> (Name.zero n, `Run)) in
+  let rec annot stage r =
+    {
+      node = query stage r.node;
+      meta =
+        object
+          method meta = r.meta
+          method stage = stage
+        end;
+    }
+  and query stage = function
+    | AHashIdx x ->
+        AHashIdx
+          {
+            hi_keys = annot stage x.hi_keys;
+            hi_values =
+              annot (incr stage @ comptime (schema x.hi_keys)) x.hi_values;
+            hi_key_layout = Option.map x.hi_key_layout ~f:(annot stage);
+            hi_lookup = List.map x.hi_lookup ~f:(pred stage);
+          }
+    | AOrderedIdx x ->
+        AOrderedIdx
+          {
+            oi_keys = annot stage x.oi_keys;
+            oi_values =
+              annot (incr stage @ comptime (schema x.oi_keys)) x.oi_values;
+            oi_key_layout = Option.map x.oi_key_layout ~f:(annot stage);
+            oi_lookup =
+              List.map x.oi_lookup ~f:(fun (b, b') ->
+                  ( Option.map ~f:(V.Map.bound (pred stage)) b,
+                    Option.map ~f:(V.Map.bound (pred stage)) b' ));
+          }
+    | AList x ->
+        AList
+          {
+            l_keys = annot stage x.l_keys;
+            l_values =
+              annot (incr stage @ comptime (schema x.l_keys)) x.l_values;
+          }
+    | DepJoin x ->
+        DepJoin
+          {
+            d_lhs = annot stage x.d_lhs;
+            d_rhs = annot (incr stage @ runtime (schema x.d_lhs)) x.d_rhs;
+          }
+    | q -> V.Map.query (annot stage) (pred stage) q
+  and pred stage p = V.Map.pred (annot stage) (pred stage) p in
+  annot [] r
 
-(* let annotate_stage r = *)
-(*   let stage = stage r in *)
-(*   let rec annot r = *)
-(*     let node = query r.node *)
-(*     and meta = *)
-(*       object *)
-(*         method meta = r.meta *)
-(*         method stage = stage *)
-(*       end *)
-(*     in *)
-(*     { node; meta } *)
-(*   and query q = V.Map.query annot pred q *)
-(*   and pred p = V.Map.pred annot pred p in *)
-(*   annot r *)
-
-(* let is_static ?(params = Set.empty (module Name)) r = *)
-(*   Free.free r *)
-(*   |> Set.for_all ~f:(fun n -> *)
-(*          match r.meta#stage n with *)
-(*          | `Compile -> true *)
-(*          | `No_scope -> not (Set.mem params n) *)
-(*          | `Run -> false) *)
+let is_static r =
+  Free.free r
+  |> Set.for_all ~f:(fun n ->
+         match
+           List.find r.meta#stage ~f:(fun (n', _) -> [%equal: Name.t] n n')
+         with
+         | Some (_, `Compile) -> true
+         | Some (_, `Run) | None -> false)
 
 (* exception Un_serial of string *)
 

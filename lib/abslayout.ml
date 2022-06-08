@@ -64,11 +64,10 @@ let select_kind l =
   if List.exists l ~f:(fun (p, _) -> Poly.(Pred.kind p = `Agg)) then `Agg
   else `Scalar
 
-let order_open order r =
-  match r.node with
+let order_query_open ~schema ~eq order = function
   | OrderBy { key; _ } -> key
   | AOrderedIdx { oi_keys = r; _ } ->
-      schema r |> List.map ~f:(fun n -> (`Name n, Asc))
+      List.map (schema r) ~f:(fun n -> (`Name n, Asc))
   | Filter (_, r) | AHashIdx { hi_values = r; _ } -> order r
   | ATuple (rs, Cross) -> List.map ~f:order rs |> List.concat
   | Select (ps, r) ->
@@ -79,7 +78,7 @@ let order_open order r =
               else None))
   | AList { l_keys = r; l_values = r'; _ } ->
       let open Name.O in
-      let s' = schema r' and eq' = r'.meta#eq in
+      let s' = schema r' and eq' = eq r' in
       List.filter_map (order r) ~f:(function
         | `Name n, dir ->
             if List.mem ~equal:( = ) s' n then Some (`Name n, dir)
@@ -94,6 +93,9 @@ let order_open order r =
   | AScalar _ | Range _ ->
       []
   | _ -> failwith "unsupported"
+
+let order_open order r =
+  order_query_open ~schema ~eq:(fun r -> r.meta#eq) order r.node
 
 let rec order_of r = order_open order_of r
 

@@ -1,1 +1,1 @@
-depjoin(alist(r1 as k1, ascalar(k1.f)) as k3, select([(k3.f + g) as x], ascalar(5 as g)))
+depjoin(alist(r1, ascalar(0.f)), select([(0.f + g) as x], ascalar(5 as g)))

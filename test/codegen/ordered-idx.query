@@ -1,1 +1,1 @@
-AOrderedIdx(OrderBy([f asc], Dedup(Select([f], r1))) as k, AList(Filter(f = k.f, r1) as lk, ascalar(lk.g)), 1, 3)
+AOrderedIdx(OrderBy([f asc], Dedup(Select([f], r1))), AList(Filter(f = 0.f, r1), ascalar(0.g)), 1, 3)

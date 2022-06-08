@@ -1,1 +1,1 @@
-AHashIdx(Dedup(Select([f], r1)) as k, AList(Filter(f = k.f, r1) as lk, ascalar(lk.g)), 2)
+AHashIdx(Dedup(Select([f], r1)), AList(Filter(f = 0.f, r1), ascalar(0.g)), 2)

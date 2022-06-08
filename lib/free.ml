@@ -21,9 +21,8 @@ let select_list_free pred_free ps =
 let zero = Set.map (module Name) ~f:Name.zero
 let decr = Set.map (module Name) ~f:Name.decr
 
-let free_open free =
+let free_query_open ~schema_set free =
   let pred_free = pred_free_open free in
-  let schema_set = Schema.schema_set in
   let open Set.O in
   function
   | Relation _ | AEmpty -> empty
@@ -63,7 +62,7 @@ let free_open free =
   | ATuple (rs, (Zip | Concat | Cross)) -> List.map rs ~f:free |> union_list
   | _ -> failwith "unsupported"
 
-let rec free r = free_open free r.node
+let rec free r = free_query_open ~schema_set:Schema.schema_set free r.node
 let pred_free p = pred_free_open free p
 
 let annotate r =
@@ -74,4 +73,5 @@ let annotate r =
         method meta = m
         method free = x
       end)
-    free_open r
+    (free_query_open ~schema_set:Schema.schema_set)
+    r

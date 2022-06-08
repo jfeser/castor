@@ -1,2 +1,2 @@
-      AOrderedIdx(join(true, ints, select([x as y], ints)) as k,
-           atuple([ascalar(k.x), ascalar(k.y)], cross), >= 3, <= 5, >= 4, <= 6)
+      AOrderedIdx(join(true, ints, select([x as y], ints)),
+           atuple([ascalar(0.x), ascalar(0.y)], cross), >= 3, <= 5, >= 4, <= 6)

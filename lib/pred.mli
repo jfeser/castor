@@ -49,7 +49,6 @@ val of_lexbuf_exn : Lexing.lexbuf -> t
 val of_string_exn : string -> t
 val kind : _ pred -> [ `Agg | `Scalar | `Window ]
 val to_type : 'a annot pred -> Prim_type.t
-val eqs : 'a annot pred -> (Name.t * Name.t) list
 
 val equiv : 'a annot pred -> Name.t Union_find.t Map.M(Name).t
 (** [equiv p] returns the equivalence class for each name mentioned in [p]. *)

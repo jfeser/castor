@@ -1,1 +1,1 @@
-atuple([alist(orderby([f desc], r1) as k, atuple([ascalar(k.f), ascalar(k.g)], cross)), atuple([ascalar(9 as x), ascalar(9 as y)], cross), alist(orderby([f], r1) as k1, atuple([ascalar(k1.f), ascalar(k1.g)], cross))], concat)
+atuple([alist(orderby([f desc], r1), atuple([ascalar(0.f), ascalar(0.g)], cross)), atuple([ascalar(9 as x), ascalar(9 as y)], cross), alist(orderby([f], r1), atuple([ascalar(0.f), ascalar(0.g)], cross))], concat)

@@ -1,1 +1,2 @@
-select([(1.0 + 2.0) as x, avg(a) as y, count() as z, sum(a) as r, min(a) as s, max(a) as t], alist(r2 as k, ascalar(k.a)))
+select([(1.0 + 2.0) as x, avg(a) as y, count() as z, sum(a) as r, min(a) as s, max(a) as t],
+  alist(r2, ascalar(0.a)))

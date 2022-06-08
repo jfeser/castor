@@ -1,2 +1,2 @@
-      AOrderedIdx(OrderBy([f asc], Dedup(Select([f], r_date))) as k,
-           AScalar(k.f as v), >= date("0000-01-01"), <= date("9999-01-01"))
+      AOrderedIdx(OrderBy([f asc], Dedup(Select([f], r_date))),
+           AScalar(0.f as v), >= date("0000-01-01"), <= date("9999-01-01"))

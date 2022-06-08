@@ -132,31 +132,8 @@ let rec disjuncts = function
   | `Binop (Binop.Or, p1, p2) -> disjuncts p1 @ disjuncts p2
   | p -> [ p ]
 
-let%expect_test "" =
-  conjuncts (`Binop (Eq, `Int 0, `Int 1)) |> [%sexp_of: t list] |> print_s;
-  [%expect {| ((Binop (Eq (Int 0) (Int 1)))) |}]
-
-let dedup_pairs = List.dedup_and_sort ~compare:[%compare: Name.t * Name.t]
-
-let eqs p =
-  let visitor =
-    object (self : 'a)
-      inherit [_] V.reduce
-      method zero = []
-      method plus = ( @ )
-
-      method! visit_Binop () op p1 p2 =
-        match (op, p1, p2) with
-        | Eq, `Name n1, `Name n2 -> [ (n1, n2) ]
-        | And, p1, p2 ->
-            self#plus (self#visit_pred () p1) (self#visit_pred () p2)
-        | _ -> self#zero
-    end
-  in
-  visitor#visit_pred () p |> dedup_pairs
-
 let equiv p =
-  List.fold_left (eqs p)
+  Set.fold (Equiv.eqs_pred p)
     ~init:(Map.empty (module Name))
     ~f:(fun acc (n, n') ->
       let acc, c = Map.find_or_insert acc n ~value:Union_find.create in

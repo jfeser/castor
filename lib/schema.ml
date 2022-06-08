@@ -1,6 +1,7 @@
 open Core
 open Ast
 open Prim_type
+module V = Visitors
 
 type t = Name.t list [@@deriving compare, equal, sexp]
 
@@ -34,7 +35,7 @@ let to_type_open schema to_type = function
       | [] -> failwith "Unexpected empty schema."
       | _ -> failwith "Too many fields.")
 
-let schema_open schema r =
+let schema_query_open schema r =
   let rec to_type p = to_type_open schema to_type p in
   let of_preds =
     List.map ~f:(fun (p, n) ->
@@ -42,7 +43,7 @@ let schema_open schema r =
         Name.create ?type_:t n)
   in
   let schema =
-    match r.node with
+    match r with
     | AList { l_values = r; _ }
     | DepJoin { d_rhs = r; _ }
     | Filter (_, r)
@@ -68,7 +69,36 @@ let schema_open schema r =
   in
   List.map schema ~f:(fun n -> { n with name = Simple (Name.name n) })
 
+let schema_open schema r = schema_query_open schema r.node
 let rec schema r = schema_open schema r
+
+let annotate_schema r =
+  let rec annot r =
+    let node = query r.node in
+    let s =
+      schema_open
+        (fun r -> r.meta#schema)
+        {
+          node;
+          meta =
+            object
+              method schema = failwith "not set"
+              method meta = r.meta
+            end;
+        }
+    in
+    {
+      node;
+      meta =
+        object
+          method meta = r.meta
+          method schema = s
+        end;
+    }
+  and query q = V.Map.query annot pred q
+  and pred p = V.Map.pred annot pred p in
+  annot r
+
 let schema_set r = Set.of_list (module Name) (schema r)
 let names r = schema r |> List.map ~f:Name.name
 
