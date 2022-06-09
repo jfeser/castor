@@ -76,6 +76,7 @@ let rec eval : 'a. _ -> _ -> (< .. > as 'a) annot -> _ =
 and eval_pred ctx = function
   | `Name n -> attr ctx n
   | `Bool x -> Bool x
+  | `Int x -> Int x
   | `Binop (op, p, p') -> (
       let v = eval_pred ctx p in
       let v' = eval_pred ctx p' in

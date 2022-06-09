@@ -39,12 +39,8 @@ open T
 (** Schemas work differently when the lhs of a depjoin is visible in its output. *)
 let rec schema q =
   match q.node with
-  | Visible_depjoin { d_lhs; d_rhs } -> depjoin_lhs_schema d_lhs @ schema d_rhs
+  | Visible_depjoin { d_lhs; d_rhs } -> schema d_lhs @ schema d_rhs
   | Query q -> Schema.schema_query_open schema q
-
-and depjoin_lhs_schema d_lhs =
-  schema d_lhs
-  |> List.map ~f:(fun n -> Name.create (sprintf "lhs_%s" (Name.name n)))
 
 let schema_set r = Set.of_list (module Name) (schema r)
 let zero = Set.map (module Name) ~f:Name.zero
@@ -57,8 +53,7 @@ and free_query = function
       Set.O.(
         free d.d_lhs
         || decr
-             (free d.d_rhs
-             - zero (Set.of_list (module Name) (depjoin_lhs_schema d.d_lhs))))
+             (free d.d_rhs - zero (Set.of_list (module Name) (schema d.d_lhs))))
   | Query q -> Free.free_query_open ~schema_set free q
 
 let assert_schema_invariant q q' =
@@ -73,6 +68,11 @@ let assert_schema_invariant q q' =
 let attrs q = schema q |> Set.of_list (module Name)
 
 let to_visible_depjoin r =
+  let id = ref 0 in
+  let fresh_id () =
+    incr id;
+    !id
+  in
   let rec annot (r : _ annot) : _ visible_depjoin_annot =
     { node = query r.node; meta = r.meta }
   and query = function
@@ -83,9 +83,11 @@ let to_visible_depjoin r =
            semantics. *)
         let old_lhs_schema = Schema.schema d.d_lhs in
         let d_lhs = annot d.d_lhs in
+
         let lhs_renaming =
+          let id = fresh_id () in
           List.map2_exn (schema d_lhs) old_lhs_schema ~f:(fun n n' ->
-              (n, sprintf "lhs_%s" (Name.name n')))
+              (n, sprintf "%d_%s" id (Name.name n')))
         in
         let lhs_subst =
           List.map lhs_renaming ~f:(fun (n, n') ->
@@ -110,12 +112,12 @@ let to_visible_depjoin r =
                  node =
                    Visible_depjoin
                      {
-                       d_rhs;
                        d_lhs =
                          {
                            node = Query (Select (lhs_project, d_lhs));
                            meta = object end;
                          };
+                       d_rhs;
                      };
                  meta = object end;
                } ))
