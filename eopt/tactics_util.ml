@@ -1,12 +1,10 @@
 open Core
 open Castor
-open Castor.Ast
-open Castor.Abslayout
-open Castor.Collections
-open Castor.Schema
-module V = Castor.Visitors
-module A = Castor.Abslayout
-module P = Castor.Pred.Infix
+open Ast
+open Collections
+module V = Visitors
+module A = Constructors.Annot
+module P = Pred.Infix
 
 (** Remove all references to names in params while ensuring that the resulting
      relation overapproximates the original. *)
@@ -21,7 +19,7 @@ let over_approx params r =
         else (self#visit_t () r).node
 
       method! visit_Select () (ps, r) =
-        match A.select_kind ps with
+        match Abslayout.select_kind ps with
         | `Agg -> Select (ps, r)
         | `Scalar -> Select (ps, self#visit_t () r)
 
@@ -67,7 +65,7 @@ let rec aliases r =
   and one k v = Map.singleton (module Name) k v in
   match r.node with
   | Select (ps, r) -> (
-      match select_kind ps with
+      match Abslayout.select_kind ps with
       | `Scalar ->
           List.fold_left ps ~init:(aliases r) ~f:(fun m (p, n) ->
               plus (one (Name.create n) p) m)
@@ -134,14 +132,14 @@ let all_values_approx_2 cost_conn (preds : _ pred select_list) r =
     |> Map.of_alist_multi (module String)
     |> Map.to_alist
     |> List.map ~f:(fun (r, ns) ->
-           dedup
-           @@ select (Select_list.of_names ns)
-           @@ relation (Db.relation cost_conn r))
-    |> List.reduce ~f:(join (`Bool true))
+           A.dedup
+           @@ A.select (Select_list.of_names ns)
+           @@ A.relation (Db.relation cost_conn r))
+    |> List.reduce ~f:(A.join (`Bool true))
   in
 
   match joined_rels with
-  | Some r -> Ok (select preds r)
+  | Some r -> Ok (A.select preds r)
   | None -> Or_error.errorf "No relations found."
 
 let all_values_approx params cost_conn ps r =
@@ -169,13 +167,13 @@ let is_supported stage bound pred =
          | None ->
              Logs.warn (fun m -> m "Missing stage on %a" Name.pp n);
              false)
-         && Option.is_some (Name.rel n))
+         && Option.is_some (Name.scope n))
 
 (** Remove names from a selection list. *)
 let select_out ns r =
   let ns = List.map ns ~f:Name.unscoped in
-  select
-    (schema r
+  A.select
+    (Schema.schema r
     |> List.filter ~f:(fun n' ->
            not (List.mem ~equal:Name.O.( = ) ns (Name.unscoped n')))
     |> Select_list.of_names)
@@ -185,7 +183,7 @@ let select_contains names ps r =
   Set.(
     is_empty
       (diff
-         (inter names (of_list (module Name) (schema r)))
+         (inter names (of_list (module Name) (Schema.schema r)))
          (of_list (module Name) (List.map ~f:(fun (_, n) -> Name.create n) ps))))
 
 let rec all_pairs = function
@@ -208,9 +206,7 @@ let all_disjoint conn ps r =
         let pred =
           all_pairs ps |> List.map ~f:(fun (p, p') -> P.(p && p')) |> disjoin
         in
-        filter pred @@ r
-        |> Unnest.unnest ~params:(Set.empty (module Name))
-        |> Sql.of_ralgebra |> Sql.to_string
+        A.filter pred @@ r |> Unnest.unnest |> Sql.of_ralgebra |> Sql.to_string
       in
       Log.debug (fun m -> m "All disjoint sql: %s" sql);
       Db.run conn sql

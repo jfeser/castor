@@ -13,8 +13,10 @@ val create : ?type_:Prim_type.t -> string -> t
 val name : t -> string
 val type_ : t -> Prim_type.t option
 val type_exn : t -> Prim_type.t
+val shift : cutoff:int -> int -> t -> t
 val incr : t -> t
-val decr : t -> t
+val decr : t -> t option
+val decr_exn : t -> t
 val zero : t -> t
 val set_index : t -> int -> t
 val pp : Formatter.t -> t -> unit

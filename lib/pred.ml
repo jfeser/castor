@@ -82,8 +82,6 @@ let unscoped scope =
       | Bound (s, x) when scope = s -> `Name { n with name = Simple x }
       | _ -> `Name n)
 
-let decr p = map_names ~f:(fun n -> `Name (Name.decr n)) p
-
 let rec iter_names p k =
   match p with
   | `Name n -> k n

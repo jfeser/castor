@@ -13,4 +13,5 @@ let register f name = Hashtbl.set ops ~key:name ~data:f
 let apply g ctx op =
   (op g ctx) (fun (id, id') -> ignore (Egraph.AstEGraph.merge g id id'))
 
+let all ts g m = Iter.of_list ts |> Iter.map (fun t -> t g m) |> Iter.concat
 let of_string_exn = Hashtbl.find_exn ops

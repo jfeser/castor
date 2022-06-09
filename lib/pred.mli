@@ -79,4 +79,3 @@ val strip_meta : < .. > annot pred -> t
 val is_expensive : _ pred -> bool
 val cse : ?min_uses:int -> t -> t * (Name.t * t) list
 val unscoped : int -> 'a pred -> 'a pred
-val decr : 'a pred -> 'a pred

@@ -153,7 +153,7 @@ let pp_query_open pp_query pp_pred fmt = function
   | _ -> ()
 
 let pp_annot_open pp_annot pp_pred pp_meta fmt { node; meta } =
-  Fmt.pf fmt "@[<hv 2>";
+  Fmt.pf fmt "@[<hov 2>";
   Option.iter pp_meta ~f:(fun ppm -> Fmt.pf fmt "@[<hv 2>%a@]#@," ppm meta);
   pp_query_open pp_annot pp_pred fmt node;
   Fmt.pf fmt "@]"

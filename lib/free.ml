@@ -19,7 +19,7 @@ let select_list_free pred_free ps =
   List.map ps ~f:(fun (p, _) -> pred_free p) |> union_list
 
 let zero = Set.map (module Name) ~f:Name.zero
-let decr = Set.map (module Name) ~f:Name.decr
+let decr_exn = Set.map (module Name) ~f:Name.decr_exn
 
 let free_query_open ~schema_set free =
   let pred_free = pred_free_open free in
@@ -40,10 +40,10 @@ let free_query_open ~schema_set free =
       || (List.map key ~f:(fun (p, _) -> pred_free p) |> union_list)
          - schema_set rel
   | DepJoin { d_lhs = r; d_rhs = r' } | AList { l_keys = r; l_values = r' } ->
-      free r || decr (free r' - zero (schema_set r))
+      free r || decr_exn (free r' - zero (schema_set r))
   | AHashIdx h ->
       free h.hi_keys
-      || decr
+      || decr_exn
            ((free h.hi_values - zero (schema_set h.hi_keys))
            || List.map ~f:pred_free h.hi_lookup |> union_list)
   | AOrderedIdx { oi_keys = r'; oi_values = r''; oi_lookup; _ } ->
@@ -55,7 +55,7 @@ let free_query_open ~schema_set free =
         Set.union (one_bound_free b1) (one_bound_free b2)
       in
       free r'
-      || decr
+      || decr_exn
            (union_list
               ([ free r'' - zero (schema_set r') ]
               @ List.map ~f:bound_free oi_lookup))

@@ -49,7 +49,7 @@ module Make (C : Config.S) = struct
     ps @ ps'
 
   let decr_select_scope ps =
-    List.map ps ~f:(fun (p, n) -> (Pred.decr (Pred.unscoped 0 p), n))
+    List.map ps ~f:(fun (p, n) -> (Subst.decr_pred_exn (Pred.unscoped 0 p), n))
 
   let elim_depjoin r =
     let open Option.Let_syntax in

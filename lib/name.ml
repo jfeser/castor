@@ -42,16 +42,22 @@ let of_string_exn s =
       with _ -> { type_ = None; name = Attr (s, n) })
   | _ -> raise_s [%message "unexpected scope" s]
 
-let incr n =
+let shift ~cutoff d n =
+  assert (d >= 0);
   match n.name with
-  | Bound (i, x) -> { n with name = Bound (i + 1, x) }
+  | Bound (i, x) when i < cutoff -> { n with name = Bound (i + d, x) }
   | _ -> n
+
+let incr = shift ~cutoff:0 1
 
 let decr n =
   match n.name with
-  | Bound (0, _) -> failwith "trying to decrease zero index"
-  | Bound (i, x) -> { n with name = Bound (i - 1, x) }
-  | _ -> n
+  | Bound (0, _) -> None
+  | Bound (i, x) -> Some { n with name = Bound (i - 1, x) }
+  | _ -> Some n
+
+let decr_exn n =
+  Option.value_exn ~message:"trying to decrease zero index" (decr n)
 
 let set_index n i =
   match n.name with

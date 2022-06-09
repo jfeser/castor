@@ -1,0 +1,7 @@
+$3:
+  filter((a < param0), atuple([ascalar(0 as a), ascalar(0 as b)], cross))
+  filter(true, select([a, b], aorderedidx(dedup(select([a], atuple([ascalar(0 as a),
+                                                                    ascalar(0 as b)], cross))), filter((a
+                                                                    = 0.a), atuple([ascalar(0 as a),
+                                                                    ascalar(0 as b)], cross)), , < param0)))
+  

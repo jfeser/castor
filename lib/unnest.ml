@@ -44,7 +44,7 @@ let rec schema q =
 
 let schema_set r = Set.of_list (module Name) (schema r)
 let zero = Set.map (module Name) ~f:Name.zero
-let decr = Set.map (module Name) ~f:Name.decr
+let decr_exn = Set.map (module Name) ~f:Name.decr_exn
 
 let rec free r = free_query r.node
 
@@ -52,7 +52,7 @@ and free_query = function
   | Visible_depjoin d ->
       Set.O.(
         free d.d_lhs
-        || decr
+        || decr_exn
              (free d.d_rhs - zero (Set.of_list (module Name) (schema d.d_lhs))))
   | Query q -> Free.free_query_open ~schema_set free q
 

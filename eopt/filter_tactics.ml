@@ -1,6 +1,7 @@
 open Core
 open Castor.Ast
 open Castor.Collections
+module Subst = Castor.Subst
 module Schema = Castor.Schema
 module Name = Castor.Name
 module Free = Castor.Free
@@ -86,27 +87,52 @@ let hoist_filter_dedup g _ =
 
 let hoist_filter_list g _ =
   let%bind root, l = M.any_list g in
-  let%map p, r = M.filter g l.l_values in
-  ( root,
-    C.filter g (Pred.unscoped l.l_scope p) (C.list g { l with l_values = r }) )
+  let%bind p, r = M.filter g l.l_values in
+  (* checks that p doesn't refer to anything bound by l *)
+  match Subst.decr_pred p with
+  | Some p' -> return (root, C.filter g p' (C.list g { l with l_values = r }))
+  | None -> empty
 
 let hoist_filter_hashidx g _ =
   let%bind root, h = M.any_hashidx g in
-  let%map p, r = M.filter g h.hi_values in
+  let%bind p, r = M.filter g h.hi_values in
   let below, above = split_bound (to_annot g h.hi_keys) p in
-  let above = List.map above ~f:(Pred.unscoped h.hi_scope) in
-  ( root,
-    C.filter g (P.and_ above)
-    @@ C.hash_idx g { h with hi_values = C.filter g (P.and_ below) r } )
+  match List.map ~f:Subst.decr_pred above |> Option.all with
+  | Some above ->
+      return
+        ( root,
+          C.filter g (P.and_ above)
+          @@ C.hash_idx g { h with hi_values = C.filter g (P.and_ below) r } )
+  | None -> empty
 
 let hoist_filter_orderedidx g _ =
   let%bind root, o = M.any_orderedidx g in
-  let%map p, r = M.filter g o.oi_values in
+  let%bind p, r = M.filter g o.oi_values in
   let below, above = split_bound (to_annot g o.oi_keys) p in
-  let above = List.map above ~f:(Pred.unscoped o.oi_scope) in
-  ( root,
-    C.filter g (P.and_ above)
-    @@ C.ordered_idx g { o with oi_values = C.filter g (P.and_ below) r } )
+  match List.map ~f:Subst.decr_pred above |> Option.all with
+  | Some above ->
+      return
+        ( root,
+          C.filter g (P.and_ above)
+          @@ C.ordered_idx g { o with oi_values = C.filter g (P.and_ below) r }
+        )
+  | None -> empty
+
+let hoist_filter =
+  Ops.all
+    [
+      hoist_filter_orderby;
+      hoist_filter_groupby;
+      hoist_filter_filter;
+      hoist_filter_select;
+      hoist_filter_join_left;
+      hoist_filter_join_both;
+      hoist_filter_join_right;
+      hoist_filter_dedup;
+      hoist_filter_list;
+      hoist_filter_hashidx;
+      hoist_filter_orderedidx;
+    ]
 
 let hoist_filter_agg g ctx =
   let params = Univ_map.find_exn ctx Ops.params in
@@ -247,18 +273,15 @@ let elim_cmp_filter g ctx =
         Tactics_util.all_values_precise (Select_list.of_names key)
           (to_annot g r')
       in
-      let scope = Fresh.name Global.fresh "s%d" in
       C.select g (Schema.to_select_list orig_schema)
       @@ C.ordered_idx g
            {
              oi_keys = of_annot g all_keys;
-             oi_scope = scope;
              oi_values =
                C.filter g
                  (P.and_
-                 @@ List.map key ~f:(fun p ->
-                        P.(name p = name (Name.scoped scope p))))
-                 r';
+                 @@ List.map key ~f:(fun p -> P.(name p = name (Name.zero p))))
+                 (of_annot g @@ Subst.incr @@ to_annot g r');
              oi_key_layout = None;
              oi_lookup = cmps;
            }
@@ -1201,5 +1224,6 @@ let () =
   Ops.register hoist_filter_list "hoist-filter-list";
   Ops.register hoist_filter_hashidx "hoist-filter-hashidx";
   Ops.register hoist_filter_orderedidx "hoist-filter-orderedidx";
+  Ops.register hoist_filter "hoist-filter";
   Ops.register hoist_filter_agg "hoist-filter-agg";
   Ops.register split_filter "split-filter"
