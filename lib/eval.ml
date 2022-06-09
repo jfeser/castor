@@ -17,7 +17,8 @@ let attr t n =
 let zero = List.map ~f:(fun (n, v) -> (Name.zero n, v))
 let incr = List.map ~f:(fun (n, v) -> (Name.incr n, v))
 
-let rec eval scan ctx r : Tuple.t list =
+let rec eval : 'a. _ -> _ -> (< .. > as 'a) annot -> _ =
+ fun scan ctx r ->
   match r.node with
   | Relation r -> scan r
   | Dedup r ->
@@ -30,6 +31,21 @@ let rec eval scan ctx r : Tuple.t list =
       |> List.map ~f:(fun t ->
              List.map ps ~f:(fun (p, n) ->
                  (Name.create n, eval_pred (ctx @ t) p)))
+  | Filter (p, r) ->
+      eval scan ctx r
+      |> List.filter ~f:(fun t ->
+             match eval_pred (ctx @ t) p with
+             | Bool b -> b
+             | _ -> failwith "expected a boolean")
+  | Join x ->
+      let r = eval scan ctx x.r1 in
+      let r' = eval scan ctx x.r2 in
+      List.concat_map r ~f:(fun t ->
+          List.filter_map r' ~f:(fun t' ->
+              match eval_pred (ctx @ t @ t') x.pred with
+              | Bool true -> Some (t @ t')
+              | Bool false -> None
+              | _ -> failwith "expected a boolean"))
   | DepJoin x ->
       eval scan ctx x.d_lhs
       |> List.concat_map ~f:(fun t -> eval scan (incr ctx @ zero t) x.d_rhs)
@@ -59,6 +75,14 @@ let rec eval scan ctx r : Tuple.t list =
 
 and eval_pred ctx = function
   | `Name n -> attr ctx n
+  | `Bool x -> Bool x
+  | `Binop (op, p, p') -> (
+      let v = eval_pred ctx p in
+      let v' = eval_pred ctx p' in
+      match op with
+      | Binop.Eq -> Bool ([%equal: Value.t] v v')
+      | And -> Bool (Value.to_bool_exn v && Value.to_bool_exn v')
+      | op -> raise_s [%message "unsupported" (op : Binop.t)])
   | x -> raise_s [%message "unsupported" (Variants_of_ppred.to_name x)]
 
 and eval_grouping_pred ctx group = function

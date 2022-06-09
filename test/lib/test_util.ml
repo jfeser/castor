@@ -1,3 +1,4 @@
+open Ast
 open Prim_type
 
 module Expect_test_config = struct
@@ -90,3 +91,46 @@ let tpch_conn =
     (let conn = Db.create @@ Sys.getenv_exn "CASTOR_TPCH_TEST_DB" in
      at_exit (fun () -> Db.close conn);
      conn)
+
+let sexp_diff_display = Sexp_diff.Display.Display_options.create Two_column
+
+let run_eval_test :
+    ?conn:Db.t Lazy.t -> string -> ('a annot -> 'b annot) -> unit =
+ fun ?(conn = test_db_conn) s f ->
+  let conn = Lazy.force conn in
+  let r = Abslayout_load.load_string_exn conn s in
+  let r' = f r in
+
+  let s = Schema.schema r in
+  let s' = Schema.schema r' in
+  if not ([%equal: Schema.t] s s') then
+    raise_s [%message "schemas differ" (s : Schema.t) (s' : Schema.t)];
+
+  let scan r =
+    let names =
+      Relation.schema r |> List.map ~f:(fun n -> Name.create (Name.name n))
+    in
+    Db.scan_exn conn r |> List.map ~f:(List.zip_exn names)
+  in
+  let eval_and_sort r =
+    Eval.eval scan [] r
+    |> List.map ~f:(List.map ~f:Tuple.T2.get2)
+    |> List.sort ~compare:[%compare: Value.t list]
+  in
+
+  let expected = eval_and_sort r in
+  let actual = eval_and_sort r' in
+
+  Abslayout_pp.pp Fmt.stdout r';
+
+  if not ([%equal: Value.t list list] expected actual) then (
+    let diff =
+      Sexp_diff.Algo.diff
+        ~original:([%sexp_of: Value.t list list] expected)
+        ~updated:([%sexp_of: Value.t list list] actual)
+        ()
+    in
+    print_endline
+    @@ Sexp_diff.Display.display_with_ansi_colors sexp_diff_display diff;
+    raise_s
+      [%message (expected : Value.t list list) (actual : Value.t list list)])

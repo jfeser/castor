@@ -7,6 +7,20 @@ module A = Constructors.Annot
 
 let n n = `Name (Name.create n)
 
+let%expect_test "" = run_eval_test "depjoin(r, r)" unnest
+let%expect_test "" = run_eval_test "depjoin(r, filter(0.f = g, r))" unnest
+
+let%expect_test "" =
+  run_eval_test "depjoin(orderby([f], r), orderby([g], filter(0.f = g, r)))"
+    unnest
+
+let%expect_test "" =
+  run_eval_test "depjoin(depjoin(r, filter(0.f = g, r)), filter(0.f = g, r))"
+    unnest
+
+let%expect_test "" =
+  run_eval_test "depjoin(r, depjoin(r, filter(0.f = g && 1.f = g, r)))" unnest
+
 let%expect_test "" =
   let conn = Lazy.force Test_util.test_db_conn in
 
@@ -241,9 +255,9 @@ let%expect_test "" =
   let r =
     {|
                        alist(select([l_extendedprice, l_discount, p_type],
-                              join(true, lineitem, part)) as s15,
+                              join(true, lineitem, part)),
                            select([count() as count0, l_extendedprice, l_discount, p_type],
-                             atuple([ascalar(s15.l_extendedprice), ascalar(s15.l_discount), ascalar(s15.p_type)], cross)))
+                             atuple([ascalar(0.l_extendedprice), ascalar(0.l_discount), ascalar(0.p_type)], cross)))
                    |}
     |> Abslayout_load.load_string_exn conn
   in
@@ -289,11 +303,11 @@ let%expect_test "" =
   let r =
     {|
                dedup(
-               depjoin(partsupp as s1,
+               depjoin(partsupp,
                  groupby([ps_partkey, ps_suppkey, ps_availqty, ps_supplycost, ps_comment],
                          [ps_partkey, ps_suppkey, ps_availqty, ps_supplycost, ps_comment],
-                   select([s1.ps_partkey, s1.ps_suppkey, s1.ps_availqty, s1.ps_supplycost, s1.ps_comment],
-                     filter((s1.ps_partkey = p_partkey),
+                   select([0.ps_partkey, 0.ps_suppkey, 0.ps_availqty, 0.ps_supplycost, 0.ps_comment],
+                     filter((0.ps_partkey = p_partkey),
                        filter((strpos(p_name, "test") = 1), part))))))
                |}
     |> Abslayout_load.load_string_exn (Lazy.force tpch_conn)
@@ -332,8 +346,8 @@ let%expect_test "" =
                                                        select([o_orderdate as o_orderdate],
                                                          dedup(
                                                            select([o_orderdate as o_orderdate],
-                                                             orders)))) as s7,
-                                               select([s7.o_orderdate as x122,
+                                                             orders)))),
+                                               select([0.o_orderdate as x122,
                                                        counter2 as x123, var0 as x124,
                                                        x118 as x125, x119 as x126,
                                                        x120 as x127, x121 as x128],
@@ -354,19 +368,19 @@ let%expect_test "" =
                                                                      select([l_extendedprice as l_extendedprice,
                                                                              l_discount as l_discount],
                                                                        join(((o_orderdate =
-                                                                             s7.o_orderdate)
+                                                                             0.o_orderdate)
                                                                             &&
                                                                             ((l_returnflag =
                                                                              "R") &&
                                                                             (l_orderkey =
                                                                             o_orderkey))),
                                                                          lineitem,
-                                                                         orders))) as s2,
-                                                             select([s2.ct21 as x118,
-                                                                     s2.l_extendedprice as x119,
-                                                                     s2.l_discount as x120,
+                                                                         orders))),
+                                                             select([0.ct21 as x118,
+                                                                     0.l_extendedprice as x119,
+                                                                     0.l_discount as x120,
                                                                      l_discount as x121],
-                                                               atuple([ascalar(s2.l_discount as l_discount)],
+                                                               atuple([ascalar(0.l_discount as l_discount)],
                                                                  cross))))],
                                                    concat)))
                |}
