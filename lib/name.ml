@@ -45,7 +45,7 @@ let of_string_exn s =
 let shift ~cutoff d n =
   assert (d >= 0);
   match n.name with
-  | Bound (i, x) when i < cutoff -> { n with name = Bound (i + d, x) }
+  | Bound (i, x) when i >= cutoff -> { n with name = Bound (i + d, x) }
   | _ -> n
 
 let incr = shift ~cutoff:0 1
