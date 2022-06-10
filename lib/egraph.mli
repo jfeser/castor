@@ -17,7 +17,7 @@ module type ANALYSIS = sig
   type 'a lang
   type t [@@deriving equal, sexp_of]
 
-  val of_enode : 'a lang -> t
+  val of_enode : ('a -> t) -> 'a lang -> t
   val merge : t -> t -> t
 end
 
@@ -82,4 +82,5 @@ module AstEGraph : sig
   val add_annot : t -> 'a annot -> Id.t
   val choose : t -> Id.t -> < > annot option
   val choose_exn : t -> Id.t -> < > annot
+  val schema : t -> Id.t -> Schema.t
 end

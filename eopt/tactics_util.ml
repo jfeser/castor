@@ -179,11 +179,11 @@ let select_out ns r =
     |> Select_list.of_names)
     r
 
-let select_contains names ps r =
+let select_contains names ps r_schema =
   Set.(
     is_empty
       (diff
-         (inter names (of_list (module Name) (Schema.schema r)))
+         (inter names (of_list (module Name) r_schema))
          (of_list (module Name) (List.map ~f:(fun (_, n) -> Name.create n) ps))))
 
 let rec all_pairs = function

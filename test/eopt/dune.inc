@@ -12,6 +12,17 @@
 
 (rule
  (alias runtest)
+ (action (diff elim-eq-filter.sexp.expected elim-eq-filter.sexp.output)))
+
+(rule
+ (alias runtest)
+ (action (with-stdout-to elim-eq-filter.sexp.output
+          (with-stdin-from elim-eq-filter.sexp
+           (run ../bin/eopt.exe)))))
+
+
+(rule
+ (alias runtest)
  (action (diff hoist-filter-select.sexp.expected hoist-filter-select.sexp.output)))
 
 (rule

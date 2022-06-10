@@ -29,7 +29,7 @@ module type ANALYSIS = sig
   type 'a lang
   type t [@@deriving equal, sexp_of]
 
-  val of_enode : 'a lang -> t
+  val of_enode : ('a -> t) -> 'a lang -> t
   val merge : t -> t -> t
 end
 
@@ -82,17 +82,6 @@ module Make (L : LANG) (A : ANALYSIS with type 'a lang := 'a L.t) = struct
       mutable data : A.t;
     }
     [@@deriving sexp_of]
-
-    let create_singleton node =
-      let class_ =
-        {
-          nodes = Set.empty (module ENode);
-          parents = H.create (module ENode);
-          data = A.of_enode node;
-        }
-      in
-      class_.nodes <- Set.add class_.nodes node;
-      class_
   end
 
   type t = {
@@ -168,6 +157,20 @@ module Make (L : LANG) (A : ANALYSIS with type 'a lang := 'a L.t) = struct
       max_id = 0;
     }
 
+  let data g id = (Map.find_exn g.classes id).data
+
+  let eclass g node =
+    let class_ =
+      EClass.
+        {
+          nodes = Set.empty (module ENode);
+          parents = H.create (module ENode);
+          data = A.of_enode (data g) node;
+        }
+    in
+    class_.nodes <- Set.add class_.nodes node;
+    class_
+
   let n_enodes g = H.length g.memo
   let n_classes g = Map.length g.classes
   let classes g f = Map.iter_keys g.classes ~f
@@ -191,8 +194,7 @@ module Make (L : LANG) (A : ANALYSIS with type 'a lang := 'a L.t) = struct
         in
         g.max_id <- g.max_id + 1;
 
-        g.classes <-
-          Map.add_exn g.classes ~key:eclass_id ~data:(EClass.create_singleton n);
+        g.classes <- Map.add_exn g.classes ~key:eclass_id ~data:(eclass g n);
 
         L.args n
         |> List.iter ~f:(fun arg_eclass_id ->
@@ -266,7 +268,7 @@ module Make (L : LANG) (A : ANALYSIS with type 'a lang := 'a L.t) = struct
           let eclass_id = find eclass_id in
           let class_ = Map.find_exn g.classes eclass_id in
           let class_data = class_.data in
-          class_.data <- A.merge class_data (A.of_enode enode);
+          class_.data <- A.merge class_data (A.of_enode (data g) enode);
           if not ([%equal: A.t] class_.data class_data) then
             g.analysis_worklist <-
               H.to_alist class_.parents @ g.analysis_worklist);
@@ -368,12 +370,26 @@ end
 module UnitAnalysis = struct
   type t = unit [@@deriving sexp_of, equal]
 
-  let of_enode _ = ()
+  let of_enode _ _ = ()
   let merge _ _ = ()
 end
 
+module OptAnalysis = struct
+  type t = { schema : Schema.t } [@@deriving sexp_of, equal]
+
+  let of_enode data q =
+    { schema = Schema.schema_query_open (fun id -> (data id).schema) q }
+
+  let merge x x' =
+    if [%equal: Schema.t] x.schema x'.schema then x
+    else
+      raise_s
+        [%message
+          "mismatched schemas" (x.schema : Schema.t) (x'.schema : Schema.t)]
+end
+
 module AstEGraph = struct
-  include Make (AstLang) (UnitAnalysis)
+  include Make (AstLang) (OptAnalysis)
 
   let rec add_query g q =
     let q' = V.Map.query (add_annot g) (add_pred g) q in
@@ -409,6 +425,7 @@ module AstEGraph = struct
 
   let choose_exn g = choose_bounded_exn g 10
   let choose g id = try Some (choose_exn g id) with Choose_failed -> None
+  let schema g id = (data g id).schema
 end
 
 let%expect_test "" =

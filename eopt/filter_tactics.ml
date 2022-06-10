@@ -43,8 +43,8 @@ let hoist_filter_groupby g _ =
   let%bind p, r = M.filter g r in
   if
     invariant_support
-      (schema_set @@ to_annot g r)
-      (schema_set (to_annot g @@ C.group_by g ps key r))
+      (Set.of_list (module Name) @@ G.schema g r)
+      (Set.of_list (module Name) @@ G.schema g @@ C.group_by g ps key r)
       p
   then return (root, C.filter g p (C.group_by g ps key r))
   else empty
@@ -59,7 +59,7 @@ let hoist_filter_select g _ =
   let%bind p, r = M.filter g r in
   match Abslayout.select_kind ps with
   | `Scalar ->
-      if Tactics_util.select_contains (free p) ps (to_annot g r) then
+      if Tactics_util.select_contains (free p) ps (G.schema g r) then
         return (root, C.filter g p (C.select g ps r))
       else empty
   | `Agg -> empty
@@ -144,7 +144,7 @@ let hoist_filter_agg g ctx =
       if
         Tactics_util.select_contains
           (Set.diff (free p) params)
-          ps (to_annot g r)
+          ps (G.schema g r)
       then return (root, C.filter g p (C.select g ps r))
       else empty
 
@@ -155,13 +155,10 @@ let split_filter g _ =
   | _ -> empty
 
 (** A predicate `p` is a candidate lookup key into a partitioning of `r` if it
-     does not depend on any of the fields in `r`.
-
-      TODO: In practice we also want it to have a parameter in it. Is this correct? *)
-let is_candidate_key params p r_schema =
+     does not depend on any of the fields in `r`. *)
+let is_candidate_key p r_schema =
   let pfree = free p in
-  (not (Set.overlaps (Set.of_list (module Name) r_schema) pfree))
-  && Set.overlaps params pfree
+  not (Set.overlaps (Set.of_list (module Name) r_schema) pfree)
 
 (** A predicate is a candidate to be matched if all its free variables are
      bound by the relation that it is above. *)
@@ -177,10 +174,9 @@ module EPred = struct
   include Comparator.Make (T)
 end
 
-let elim_cmp_filter g ctx =
-  let params = Univ_map.find_exn ctx Ops.params in
+let elim_cmp_filter g _ =
   let%bind root, (p, r') = M.any_filter g in
-  let orig_schema = Schema.schema (to_annot g r') in
+  let orig_schema = G.schema g r' in
 
   (* Select the comparisons which have a parameter on exactly one side and
      partition by the unparameterized side of the comparison. *)
@@ -189,21 +185,21 @@ let elim_cmp_filter g ctx =
     |> List.partition_map ~f:(function
          | (`Binop (Binop.Gt, p1, p2) | `Binop (Lt, p2, p1)) as p ->
              if
-               is_candidate_key params p1 orig_schema
+               is_candidate_key p1 orig_schema
                && is_candidate_match p2 orig_schema
              then First (p2, (`Lt, p1))
              else if
-               is_candidate_key params p2 orig_schema
+               is_candidate_key p2 orig_schema
                && is_candidate_match p1 orig_schema
              then First (p1, (`Gt, p2))
              else Second p
          | (`Binop (Ge, p1, p2) | `Binop (Le, p2, p1)) as p ->
              if
-               is_candidate_key params p1 orig_schema
+               is_candidate_key p1 orig_schema
                && is_candidate_match p2 orig_schema
              then First (p2, (`Le, p1))
              else if
-               is_candidate_key params p2 orig_schema
+               is_candidate_key p2 orig_schema
                && is_candidate_match p1 orig_schema
              then First (p1, (`Ge, p2))
              else Second p
@@ -294,20 +290,17 @@ let elim_cmp_filter g ctx =
 
 let elim_cmp_filter = Ops.register elim_cmp_filter "elim-cmp-filter"
 
-let elim_eq_filter g ctx =
-  let params = Univ_map.find_exn ctx Ops.params in
+let elim_eq_filter g _ =
   let%bind root, (p, r') = M.any_filter g in
-  let schema = Schema.schema (to_annot g r') in
+  let schema = G.schema g r' in
 
   let cmps, rest =
     Pred.conjuncts p
     |> List.partition_map ~f:(function
          | `Binop (Binop.Eq, p1, p2) as p ->
-             if
-               is_candidate_key params p1 schema && is_candidate_match p2 schema
-             then First (p1, p2)
-             else if
-               is_candidate_key params p2 schema && is_candidate_match p1 schema
+             if is_candidate_key p1 schema && is_candidate_match p2 schema then
+               First (p1, p2)
+             else if is_candidate_key p2 schema && is_candidate_match p1 schema
              then First (p2, p1)
              else Second p
          | p -> Second p)

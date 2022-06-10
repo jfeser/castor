@@ -1,0 +1,15 @@
+$3:
+  filter((a = param0), atuple([ascalar(0 as a), ascalar(0 as b)], cross))
+  ahashidx(dedup(select([a], atuple([ascalar(0 as a), ascalar(0 as b)], cross))), $7, param0)
+  
+$4:
+  filter((0.x = a), atuple([ascalar(0 as a), ascalar(0 as b)], cross))
+  ahashidx(dedup(select([a], atuple([ascalar(0 as a), ascalar(0 as b)], cross))), $7, 0.x)
+  
+$6:
+  depjoin(ascalar(1 as x), $4)
+  
+$7:
+  filter((a = 0.a), atuple([ascalar(0 as a), ascalar(0 as b)], cross))
+  ahashidx(dedup(select([a], atuple([ascalar(0 as a), ascalar(0 as b)], cross))), $7, 0.a)
+  
