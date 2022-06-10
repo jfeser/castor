@@ -13,8 +13,7 @@ let%expect_test "" =
     {|
     select([f, g],
       select([f, g],
-        join(true,
-          select([1_f, 1_g], select([f as 1_f, g as 1_g], r)),
+        join(true, select([1_f, 1_g], select([f as 1_f, g as 1_g], r)),
           select([f, g], r)))) |}]
 
 let%expect_test "" =
@@ -49,16 +48,14 @@ let%expect_test "" =
           join((2_f = lhs_2_f),
             select([2_f as lhs_2_f, 2_g], select([f as 2_f, g as 2_g], r)),
             select([2_f, 2_f as f],
-              join(true,
-                dedup(select([2_f], select([f as 2_f, g as 2_g], r))),
+              join(true, dedup(select([2_f], select([f as 2_f, g as 2_g], r))),
                 r))))),
       select([g],
         select([g],
           join((1_g = lhs_1_g),
             select([1_f, 1_g as lhs_1_g], select([f as 1_f, g as 1_g], r)),
             select([1_g, 1_g as g],
-              join(true,
-                dedup(select([1_g], select([f as 1_f, g as 1_g], r))),
+              join(true, dedup(select([1_g], select([f as 1_f, g as 1_g], r))),
                 r)))))) |}]
 
 let%expect_test "" =

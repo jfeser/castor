@@ -382,15 +382,33 @@ module AstEGraph = struct
   and add_pred g p = V.Map.pred (add_annot g) (add_pred g) p
   and add_annot g r = add_query g r.Ast.node
 
-  let rec choose_exn g id =
-    let enode = Set.choose_exn (Map.find_exn g.classes id).nodes in
+  exception Choose_failed
+
+  let rec choose_bounded_exn g b id =
+    let enodes = (Map.find_exn g.classes id).nodes in
+    let enodes =
+      if b = 0 then
+        Set.filter enodes ~f:(fun x -> List.length (AstLang.args x) = 0)
+      else enodes
+    in
+    let enode =
+      match Set.choose enodes with Some x -> x | None -> raise Choose_failed
+    in
     Ast.
       {
-        node = V.Map.query (choose_exn g) (choose_pred_exn g) enode;
+        node =
+          V.Map.query
+            (choose_bounded_exn g (b - 1))
+            (choose_bounded_pred_exn g b)
+            enode;
         meta = object end;
       }
 
-  and choose_pred_exn g p = V.Map.pred (choose_exn g) (choose_pred_exn g) p
+  and choose_bounded_pred_exn g b p =
+    V.Map.pred (choose_bounded_exn g b) (choose_bounded_pred_exn g b) p
+
+  let choose_exn g = choose_bounded_exn g 10
+  let choose g id = try Some (choose_exn g id) with Choose_failed -> None
 end
 
 let%expect_test "" =

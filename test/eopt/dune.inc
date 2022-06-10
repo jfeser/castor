@@ -23,6 +23,17 @@
 
 (rule
  (alias runtest)
+ (action (diff multi-query.sexp.expected multi-query.sexp.output)))
+
+(rule
+ (alias runtest)
+ (action (with-stdout-to multi-query.sexp.output
+          (with-stdin-from multi-query.sexp
+           (run ../bin/eopt.exe)))))
+
+
+(rule
+ (alias runtest)
  (action (diff split-filter.sexp.expected split-filter.sexp.output)))
 
 (rule

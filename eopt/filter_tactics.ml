@@ -49,7 +49,7 @@ let hoist_filter_groupby g _ =
   then return (root, C.filter g p (C.group_by g ps key r))
   else empty
 
-let hoist_filter_filter g _ =
+let fuse_filter g _ =
   let%bind root, (p', r) = M.any_filter g in
   let%map p, r = M.filter g r in
   (root, C.filter g P.(p && p') r)
@@ -123,7 +123,7 @@ let hoist_filter =
     [
       hoist_filter_orderby;
       hoist_filter_groupby;
-      hoist_filter_filter;
+      fuse_filter;
       hoist_filter_select;
       hoist_filter_join_left;
       hoist_filter_join_both;
@@ -294,6 +294,73 @@ let elim_cmp_filter g ctx =
 
 let elim_cmp_filter = Ops.register elim_cmp_filter "elim-cmp-filter"
 
+let elim_eq_filter g ctx =
+  let params = Univ_map.find_exn ctx Ops.params in
+  let%bind root, (p, r') = M.any_filter g in
+  let schema = Schema.schema (to_annot g r') in
+
+  let cmps, rest =
+    Pred.conjuncts p
+    |> List.partition_map ~f:(function
+         | `Binop (Binop.Eq, p1, p2) as p ->
+             if
+               is_candidate_key params p1 schema && is_candidate_match p2 schema
+             then First (p1, p2)
+             else if
+               is_candidate_key params p2 schema && is_candidate_match p1 schema
+             then First (p2, p1)
+             else Second p
+         | p -> Second p)
+  in
+  let hi_lookup, keys, rest' =
+    Map.of_alist_multi (module EPred) cmps
+    |> Map.to_alist
+    |> List.map ~f:(fun (lookup, keys) ->
+           let table_key, extra_constraints =
+             match keys with
+             | [] -> failwith "expected nonempty list"
+             | [ x ] -> (x, [])
+             | x :: xs ->
+                 List.fold_left (x :: xs) ~init:(x, []) ~f:(fun (l, cs) r ->
+                     (r, P.(l = r) :: cs))
+           in
+           (lookup, table_key, extra_constraints))
+    |> List.unzip3
+  in
+  let rest = rest @ List.concat rest' in
+  let x =
+    let open Or_error.Let_syntax in
+    if List.is_empty keys then Or_error.error_string "No candidate keys found."
+    else
+      let key =
+        List.map keys ~f:(function
+          | `Name n -> n
+          | _ -> failwith "expected a name")
+      in
+      let%map all_keys =
+        Tactics_util.all_values_precise (Select_list.of_names key)
+          (to_annot g r')
+      in
+      C.hash_idx g
+        {
+          hi_keys = of_annot g all_keys;
+          hi_values =
+            C.filter g
+              (P.and_
+              @@ List.map key ~f:(fun p -> P.(name p = name (Name.zero p))))
+              (of_annot g @@ Subst.incr @@ to_annot g r');
+          hi_key_layout = None;
+          hi_lookup;
+        }
+  in
+  match x with
+  | Ok r -> return (root, C.filter g (P.and_ rest) r)
+  | Error err ->
+      Logs.warn (fun m -> m "Elim-eq: %a" Error.pp err);
+      empty
+
+let elim_eq_filter = Ops.register elim_eq_filter "elim-eq-filter"
+
 (* (\** Eliminate a filter with one parameter and one attribute. *\) *)
 (* let elim_simple_filter r = *)
 (*   let open Option.Let_syntax in *)
@@ -331,7 +398,9 @@ let elim_cmp_filter = Ops.register elim_cmp_filter "elim-cmp-filter"
 (*   of_func_pre ~pre:Is_serializable.annotate_stage elim_simple_filter *)
 (*     ~name:"elim-simple-filter" *)
 
-(* let push_filter_cross_tuple stage p rs = *)
+(* let push_filter_cross_tuple g _ = *)
+(*   let%bind root, (p, r) = M.any_filter g in *)
+(*   let%bind rs = M.tuple_cross g r in *)
 (*   let ps = Pred.conjuncts p in *)
 (*   (\* Find the earliest placement for each predicate. *\) *)
 (*   let preds = Array.create ~len:(List.length rs) [] in *)
@@ -348,8 +417,8 @@ let elim_cmp_filter = Ops.register elim_cmp_filter "elim-cmp-filter"
 (*       place_all up (i + 1) *)
 (*   in *)
 (*   let rest = place_all ps 0 in *)
-(*   let rs = List.mapi rs ~f:(fun i -> filter_many preds.(i)) in *)
-(*   filter_many rest (A.tuple rs Cross) *)
+(*   let rs = List.mapi rs ~f:(fun i -> C.filter_many g preds.(i)) in *)
+(*   C.filter_many g rest (C.tuple g rs Cross) *)
 
 (* let push_filter_list stage p l = *)
 (*   let rk_bnd = Set.of_list (module Name) (Schema.schema l.l_keys) in *)
@@ -390,16 +459,23 @@ let elim_cmp_filter = Ops.register elim_cmp_filter "elim-cmp-filter"
 (*       in *)
 (*       filter_many unpushed @@ A.select ps @@ filter_many pushed r *)
 
+(* let push_filter_dedup g _ = *)
+(*   let%bind root, (p, r) = M.any_filter g in *)
+(*   let%bind r = M.dedup g r in *)
+(*   return (root, C.dedup g (C.filter g p r)) *)
+
+(* let push_filter_tuple_concat g _ = *)
+(*   let%bind root, (p, r) = M.any_filter g in *)
+(*   let%bind rs = M.tuple_concat g r in *)
+(*   return (root, C.tuple g (List.map rs ~f:(C.filter g p)) Concat) *)
+
 (* let push_filter r = *)
 (*   let open Option.Let_syntax in *)
 (*   let stage = r.meta#stage in *)
 (*   let r = strip_meta r in *)
 (*   let%bind p, r = to_filter r in *)
 (*   match r.node with *)
-(*   | Filter (p', r') -> Some (A.filter (`Binop (And, p, p')) r') *)
-(*   | Dedup r' -> Some (A.dedup (A.filter p r')) *)
 (*   | Select (ps, r') -> Some (push_filter_select stage p ps r') *)
-(*   | ATuple (rs, Concat) -> Some (A.tuple (List.map rs ~f:(A.filter p)) Concat) *)
 (*   | ATuple (rs, Cross) -> Some (push_filter_cross_tuple stage p rs) *)
 (*   (\* Lists are a special case because their keys are bound at compile time and *)
 (*      are not available at runtime. *\) *)
@@ -449,11 +525,6 @@ let elim_cmp_filter = Ops.register elim_cmp_filter "elim-cmp-filter"
 (*        ~post:(fun r -> Resolve.resolve ~params r |> Result.ok)) *)
 (*     simplify *)
 
-(* let elim_eq_filter_src = *)
-(*   let src = Logs.Src.create "elim-eq-filter" in *)
-(*   Logs.Src.set_level src (Some Warning); *)
-(*   src *)
-
 (* let contains_not p = *)
 (*   let visitor = *)
 (*     object (self) *)
@@ -483,141 +554,6 @@ let elim_cmp_filter = Ops.register elim_cmp_filter "elim-cmp-filter"
 (*     end *)
 (*   in *)
 (*   visitor#visit_pred () p *)
-
-(* (\** Domain computations for predicates containing conjunctions, disjunctions *)
-(*      and equalities. *\) *)
-(* module EqDomain = struct *)
-(*   type domain = *)
-(*     | And of domain * domain *)
-(*     | Or of domain * domain *)
-(*     | Domain of Ast.t *)
-(*   [@@deriving compare] *)
-
-(*   type t = domain Map.M(Pred).t *)
-
-(*   let intersect d1 d2 = *)
-(*     Map.merge d1 d2 ~f:(fun ~key:_ v -> *)
-(*         let ret = *)
-(*           match v with *)
-(*           | `Both (d1, d2) -> *)
-(*               if [%compare.equal: domain] d1 d2 then d1 else And (d1, d2) *)
-(*           | `Left d | `Right d -> d *)
-(*         in *)
-(*         Some ret) *)
-
-(*   let union d1 d2 = *)
-(*     Map.merge d1 d2 ~f:(fun ~key:_ v -> *)
-(*         let ret = *)
-(*           match v with *)
-(*           | `Both (d1, d2) -> *)
-(*               if [%compare.equal: domain] d1 d2 then d1 else Or (d1, d2) *)
-(*           | `Left d | `Right d -> d *)
-(*         in *)
-(*         Some ret) *)
-
-(*   let rec of_pred r : _ pred -> _ = *)
-(*     let open Or_error.Let_syntax in *)
-(*     function *)
-(*     | `Binop (And, p1, p2) -> *)
-(*         let%bind ds1 = of_pred r p1 in *)
-(*         let%map ds2 = of_pred r p2 in *)
-(*         intersect ds1 ds2 *)
-(*     | `Binop (Or, p1, p2) -> *)
-(*         let%bind ds1 = of_pred r p1 in *)
-(*         let%map ds2 = of_pred r p2 in *)
-(*         union ds1 ds2 *)
-(*     | `Binop (Eq, p1, p2) -> ( *)
-(*         match *)
-(*           ( Tactics_util.all_values [ (p1, "p1") ] r, *)
-(*             Tactics_util.all_values [ (p2, "p2") ] r ) *)
-(*         with *)
-(*         | _, Ok vs2 when is_candidate_key p1 r && is_candidate_match p2 r -> *)
-(*             Ok (Map.singleton (module Pred) p1 (Domain vs2)) *)
-(*         | Ok vs1, _ when is_candidate_key p2 r && is_candidate_match p1 r -> *)
-(*             Ok (Map.singleton (module Pred) p2 (Domain vs1)) *)
-(*         | _, Ok _ | Ok _, _ -> *)
-(*             Or_error.error "No candidate keys." (p1, p2) *)
-(*               [%sexp_of: Pred.t * Pred.t] *)
-(*         | Error e1, Error e2 -> Error (Error.of_list [ e1; e2 ])) *)
-(*     | p -> *)
-(*         Or_error.error "Not part of an equality predicate." p [%sexp_of: Pred.t] *)
-
-(*   let to_ralgebra d = *)
-(*     let schema r = List.hd_exn (Schema.schema r) in *)
-(*     let rec extract = function *)
-(*       | And (d1, d2) -> *)
-(*           let e1 = extract d1 and e2 = extract d2 in *)
-(*           let n1 = schema e1 and n2 = schema e2 in *)
-(*           A.dedup *)
-(*           @@ A.select (Select_list.of_names [ n1 ]) *)
-(*           @@ A.join (`Binop (Eq, `Name n1, `Name n2)) e1 e2 *)
-(*       | Or (d1, d2) -> *)
-(*           let e1 = extract d1 and e2 = extract d2 in *)
-(*           let n1 = schema e1 and n2 = schema e2 and n = fresh_name "x%d" in *)
-(*           A.dedup *)
-(*           @@ A.tuple *)
-(*                [ A.select [ (`Name n1, n) ] e1; A.select [ (`Name n2, n) ] e2 ] *)
-(*                Concat *)
-(*       | Domain d -> *)
-(*           let n = schema d and n' = fresh_name "x%d" in *)
-(*           A.select [ (`Name n, n') ] d *)
-(*     in *)
-(*     Map.map d ~f:extract *)
-(* end *)
-
-(* let elim_eq_filter_limit = 3 *)
-
-(* let elim_eq_check_limit n = *)
-(*   if n > elim_eq_filter_limit then ( *)
-(*     Logs.info ~src:elim_eq_filter_src (fun m -> *)
-(*         m "Would need to join too many relations (%d > %d)" n *)
-(*           elim_eq_filter_limit); *)
-(*     None) *)
-(*   else Some () *)
-
-(* let elim_eq_filter r = *)
-(*   let open Option.Let_syntax in *)
-(*   let%bind p, r = to_filter r in *)
-(*   let orig_schema = Schema.schema r in *)
-
-(*   (\* Extract equalities from the filter predicate. *\) *)
-(*   let eqs, rest = *)
-(*     Pred.to_nnf p |> Pred.conjuncts *)
-(*     |> List.partition_map ~f:(fun p -> *)
-(*            match EqDomain.of_pred r p with *)
-(*            | Ok d -> First (p, d) *)
-(*            | Error e -> *)
-(*                Logs.info ~src:elim_eq_filter_src (fun m -> m "%a" Error.pp e); *)
-(*                Second p) *)
-(*   in *)
-
-(*   let inner, eqs = List.unzip eqs in *)
-(*   let eqs = List.reduce ~f:EqDomain.intersect eqs *)
-(*   and inner = Pred.conjoin inner in *)
-(*   match eqs with *)
-(*   | None -> *)
-(*       Logs.info ~src:elim_eq_filter_src (fun m -> m "Found no equalities."); *)
-(*       None *)
-(*   | Some eqs -> *)
-(*       let eqs = EqDomain.to_ralgebra eqs in *)
-(*       let key, rels = Map.to_alist eqs |> List.unzip in *)
-
-(*       let%map () = elim_eq_check_limit (List.length rels) in *)
-
-(*       let r_keys = A.dedup (A.tuple rels Cross) in *)
-(*       let scope = fresh_name "s%d" in *)
-(*       let inner_filter_pred = *)
-(*         let ctx = *)
-(*           Map.map eqs ~f:(fun r -> *)
-(*               Schema.schema r |> List.hd_exn |> Name.scoped scope |> P.name) *)
-(*         in *)
-(*         Pred.subst_tree ctx inner *)
-(*       and select_list = Schema.to_select_list orig_schema in *)
-(*       A.select select_list @@ filter_many rest *)
-(*       @@ A.hash_idx r_keys scope (A.filter inner_filter_pred r) key *)
-
-(* let elim_eq_filter = *)
-(*   seq' (of_func elim_eq_filter ~name:"elim-eq-filter") (try_ filter_const) *)
 
 (* let elim_disjunct r = *)
 (*   let open Option.Let_syntax in *)
@@ -1215,7 +1151,6 @@ let elim_cmp_filter = Ops.register elim_cmp_filter "elim-cmp-filter"
 let () =
   Ops.register hoist_filter_orderby "hoist-filter-orderby";
   Ops.register hoist_filter_groupby "hoist-filter-groupby";
-  Ops.register hoist_filter_filter "hoist-filter-filter";
   Ops.register hoist_filter_select "hoist-filter-select";
   Ops.register hoist_filter_join_both "hoist-filter-join-both";
   Ops.register hoist_filter_join_left "hoist-filter-join-left";
@@ -1226,4 +1161,5 @@ let () =
   Ops.register hoist_filter_orderedidx "hoist-filter-orderedidx";
   Ops.register hoist_filter "hoist-filter";
   Ops.register hoist_filter_agg "hoist-filter-agg";
+  Ops.register fuse_filter "fuse-filter";
   Ops.register split_filter "split-filter"

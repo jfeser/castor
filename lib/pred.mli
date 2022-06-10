@@ -60,7 +60,7 @@ val names : 'a annot pred -> Set.M(Name).t
 val collect_aggs :
   'a annot pred -> 'a annot pred * ('a annot pred * string) list
 
-val simplify : t -> t
+val simplify : < .. > annot pred -> < > annot pred
 val subst : 'a pred Map.M(Name).t -> 'a pred -> 'a pred
 
 val subst_tree :
@@ -73,7 +73,7 @@ val sum_exn : 'a pred list -> 'a pred
 val pseudo_bool : 'a pred -> 'a pred
 val min_of : 'a pred -> 'a pred -> 'a pred
 val max_of : 'a pred -> 'a pred -> 'a pred
-val to_nnf : 'a annot pred -> 'a annot pred
+val to_nnf : 'a pred -> 'a pred
 val to_static : params:Set.M(Name).t -> t -> t
 val strip_meta : < .. > annot pred -> t
 val is_expensive : _ pred -> bool

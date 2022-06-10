@@ -80,5 +80,6 @@ module AstEGraph : sig
 
   val add_query : t -> ('a annot pred, 'a annot) query -> Id.t
   val add_annot : t -> 'a annot -> Id.t
+  val choose : t -> Id.t -> < > annot option
   val choose_exn : t -> Id.t -> < > annot
 end

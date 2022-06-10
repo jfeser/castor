@@ -173,34 +173,25 @@ let subst_tree ctx p =
   in
   v#visit_pred () p
 
-let to_nnf p =
-  let visitor =
-    object (self : 'self)
-      inherit [_] V.map as super
+let rec to_nnf =
+  let open Infix in
+  function
+  | `Unop (Unop.Not, p) -> (
+      match p with
+      | `Binop (Binop.Or, p1, p2) -> to_nnf (not p1) && to_nnf (not p2)
+      | `Binop (And, p1, p2) -> to_nnf (not p1) || to_nnf (not p2)
+      | `Binop (Gt, p1, p2) -> to_nnf (p1 <= p2)
+      | `Binop (Ge, p1, p2) -> to_nnf (p1 < p2)
+      | `Binop (Lt, p1, p2) -> to_nnf (p1 >= p2)
+      | `Binop (Le, p1, p2) -> to_nnf (p1 > p2)
+      | `Unop (Unop.Not, p) -> to_nnf p
+      | p -> not (to_nnf p))
+  | p -> V.Map.pred Fun.id to_nnf p
 
-      method! visit_Unop () op arg =
-        if Poly.(op = Not) then
-          match arg with
-          | `Binop (Or, p1, p2) ->
-              self#visit_pred ()
-                (`Binop (And, `Unop (Not, p1), `Unop (Not, p2)))
-          | `Binop (And, p1, p2) ->
-              `Binop
-                ( Or,
-                  self#visit_pred () (`Unop (Not, p1)),
-                  self#visit_pred () (`Unop (Not, p2)) )
-          | `Binop (Gt, p1, p2) -> self#visit_Binop () Le p1 p2
-          | `Binop (Ge, p1, p2) -> self#visit_Binop () Lt p1 p2
-          | `Binop (Lt, p1, p2) -> self#visit_Binop () Ge p1 p2
-          | `Binop (Le, p1, p2) -> self#visit_Binop () Gt p1 p2
-          | `Unop (Not, p) -> self#visit_pred () p
-          | p -> `Unop (op, self#visit_pred () p)
-        else super#visit_Unop () op arg
-    end
-  in
-  visitor#visit_pred () p
+let strip_meta p = V.map_meta_pred (fun m -> (m :> < >)) p
 
 let simplify p =
+  let p = strip_meta p in
   let p = to_nnf p in
   (* Extract common clauses from disjunctions. *)
   let common_visitor =
@@ -306,8 +297,6 @@ let to_static ~params:_ _ = assert false
 (*   | `Leaf p -> if is_static ~params p then p else `Bool true *)
 (* in *)
 (* to_static p *)
-
-let strip_meta p = V.map_meta_pred (fun m -> (m :> < >)) p
 
 let is_expensive p =
   let rec pred : _ pred -> _ = function

@@ -89,17 +89,13 @@ let%expect_test "" =
                              join((c_nationkey = n1_nationkey),
                                join((n1_regionkey = r_regionkey),
                                  select([n_regionkey as n1_regionkey,
-                                         n_nationkey as n1_nationkey],
-                                   nation),
-                                 region),
-                               customer),
+                                         n_nationkey as n1_nationkey], nation),
+                                 region), customer),
                              filter(((o_orderdate >= date("1995-01-01")) &&
-                                    (o_orderdate <= date("1996-12-31"))),
-                               orders)),
+                                    (o_orderdate <= date("1996-12-31"))), orders)),
                            lineitem),
                          join((s_nationkey = n2_nationkey),
-                           select([n_nationkey as n2_nationkey], nation),
-                           supplier)),
+                           select([n_nationkey as n2_nationkey], nation), supplier)),
                        part)))),
            select([o_year,
                    (sum((if (nation_name = param1) then volume else 0.0)) / sum(volume)) as mkt_share],
@@ -116,21 +112,15 @@ let%expect_test "" =
                                    join((c_nationkey = n1_nationkey),
                                      join((n1_regionkey = r_regionkey),
                                        select([n_regionkey as n1_regionkey,
-                                               n_nationkey as n1_nationkey],
-                                         nation),
-                                       filter((r_name = param2), region)),
-                                     customer),
+                                               n_nationkey as n1_nationkey], nation),
+                                       filter((r_name = param2), region)), customer),
                                    filter(((o_orderdate >= date("1995-01-01")) &&
                                           (o_orderdate <= date("1996-12-31"))),
-                                     orders)),
-                                 lineitem),
+                                     orders)), lineitem),
                                join((s_nationkey = n2_nationkey),
                                  select([n_nationkey as n2_nationkey,
-                                         n_name as n2_name],
-                                   nation),
-                                 supplier)),
-                             filter((p_type = param3), part)))))],
-               cross))) |}]
+                                         n_name as n2_name], nation), supplier)),
+                             filter((p_type = param3), part)))))], cross))) |}]
 
 let%expect_test "" =
   let r =
@@ -140,8 +130,7 @@ let%expect_test "" =
   project ~params r |> Format.printf "%a@." Abslayout.pp;
   [%expect
     {|
-         groupby([count() as c],
-           [o_orderdate],
+         groupby([count() as c], [o_orderdate],
            dedup(select([o_orderdate, o_orderkey], orders))) |}]
 
 let run_test ?(params = Set.empty (module Name)) conn s =
@@ -158,8 +147,7 @@ let%expect_test "" =
    |};
   [%expect
     {|
-       groupby([min(ct2) as x12, max(ct2) as x13],
-         [],
+       groupby([min(ct2) as x12, max(ct2) as x13], [],
          groupby([count() as ct2], [], select([false as dummy], r1))) |}]
 
 let%expect_test "filter-exists" =
@@ -172,9 +160,7 @@ let%expect_test "filter-exists" =
   [%expect
     {|
        filter(exists(groupby([l_orderkey, sum(l_quantity) as sum_l_quantity],
-                       [l_orderkey],
-                       lineitem)),
-         orders) |}]
+                       [l_orderkey], lineitem)), orders) |}]
 
 let%expect_test "" =
   run_test
@@ -186,10 +172,8 @@ let%expect_test "" =
    |};
   [%expect
     {|
-       groupby([min(ct0) as x0, max(ct0) as x1],
-         [],
-         groupby([count() as ct0],
-           [],
+       groupby([min(ct0) as x0, max(ct0) as x1], [],
+         groupby([count() as ct0], [],
            select([false as dummy], dedup(select([c_mktsegment], customer))))) |}]
 
 let%expect_test "" =
@@ -202,10 +186,8 @@ let%expect_test "" =
    |};
   [%expect
     {|
-       groupby([min(ct0) as x0, max(ct0) as x1],
-         [],
-         groupby([count() as ct0],
-           [],
+       groupby([min(ct0) as x0, max(ct0) as x1], [],
+         groupby([count() as ct0], [],
            select([false as dummy], dedup(select([c_mktsegment], customer))))) |}]
 
 let%expect_test "" =
@@ -303,15 +285,12 @@ let%expect_test "" =
                select([p_brand, p_type, p_size],
                  dedup(
                    select([p_type, p_brand, p_size],
-                     join(((p_partkey = ps_partkey) && true),
-                       part,
+                     join(((p_partkey = ps_partkey) && true), part,
                        filter(not(exists(filter(((ps_suppkey = s_suppkey) &&
                                                 ((strpos(s_comment, "Customer") >=
                                                  1) &&
                                                 (strpos(s_comment, "Complaints") >=
-                                                1))),
-                                           supplier))),
-                         partsupp)))))),
+                                                1))), supplier))), partsupp)))))),
          select([p_brand, p_type, p_size, supplier_cnt],
            select([p_brand, p_type, p_size, count() as supplier_cnt],
              dedup(
@@ -321,13 +300,10 @@ let%expect_test "" =
                                                   ((strpos(s_comment, "Customer") >=
                                                    1) &&
                                                   (strpos(s_comment, "Complaints")
-                                                  >= 1))),
-                                             supplier))) &&
+                                                  >= 1))), supplier))) &&
                                ((p_brand = 0.p_brand) &&
                                ((p_type = 0.p_type) && (p_size = 0.p_size)))) &&
-                              (p_partkey = ps_partkey)),
-                           part,
-                           partsupp))),
+                              (p_partkey = ps_partkey)), part, partsupp))),
                  select([p_type, p_brand, p_size, ps_suppkey],
                    filter((not((p_brand = "")) &&
                           (not((strpos(p_type, "") = 1)) &&
@@ -338,5 +314,4 @@ let%expect_test "" =
                           ((p_size = 0) ||
                           ((p_size = 0) || ((p_size = 0) || (p_size = 0)))))))))),
                      atuple([ascalar(0.p_brand), ascalar(0.p_type),
-                             ascalar(0.p_size), ascalar(0.ps_suppkey)],
-                       cross)))))))) |}]
+                             ascalar(0.p_size), ascalar(0.ps_suppkey)], cross)))))))) |}]

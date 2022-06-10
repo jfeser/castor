@@ -34,8 +34,7 @@ let%expect_test "" =
   Format.printf "%a@." pp_with_refcount r;
   [%expect
     {|
-         {l_receiptdate, }#
-           select([l_receiptdate],
+         {l_receiptdate, }#select([l_receiptdate],
            {l_receiptdate, }#
              alist({l_commitdate, l_orderkey, l_receiptdate, o_comment, o_orderkey, }#
                      join((o_orderkey = l_orderkey),
@@ -44,8 +43,7 @@ let%expect_test "" =
              {l_receiptdate, }#
                atuple([{}#ascalar(0.l_orderkey), {}#ascalar(0.l_commitdate),
                        {l_receiptdate, }#ascalar(0.l_receiptdate),
-                       {}#ascalar(0.o_comment)],
-               cross))) |}]
+                       {}#ascalar(0.o_comment)], cross))) |}]
 
 let%expect_test "" =
   let r =
@@ -58,8 +56,7 @@ let%expect_test "" =
   Format.printf "%a@." pp_with_refcount r;
   [%expect
     {|
-       {f, }#
-         select([f],
+       {f, }#select([f],
          {f, }#
            atuple([{f, }#atuple([{f, }#ascalar(0 as f), {}#ascalar(1 as g)], cross),
                    {f, }#atuple([{}#ascalar(2 as g), {f, }#ascalar(3 as f)], cross)],
@@ -75,10 +72,8 @@ let%expect_test "" =
   Format.printf "%a@." pp_with_refcount r;
   [%expect
     {|
-       {l_shipmode, }#
-         alist({l_shipmode, }#lineitem,
-         {l_shipmode, }#
-           select([l_shipmode],
+       {l_shipmode, }#alist({l_shipmode, }#lineitem,
+         {l_shipmode, }#select([l_shipmode],
            {l_shipmode, }#
              atuple([{l_shipmode, }#ascalar(0.l_shipmode), {}#ascalar(0 as z)],
              cross))) |}]
@@ -103,11 +98,8 @@ let%expect_test "" =
   Format.printf "%a@." pp_with_refcount r;
   [%expect
     {|
-       {l_shipmode, o_orderkey, }#
-         alist({l_shipmode, }#lineitem,
-         {l_shipmode, o_orderkey, }#
-           alist({o_orderkey, }#orders,
+       {l_shipmode, o_orderkey, }#alist({l_shipmode, }#lineitem,
+         {l_shipmode, o_orderkey, }#alist({o_orderkey, }#orders,
            {l_shipmode, o_orderkey, }#
              atuple([{l_shipmode, }#ascalar(1.l_shipmode),
-                     {o_orderkey, }#ascalar(0.o_orderkey)],
-             cross))) |}]
+                     {o_orderkey, }#ascalar(0.o_orderkey)], cross))) |}]

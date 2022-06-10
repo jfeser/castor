@@ -1,40 +1,65 @@
 open Castor
+open Castor_test
 open Castor_eopt
 
+type test = {
+  queries : Ast.t list;
+  transforms : Ops.t list;
+  conn : Db.t option;
+}
+
+let params = Set.of_list (module Name) [ Name.create "param0" ]
+
 let parse_test sexp =
-  let parse_queries = function
-    | Sexp.List (Atom "queries" :: qs) ->
-        List.map qs ~f:(function
-          | Atom q -> Abslayout.of_string_exn q
-          | _ -> failwith "expected a query")
+  let parse_tagged_list = function
+    | Sexp.List (Atom x :: xs) -> (x, xs)
     | _ -> failwith "expected a list"
   in
-  let parse_transforms = function
-    | Sexp.List (Atom "transforms" :: qs) ->
-        List.map qs ~f:(function
-          | Atom q -> Ops.of_string_exn q
-          | _ -> failwith "expected a transform name")
-    | _ -> failwith "expected a list"
+  let parse_queries conn qs =
+    let load =
+      match conn with
+      | Some c -> Abslayout_load.load_string_exn ~params c
+      | None -> Abslayout.of_string_exn
+    in
+    List.map qs ~f:(function
+      | Sexp.Atom q -> load q
+      | _ -> failwith "expected a query")
+  in
+  let parse_transforms qs =
+    List.map qs ~f:(function
+      | Sexp.Atom q -> Ops.of_string_exn q
+      | _ -> failwith "expected a transform name")
+  in
+  let parse_db = function
+    | Some [ Sexp.Atom x ] -> Some (Db.create x)
+    | None -> None
+    | _ -> failwith "expected a database url"
   in
   match sexp with
-  | Sexp.List [ queries; transforms ] ->
-      (parse_queries queries, parse_transforms transforms)
+  | Sexp.List xs ->
+      let contents =
+        List.map xs ~f:parse_tagged_list |> Map.of_alist_exn (module String)
+      in
+      let conn = parse_db (Map.find contents "db") in
+      {
+        conn;
+        queries = parse_queries conn (Map.find_exn contents "queries");
+        transforms = parse_transforms (Map.find_exn contents "transforms");
+      }
   | _ -> failwith "expected a list"
 
 let run_test () =
   let ctx = Univ_map.empty in
-  let ctx =
-    Univ_map.set ctx ~key:Ops.params
-      ~data:(Set.of_list (module Name) [ Name.create "param0" ])
-  in
+  let ctx = Univ_map.set ctx ~key:Ops.params ~data:params in
   let testcase = Sexp.input_sexp In_channel.stdin in
-  let queries, transforms = parse_test testcase in
+  let { queries; transforms; conn } = parse_test testcase in
 
   let module G = Egraph.AstEGraph in
   let g = G.create () in
   List.iter queries ~f:(fun q -> ignore (G.add_annot g q));
 
   let max_iters = 100 in
+
   let rec saturate iter =
     let n_enodes = G.n_enodes g in
     let n_eclasses = G.n_classes g in
@@ -44,9 +69,13 @@ let run_test () =
     if (n_enodes <> n_enodes' || n_eclasses <> n_eclasses') && iter < max_iters
     then saturate (iter + 1)
   in
-  saturate 0;
 
-  G.pp Fmt.stdout g
+  try
+    saturate 0;
+    G.pp Fmt.stdout g
+  with e ->
+    let bt = Printexc.get_backtrace () in
+    Fmt.pr "%a\n%s" G.pp g bt
 
 let spec =
   let open Command in

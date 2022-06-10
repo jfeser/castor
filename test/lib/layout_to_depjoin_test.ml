@@ -37,8 +37,7 @@ let%expect_test "" =
                  select([c_nationkey],
                    depjoin(join((l_orderkey = o_orderkey),
                              join((c_custkey = o_custkey), customer, orders),
-                             lineitem),
-                     select([0.c_nationkey], ascalar(0 as x2))))),
+                             lineitem), select([0.c_nationkey], ascalar(0 as x2))))),
          select([0.c_nationkey, c_custkey, c_name, c_address, c_phone, c_acctbal,
                  c_mktsegment, c_comment, o_orderkey, o_custkey, o_orderstatus,
                  o_totalprice, o_orderdate, o_orderpriority, o_clerk,
@@ -49,8 +48,7 @@ let%expect_test "" =
            filter((0.c_nationkey = s2.n_nationkey),
              filter((0.c_nationkey = c_nationkey),
                depjoin(join((l_orderkey = o_orderkey),
-                         join((c_custkey = o_custkey), customer, orders),
-                         lineitem),
+                         join((c_custkey = o_custkey), customer, orders), lineitem),
                  select([0.c_custkey, 0.c_name, 0.c_address, 0.c_nationkey,
                          0.c_phone, 0.c_acctbal, 0.c_mktsegment, 0.c_comment,
                          0.o_orderkey, 0.o_custkey, 0.o_orderstatus, 0.o_totalprice,
@@ -60,5 +58,4 @@ let%expect_test "" =
                          0.l_extendedprice, 0.l_discount, 0.l_tax, 0.l_returnflag,
                          0.l_linestatus, 0.l_shipdate, 0.l_commitdate,
                          0.l_receiptdate, 0.l_shipinstruct, 0.l_shipmode,
-                         0.l_comment],
-                   ascalar(0 as x1))))))) |}]
+                         0.l_comment], ascalar(0 as x1))))))) |}]
