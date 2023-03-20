@@ -1,0 +1,17 @@
+(test
+ (name test)
+ (modules test)
+ (libraries oUnit cmph)
+ (deps
+  (file keys-long.txt)
+  (file keys-fw-1.buf)
+  (file keys-fw.buf)))
+
+(test
+ (name example)
+ (modules example)
+ (libraries cmph))
+
+; Local Variables:
+; mode: tuareg-dune
+; End:

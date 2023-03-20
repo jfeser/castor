@@ -1,0 +1,10 @@
+(menhir
+ (modules sql_parser))
+
+(ocamllex sql_lexer)
+
+(library
+ (public_name sqlgg)
+ (libraries base stdio)
+ (preprocess (pps ppx_compare ppx_sexp_conv))
+)
