@@ -3,7 +3,7 @@ open Ast
 module Binop = Ast.Binop
 module Unop = Ast.Unop
 
-type t = Ast.t Ast.pred [@@deriving compare, hash, sexp]
+type t = Ast.t Ast.pred [@@deriving compare, equal, hash, sexp]
 
 include Comparator.S with type t := t
 module O : Comparable.Infix with type t := t

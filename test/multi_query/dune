@@ -1,0 +1,9 @@
+(library
+ (name multi_query)
+ (inline_tests
+  (deps
+   (alias ../test_db)
+   (env_var CASTOR_TPCH_TEST_DB)))
+ (preprocess
+  (pps ppx_sexp_conv ppx_compare ppx_expect ppx_sexp_message ppx_let))
+ (libraries core fmt castor))

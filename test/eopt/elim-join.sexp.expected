@@ -1,0 +1,7 @@
+$2:
+  join((f = g), ascalar(1 as f), ascalar(0 as g))
+  depjoin(ascalar(1 as f), atuple([atuple([ascalar(f)], cross),
+                                   filter((0.f = g), ascalar(0 as g))], cross))
+  depjoin(ascalar(1 as f), select([0.f, g], ahashidx(dedup(select([g as key], ascalar(0 as g))), filter((0.key
+                                                                    = g), ascalar(0 as g)), 0.f)))
+  

@@ -7,8 +7,25 @@ $2:
   
 $4:
   join((l_orderkey = o_orderkey), lineitem, orders)
+  depjoin(lineitem, select([0.l_comment, 0.l_commitdate, 0.l_discount,
+                            0.l_extendedprice, 0.l_linenumber,
+                            0.l_linestatus, 0.l_orderkey, 0.l_partkey,
+                            0.l_quantity, 0.l_receiptdate, 0.l_returnflag,
+                            0.l_shipdate, 0.l_shipinstruct, 0.l_shipmode,
+                            0.l_suppkey, 0.l_tax, o_clerk, o_comment,
+                            o_custkey, o_orderdate, o_orderkey,
+                            o_orderpriority, o_orderstatus, o_shippriority,
+                            o_totalprice], ahashidx(dedup(select([o_orderkey as key], orders)), $9, 0.l_orderkey)))
   
 $5:
   filter((l_orderkey = 0.l_orderkey), lineitem)
   ahashidx(dedup(select([l_orderkey], lineitem)), $5, 0.l_orderkey)
+  
+$9:
+  filter((0.key = o_orderkey), orders)
+  ahashidx(dedup(select([o_orderkey], orders)), $16, 0.key)
+  
+$16:
+  filter((o_orderkey = 0.o_orderkey), orders)
+  ahashidx(dedup(select([o_orderkey], orders)), $16, 0.o_orderkey)
   

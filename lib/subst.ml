@@ -13,6 +13,10 @@ let decr_pred p =
 
 let decr_pred_exn p = Pred.map_names ~f:(fun n -> `Name (Name.decr_exn n)) p
 
+let rec shift_pred ~cutoff d = function
+  | `Name n -> `Name (Name.shift ~cutoff d n)
+  | p -> Visitors.Map.pred Fun.id (shift_pred ~cutoff d) p
+
 let rec shift ~cutoff d r = { r with node = shift_query ~cutoff d r.node }
 
 and shift_query ~cutoff:c d =
@@ -48,10 +52,6 @@ and shift_lookup ~cutoff d =
 
 and shift_bound ~cutoff d (p, b) = (shift_pred ~cutoff d p, b)
 
-and shift_pred ~cutoff d = function
-  | `Name n -> `Name (Name.shift ~cutoff d n)
-  | p -> Visitors.Map.pred Fun.id (shift_pred ~cutoff d) p
-
 let incr x = shift ~cutoff:0 1 x
 let incr_pred x = shift_pred ~cutoff:0 1 x
 
@@ -59,6 +59,10 @@ let incr_ctx ctx =
   Map.to_alist ctx
   |> List.map ~f:(fun (n, p) -> (Name.incr n, incr_pred p))
   |> Map.of_alist_exn (module Name)
+
+let rec subst_pred ctx = function
+  | `Name n as p -> Map.find ctx n |> Option.value ~default:p
+  | p -> Visitors.Map.pred Fun.id (subst_pred ctx) p
 
 let rec subst ctx r = { r with node = subst_query ctx r.node }
 
@@ -95,7 +99,3 @@ and subst_lookup ctx =
       (Option.map l ~f:(subst_bound ctx), Option.map h ~f:(subst_bound ctx)))
 
 and subst_bound ctx (p, b) = (subst_pred ctx p, b)
-
-and subst_pred ctx = function
-  | `Name n as p -> Map.find ctx n |> Option.value ~default:p
-  | p -> Visitors.Map.pred Fun.id (subst_pred ctx) p

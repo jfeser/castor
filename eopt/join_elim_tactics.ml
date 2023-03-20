@@ -1,62 +1,75 @@
-(* open Core *)
-(* open Castor *)
-(* open Ast *)
-(* open Schema *)
-(* open Collections *)
-(* module P = Pred.Infix *)
-(* module A = Abslayout *)
-(* open Match.Query *)
-(* open Egraph_matcher *)
+open Core
+module Subst = Castor.Subst
+module Schema = Castor.Schema
+module Name = Castor.Name
+module Free = Castor.Free
+module Abslayout = Castor.Abslayout
+module Pred = Castor.Pred
+module Select_list = Castor.Select_list
+module Fresh = Castor.Fresh
+module Global = Castor.Global
+module Egraph = Castor.Egraph
+module P = Pred.Infix
+module A = Abslayout
+open Egraph_matcher
 
-(* let elim_join_nest g _ = *)
-(*   let%bind root, join = M.any_join g in *)
-(*   let scope = Fresh.name Global.fresh "s%d" in *)
-(*   let pred = Pred.scoped (schema r1) scope pred in *)
-(*   let lhs = *)
-(*     let scalars = *)
-(*       Schema.schema r1 |> Schema.scoped scope |> List.map ~f:C.scalar_name *)
-(*     in *)
-(*     A.tuple scalars Cross *)
-(*   and rhs = A.filter pred r2 in *)
-(*   return (root, C.list join.r1 @@ A.tuple [ lhs; rhs ] Cross) *)
+let elim_join_nest g _ =
+  let%map root, join = M.any_join g in
+  let lhs_schema = G.schema g join.r1 in
+  let pred =
+    Subst.subst_pred
+      (List.map lhs_schema ~f:(fun n -> (n, `Name (Name.zero n)))
+      |> Map.of_alist_exn (module Name))
+      join.pred
+  in
+  let lhs = C.tuple g (List.map lhs_schema ~f:(C.scalar_name g)) Cross
+  and rhs = C.filter g pred (of_annot g @@ Subst.incr @@ to_annot g join.r2) in
+  (root, C.depjoin g { d_lhs = join.r1; d_rhs = C.tuple g [ lhs; rhs ] Cross })
 
-(* let elim_join_nest = of_func elim_join_nest ~name:"elim-join-nest" *)
+let elim_join_hash g _ =
+  let%bind root, join = M.any_join g in
+  match join.pred with
+  | `Binop (Eq, kl, kr) ->
+      let r1_schema = G.schema g join.r1 in
+      let kl =
+        Subst.incr_pred kl
+        |> Subst.subst_pred
+             (Map.of_alist_exn (module Name)
+             @@ List.map r1_schema ~f:(fun n -> (n, `Name (Name.zero n))))
+      in
+      let layout =
+        let slist =
+          Select_list.of_names
+            (List.map ~f:Name.zero r1_schema @ G.schema g join.r2)
+        in
+        C.depjoin g
+          {
+            d_lhs = join.r1;
+            d_rhs =
+              C.select g slist
+              @@ C.hash_idx g
+                   {
+                     hi_keys =
+                       C.dedup g
+                       @@ C.select g [ (kr, "key") ]
+                       @@ of_annot g @@ Subst.incr @@ to_annot g join.r2;
+                     hi_values =
+                       C.filter g
+                         (`Binop
+                           (Eq, `Name (Name.zero @@ Name.create "key"), kr))
+                       @@ of_annot g @@ Subst.incr @@ Subst.incr
+                       @@ to_annot g join.r2;
+                     hi_lookup = [ kl ];
+                     hi_key_layout = None;
+                   };
+          }
+      in
+      return (root, layout)
+  | _ -> empty
 
-(* let elim_join_hash r = *)
-(*   let open Option.Let_syntax in *)
-(*   let%bind pred, r1, r2 = to_join r in *)
-(*   match pred with *)
-(*   | `Binop (Eq, kl, kr) -> *)
-(*       let join_scope = Fresh.name Global.fresh "s%d" *)
-(*       and hash_scope = Fresh.name Global.fresh "s%d" *)
-(*       and r1_schema = schema r1 in *)
-(*       let key_name = Fresh.name Global.fresh "k%d" in *)
-(*       let layout = *)
-(*         let slist = *)
-(*           let r1_schema = Schema.scoped join_scope r1_schema in *)
-(*           r1_schema @ schema r2 |> Select_list.of_names *)
-(*         in *)
-(*         A.dep_join r1 join_scope @@ A.select slist *)
-(*         @@ A.hash_idx *)
-(*              (A.dedup @@ A.select [ (kr, key_name) ] r2) *)
-(*              hash_scope *)
-(*              (A.filter *)
-(*                 (`Binop *)
-(*                   (Eq, `Name (Name.create ~scope:hash_scope key_name), kr)) *)
-(*                 r2) *)
-(*              [ Pred.scoped r1_schema join_scope kl ] *)
-(*       in *)
-(*       Some layout *)
-(*   | _ -> None *)
-
-(* let elim_join_hash = of_func elim_join_hash ~name:"elim-join-hash" *)
-
-(* let elim_join_filter r = *)
-(*   let open Option.Let_syntax in *)
-(*   let%map pred, r1, r2 = to_join r in *)
-(*   A.filter pred (A.join (`Bool true) r1 r2) *)
-
-(* let elim_join_filter = of_func elim_join_filter ~name:"elim-join-filter" *)
+let elim_join_filter g _ =
+  let%map root, join = M.any_join g in
+  (root, C.filter g join.pred (C.join g (`Bool true) join.r1 join.r2))
 
 (* let hoist_join_param_filter r = *)
 (*   let open Option.Let_syntax in *)
@@ -163,3 +176,8 @@
 (*  *     return *)
 (*  *     @@ A.filter (Pred.conjoin hoist) *)
 (*  *     @@ A.join (Pred.conjoin keep) r1 r2 *\) *)
+
+let () =
+  Ops.register elim_join_nest "elim-join-nest";
+  Ops.register elim_join_hash "elim-join-hash";
+  Ops.register elim_join_hash "elim-join-filter"

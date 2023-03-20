@@ -3,6 +3,8 @@ open Collections
 open Ast
 open Sql
 
+type t = (Relation.t * string) spj [@@deriving sexp_of, equal]
+
 module Foreign_key_join_graph = struct
   module Edge = struct
     type t = { l_attr : string; r_attr : string } [@@deriving compare]

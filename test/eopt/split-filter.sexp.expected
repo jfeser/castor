@@ -1,8 +1,8 @@
 $1:
   filter((a = b), $2)
-  filter(((a = b) && ((b = c) && (c = d))), r)
+  filter(((a = b) && ((b = c) && (c = d))), ascalar(0 as x))
   
 $2:
-  filter((b = c), filter((c = d), r))
-  filter(((b = c) && (c = d)), r)
+  filter((b = c), filter((c = d), ascalar(0 as x)))
+  filter(((b = c) && (c = d)), ascalar(0 as x))
   

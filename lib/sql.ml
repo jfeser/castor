@@ -8,7 +8,7 @@ module P = Pred.Infix
 include (val Log.make "castor.sql")
 
 type select_entry = { pred : Pred.t; alias : string; cast : Prim_type.t option }
-[@@deriving compare, sexp_of]
+[@@deriving compare, equal, sexp_of]
 
 type 'r spj = {
   select : select_entry list;
@@ -19,7 +19,7 @@ type 'r spj = {
   group : Pred.t list;
   limit : int option;
 }
-[@@deriving compare, sexp_of]
+[@@deriving compare, equal, sexp_of]
 
 type 'q compound_relation =
   [ `Subquery of 'q | `Table of Relation.t | `Series of Pred.t * Pred.t ]
@@ -297,8 +297,7 @@ let relation Relation.({ r_name = tbl; _ } as rel) =
   let relations = [ (`Table rel, tbl, `Left) ] in
   `Query (create_spj ~relations select_list)
 
-let of_ralgebra_open f r =
-  match r.node with
+let of_query_open f = function
   | Range (p, p') ->
       let alias = Fresh.name Global.fresh "t%d" in
       `Query
@@ -323,16 +322,17 @@ let of_ralgebra_open f r =
   | ATuple (rs, Concat) -> `Union_all (List.map ~f:(fun r -> to_spj (f r)) rs)
   | ATuple ([], _) | AEmpty -> `Query (create_spj ~limit:0 [])
   | AScalar p -> `Query (create_spj [ create_entry p.s_pred ~alias:p.s_name ])
-  | ATuple (_, Zip) ->
-      Error.(create "Unsupported." r [%sexp_of: _ annot] |> raise)
+  | ATuple (_, Zip) -> failwith "zip tuples are unsupported"
   | AList l -> f @@ A.dep_join' (Layout_to_depjoin.list l)
   | AHashIdx h -> f @@ A.dep_join' (Layout_to_depjoin.hash_idx h)
   | AOrderedIdx o -> f @@ A.dep_join' (Layout_to_depjoin.ordered_idx o)
   | _ -> failwith "unsupported"
 
+let of_annot_open f r = of_query_open f r.node
+
 let of_ralgebra x =
-  let rec f x = of_ralgebra_open f x in
-  f (strip_meta x)
+  let rec f x = of_annot_open f x in
+  f x
 
 let name_to_sql (n : Name.t) =
   match n.name with

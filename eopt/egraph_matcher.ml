@@ -75,7 +75,10 @@ module C = struct
   let list g = mk_query Ast.alist g
   let hash_idx g = mk_query Ast.ahashidx g
   let ordered_idx g = mk_query Ast.aorderedidx g
+  let depjoin g = mk_query Ast.depjoin g
   let tuple g ts k = G.add g (ATuple (ts, k))
+  let scalar g = mk_query Ast.ascalar g
+  let scalar_name g n = scalar g { s_pred = `Name n; s_name = Name.name n }
 end
 
 let to_annot = G.choose_exn

@@ -23,6 +23,17 @@
 
 (rule
  (alias runtest)
+ (action (diff elim-join.sexp.expected elim-join.sexp.output)))
+
+(rule
+ (alias runtest)
+ (action (with-stdout-to elim-join.sexp.output
+          (with-stdin-from elim-join.sexp
+           (run ../bin/eopt.exe)))))
+
+
+(rule
+ (alias runtest)
  (action (diff hoist-filter-select.sexp.expected hoist-filter-select.sexp.output)))
 
 (rule
