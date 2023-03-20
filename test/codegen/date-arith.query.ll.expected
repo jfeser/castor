@@ -1,7 +1,7 @@
 ; ModuleID = 'scanner'
 source_filename = "scanner"
 target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
-target triple = "x86_64-unknown-linux-gnu"
+target triple = "x86_64-redhat-linux-gnu"
 
 %params = type { [0 x i64]* }
 
@@ -145,7 +145,7 @@ entry:
 
 define %params* @create(i64* %0) {
 entry:
-  %malloccall = tail call i8* @malloc(i32 ptrtoint (i1** getelementptr (i1*, i1** null, i32 1) to i32))
+  %malloccall = tail call i8* @malloc(i32 ptrtoint (%params* getelementptr (%params, %params* null, i32 1) to i32))
   %paramstmp = bitcast i8* %malloccall to %params*
   %buf = getelementptr inbounds %params, %params* %paramstmp, i32 0, i32 0
   %tmpbufp = bitcast i64* %0 to [0 x i64]*

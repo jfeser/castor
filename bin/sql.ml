@@ -35,7 +35,7 @@ let main ~params:all_params ~simplify ~project ~unnest ~sql ~cse ch =
   let query = simplify query in
   let query =
     let q =
-      if unnest then Unnest.unnest ~params query
+      if unnest then Unnest.unnest query
       else
         (Cardinality.annotate query
           :> < cardinality_matters : bool ; why_card_matters : string >

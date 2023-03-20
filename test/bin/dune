@@ -27,5 +27,5 @@
  (libraries castor castor_test castor_eopt core core_unix.command_unix)
  (flags -open Core)
  (preprocess
-  (pps ppx_sexp_conv ppx_let))
+  (pps ppx_sexp_conv ppx_let ppx_sexp_message))
  (modules Eopt))

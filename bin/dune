@@ -16,14 +16,14 @@
   (pps ppx_sexp_conv ppx_let))
  (modules compile))
 
-(executable
- (package castor)
- (public_name castor-to-cozy)
- (name to_cozy)
- (libraries core core_unix.command_unix castor)
- (preprocess
-  (pps ppx_sexp_conv ppx_let))
- (modules to_cozy))
+; (executable
+;  (package castor)
+;  (public_name castor-to-cozy)
+;  (name to_cozy)
+;  (libraries core core_unix.command_unix castor)
+;  (preprocess
+;   (pps ppx_sexp_conv ppx_let))
+;  (modules to_cozy))
 
 (executable
  (package castor)

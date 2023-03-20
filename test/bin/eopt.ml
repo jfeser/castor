@@ -4,7 +4,7 @@ open Castor_eopt
 
 type test = {
   queries : Ast.t list;
-  transforms : Ops.t list;
+  transforms : (string * Ops.t) list;
   conn : Db.t option;
 }
 
@@ -27,7 +27,7 @@ let parse_test sexp =
   in
   let parse_transforms qs =
     List.map qs ~f:(function
-      | Sexp.Atom q -> Ops.of_string_exn q
+      | Sexp.Atom q -> (q, Ops.of_string_exn q)
       | _ -> failwith "expected a transform name")
   in
   let parse_db = function
@@ -63,7 +63,10 @@ let run_test () =
   let rec saturate iter =
     let n_enodes = G.n_enodes g in
     let n_eclasses = G.n_classes g in
-    List.iter transforms ~f:(fun t -> Ops.apply g ctx t);
+    List.iter transforms ~f:(fun (xform_name, xform) ->
+        try Ops.apply g ctx xform
+        with Egraph.Merge_error e ->
+          raise (Egraph.Merge_error [%message xform_name (e : Sexp.t)]));
     let n_enodes' = G.n_enodes g in
     let n_eclasses' = G.n_classes g in
     if (n_enodes <> n_enodes' || n_eclasses <> n_eclasses') && iter < max_iters
@@ -75,7 +78,9 @@ let run_test () =
     G.pp Fmt.stdout g
   with e ->
     let bt = Printexc.get_backtrace () in
-    Fmt.pr "%a\n%s" G.pp g bt
+    G.pp Fmt.stdout g;
+    Fmt.pr "%a\n" Exn.pp e;
+    print_endline bt
 
 let spec =
   let open Command in

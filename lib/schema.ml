@@ -48,10 +48,11 @@ let schema_query_open schema r =
     | DepJoin { d_rhs = r; _ }
     | Filter (_, r)
     | Dedup r
-    | OrderBy { rel = r; _ }
-    | AOrderedIdx { oi_values = r; _ }
-    | AHashIdx { hi_values = r; _ } ->
+    | OrderBy { rel = r; _ } ->
         schema r
+    | AOrderedIdx { oi_keys = lhs; oi_values = rhs; _ }
+    | AHashIdx { hi_keys = lhs; hi_values = rhs; _ } ->
+        schema lhs @ schema rhs
     | Select (x, _) | GroupBy (x, _, _) -> Select_list.to_list x |> of_preds
     | Join { r1; r2; _ } -> schema r1 @ schema r2
     | AEmpty -> []

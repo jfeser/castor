@@ -4,6 +4,8 @@ module H = Hashtbl
 
 (** Nearly direct port of https://github.com/egraphs-good/egg/blob/main/src/eclass.rs *)
 
+exception Merge_error of Sexp.t [@@deriving sexp]
+
 module Id = struct
   module T = struct
     type t = { id : int; canon : int Union_find.t [@ignore] }
@@ -383,9 +385,10 @@ module OptAnalysis = struct
   let merge x x' =
     if [%equal: Schema.t] x.schema x'.schema then x
     else
-      raise_s
-        [%message
-          "mismatched schemas" (x.schema : Schema.t) (x'.schema : Schema.t)]
+      raise
+        (Merge_error
+           [%message
+             "mismatched schemas" (x.schema : Schema.t) (x'.schema : Schema.t)])
 end
 
 module AstEGraph = struct

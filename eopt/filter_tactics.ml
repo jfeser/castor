@@ -334,17 +334,18 @@ let elim_eq_filter g _ =
         Tactics_util.all_values_precise (Select_list.of_names key)
           (to_annot g r')
       in
-      C.hash_idx g
-        {
-          hi_keys = of_annot g all_keys;
-          hi_values =
-            C.filter g
-              (P.and_
-              @@ List.map key ~f:(fun p -> P.(name p = name (Name.zero p))))
-              (of_annot g @@ Subst.incr @@ to_annot g r');
-          hi_key_layout = None;
-          hi_lookup;
-        }
+      C.select g (Schema.to_select_list @@ G.schema g r')
+      @@ C.hash_idx g
+           {
+             hi_keys = of_annot g all_keys;
+             hi_values =
+               C.filter g
+                 (P.and_
+                 @@ List.map key ~f:(fun p -> P.(name p = name (Name.zero p))))
+                 (of_annot g @@ Subst.incr @@ to_annot g r');
+             hi_key_layout = None;
+             hi_lookup;
+           }
   in
   match x with
   | Ok r -> return (root, C.filter g (P.and_ rest) r)

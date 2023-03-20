@@ -158,7 +158,14 @@ module Ctx0 = struct
     List.dedup_and_sort ~compare l |> Map.of_alist_exn (module Name)
 
   let of_schema schema tup =
-    List.map2_exn schema tup ~f:(fun n e -> (n, Field e)) |> of_alist_exn
+    match List.map2 schema tup ~f:(fun n e -> (n, Field e)) with
+    | Ok l -> of_alist_exn l
+    | Unequal_lengths ->
+        raise_s
+          [%message
+            "schema and tuple have different lengths"
+              (schema : Name.t list)
+              (tup : expr list)]
 
   (* Create an argument list for a caller. *)
   let make_caller_args ctx =

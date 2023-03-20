@@ -1,6 +1,5 @@
 #!/usr/bin/python
 
-import os
 import sys
 
 for name in sys.argv[1:]:
@@ -12,8 +11,9 @@ for name in sys.argv[1:]:
 
 (rule
  (alias runtest)
- (action (with-stdout-to {name}.output
-          (with-stdin-from {name}
-           (run ../bin/eopt.exe)))))
+ (action (with-stderr-to {name}.output
+           (with-stdout-to {name}.output
+            (with-stdin-from {name}
+             (run ../bin/eopt.exe))))))
 """
     )

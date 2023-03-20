@@ -332,7 +332,7 @@ let of_annot_open f r = of_query_open f r.node
 
 let of_ralgebra x =
   let rec f x = of_annot_open f x in
-  f x
+  f (strip_meta x)
 
 let name_to_sql (n : Name.t) =
   match n.name with

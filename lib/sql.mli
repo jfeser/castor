@@ -42,7 +42,7 @@ val create_entry_s :
 
 val create_entries_s : string list -> select_entry list
 val src : Logs.Src.t
-val of_ralgebra_open : (< > annot -> t) -> < > annot -> t
+val of_ralgebra : < .. > annot -> t
 val has_aggregates : t -> bool
 val to_schema : t -> string list
 val sample : int -> string -> string

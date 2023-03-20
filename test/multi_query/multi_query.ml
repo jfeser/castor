@@ -45,53 +45,50 @@ let%expect_test "" =
   [%expect
     {|
     (can_use
-     (((6
-        ((((pred (Name ((name l_orderkey)))) (alias l_orderkey) (cast ()))) ())))
-      ((6
-        ((((pred (Name ((name l_orderkey)))) (alias l_orderkey) (cast ())))
-         ((Binop (Eq (Name ((name l_orderkey))) (Int 0)))))))
-      ((5
-        ((((pred (Name ((name l_comment)))) (alias l_comment) (cast ()))
-          ((pred (Name ((name l_commitdate)))) (alias l_commitdate) (cast ()))
-          ((pred (Name ((name l_discount)))) (alias l_discount) (cast ()))
-          ((pred (Name ((name l_extendedprice)))) (alias l_extendedprice)
+     (((1
+        ((((pred (Name ((name (Simple l_comment))))) (alias l_comment) (cast ()))
+          ((pred (Name ((name (Simple l_commitdate))))) (alias l_commitdate)
            (cast ()))
-          ((pred (Name ((name l_linenumber)))) (alias l_linenumber) (cast ()))
-          ((pred (Name ((name l_linestatus)))) (alias l_linestatus) (cast ()))
-          ((pred (Name ((name l_orderkey)))) (alias l_orderkey) (cast ()))
-          ((pred (Name ((name l_partkey)))) (alias l_partkey) (cast ()))
-          ((pred (Name ((name l_quantity)))) (alias l_quantity) (cast ()))
-          ((pred (Name ((name l_receiptdate)))) (alias l_receiptdate) (cast ()))
-          ((pred (Name ((name l_returnflag)))) (alias l_returnflag) (cast ()))
-          ((pred (Name ((name l_shipdate)))) (alias l_shipdate) (cast ()))
-          ((pred (Name ((name l_shipinstruct)))) (alias l_shipinstruct)
+          ((pred (Name ((name (Simple l_discount))))) (alias l_discount)
            (cast ()))
-          ((pred (Name ((name l_shipmode)))) (alias l_shipmode) (cast ()))
-          ((pred (Name ((name l_suppkey)))) (alias l_suppkey) (cast ()))
-          ((pred (Name ((name l_tax)))) (alias l_tax) (cast ())))
-         ((Binop (Eq (Name ((name l_orderkey))) (Int 0))))))
+          ((pred (Name ((name (Simple l_extendedprice)))))
+           (alias l_extendedprice) (cast ()))
+          ((pred (Name ((name (Simple l_linenumber))))) (alias l_linenumber)
+           (cast ()))
+          ((pred (Name ((name (Simple l_linestatus))))) (alias l_linestatus)
+           (cast ()))
+          ((pred (Name ((name (Simple l_orderkey))))) (alias l_orderkey)
+           (cast ()))
+          ((pred (Name ((name (Simple l_partkey))))) (alias l_partkey) (cast ()))
+          ((pred (Name ((name (Simple l_quantity))))) (alias l_quantity)
+           (cast ()))
+          ((pred (Name ((name (Simple l_receiptdate))))) (alias l_receiptdate)
+           (cast ()))
+          ((pred (Name ((name (Simple l_returnflag))))) (alias l_returnflag)
+           (cast ()))
+          ((pred (Name ((name (Simple l_shipdate))))) (alias l_shipdate)
+           (cast ()))
+          ((pred (Name ((name (Simple l_shipinstruct))))) (alias l_shipinstruct)
+           (cast ()))
+          ((pred (Name ((name (Simple l_shipmode))))) (alias l_shipmode)
+           (cast ()))
+          ((pred (Name ((name (Simple l_suppkey))))) (alias l_suppkey) (cast ()))
+          ((pred (Name ((name (Simple l_tax))))) (alias l_tax) (cast ())))
+         ((Binop
+           (Eq (Name ((name (Simple l_orderkey))))
+            (Name ((name (Simple l_orderkey)))))))))
        (2
-        ((((pred (Name ((name l_orderkey)))) (alias l_orderkey) (cast ()))) ()))
-       (6
-        ((((pred (Name ((name l_orderkey)))) (alias l_orderkey) (cast ())))
-         ((Binop (Eq (Name ((name l_orderkey))) (Int 0)))))))
-      ()))
+        ((((pred (Name ((name (Simple l_shipdate))))) (alias l_shipdate)
+           (cast ())))
+         ((Binop
+           (Eq (Name ((name (Simple l_orderkey))))
+            (Name ((name (Simple l_orderkey))))))))))
+      ((2
+        ((((pred (Name ((name (Simple l_shipdate))))) (alias l_shipdate)
+           (cast ())))
+         ())))
+      () () ()))
     digraph {
-    subgraph cluster_4 {
-    label="Class 4"
-    c4 [shape=point];
-    n4_0 [label="( = )"];
-    }
-    subgraph cluster_5 {
-    label="Class 5"
-    c5 [shape=point];
-    n5_0 [label="filter(, )"];
-    }
-    subgraph cluster_2 {
-    label="Class 2"
-    c2 [shape=point];
-    n2_0 [label="select([ as l_orderkey], )"];
-    }
     subgraph cluster_0 {
     label="Class 0"
     c0 [shape=point];
@@ -100,32 +97,390 @@ let%expect_test "" =
     subgraph cluster_1 {
     label="Class 1"
     c1 [shape=point];
-    n1_0 [label="l_orderkey"];
+    n1_0 [label="filter((l_orderkey = param0), )"];
+    }
+    subgraph cluster_2 {
+    label="Class 2"
+    c2 [shape=point];
+    n2_0 [label="select([l_shipdate], )"];
     }
     subgraph cluster_3 {
     label="Class 3"
     c3 [shape=point];
-    n3_0 [label="0"];
+    n3_0 [label="orders"];
     }
-    subgraph cluster_6 {
-    label="Class 6"
-    c6 [shape=point];
-    n6_0 [label="select([ as l_orderkey], )"];
+    subgraph cluster_4 {
+    label="Class 4"
+    c4 [shape=point];
+    n4_0 [label="join((l_orderkey = o_orderkey), , )"];
     }
-    n4_0 -> {c1 c3};
-    n5_0 -> {c4 c0};
-    n2_0 -> {c1 c0};
     n0_0 -> {};
-    n1_0 -> {};
+    n1_0 -> {c0};
+    n2_0 -> {c1};
     n3_0 -> {};
-    n6_0 -> {c1 c5};
+    n4_0 -> {c0 c3};
     }
-    ("extra view predicates"
-     (extra_view_preds
-      ((Binop (Eq (Name ((scope lineitem) (name l_orderkey))) (Int 0))))))("extra view predicates"
-     (extra_view_preds
-      ((Binop (Eq (Name ((scope lineitem) (name l_orderkey))) (Int 0))))))("no output column matching" (n ((scope lineitem) (name l_comment))))("no output column matching" (n ((scope lineitem) (name l_comment))))("no output column matching" (n ((scope lineitem) (name l_comment))))("extra view predicates"
-     (extra_view_preds
-      ((Binop (Eq (Name ((scope lineitem) (name l_orderkey))) (Int 0))))))("extra view predicates"
-     (extra_view_preds
-      ((Binop (Eq (Name ((scope lineitem) (name l_orderkey))) (Int 0)))))) |}]
+    ("different relations"
+     (view_relations
+      ((((r_name lineitem)
+         (r_schema
+          (((l_comment (StringT)) (l_commitdate (DateT)) (l_discount (FixedT))
+            (l_extendedprice (FixedT)) (l_linenumber (IntT))
+            (l_linestatus (StringT (padded))) (l_orderkey (IntT))
+            (l_partkey (IntT)) (l_quantity (IntT)) (l_receiptdate (DateT))
+            (l_returnflag (StringT (padded))) (l_shipdate (DateT))
+            (l_shipinstruct (StringT (padded))) (l_shipmode (StringT (padded)))
+            (l_suppkey (IntT)) (l_tax (FixedT))))))
+        lineitem)))
+     (query_relations
+      ((((r_name orders)
+         (r_schema
+          (((o_clerk (StringT (padded))) (o_comment (StringT)) (o_custkey (IntT))
+            (o_orderdate (DateT)) (o_orderkey (IntT))
+            (o_orderpriority (StringT (padded)))
+            (o_orderstatus (StringT (padded))) (o_shippriority (IntT))
+            (o_totalprice (FixedT))))))
+        orders))))("different relations"
+     (view_relations
+      ((((r_name lineitem)
+         (r_schema
+          (((l_comment (StringT)) (l_commitdate (DateT)) (l_discount (FixedT))
+            (l_extendedprice (FixedT)) (l_linenumber (IntT))
+            (l_linestatus (StringT (padded))) (l_orderkey (IntT))
+            (l_partkey (IntT)) (l_quantity (IntT)) (l_receiptdate (DateT))
+            (l_returnflag (StringT (padded))) (l_shipdate (DateT))
+            (l_shipinstruct (StringT (padded))) (l_shipmode (StringT (padded)))
+            (l_suppkey (IntT)) (l_tax (FixedT))))))
+        lineitem)))
+     (query_relations
+      ((((r_name lineitem)
+         (r_schema
+          (((l_comment (StringT)) (l_commitdate (DateT)) (l_discount (FixedT))
+            (l_extendedprice (FixedT)) (l_linenumber (IntT))
+            (l_linestatus (StringT (padded))) (l_orderkey (IntT))
+            (l_partkey (IntT)) (l_quantity (IntT)) (l_receiptdate (DateT))
+            (l_returnflag (StringT (padded))) (l_shipdate (DateT))
+            (l_shipinstruct (StringT (padded))) (l_shipmode (StringT (padded)))
+            (l_suppkey (IntT)) (l_tax (FixedT))))))
+        lineitem)
+       (((r_name orders)
+         (r_schema
+          (((o_clerk (StringT (padded))) (o_comment (StringT)) (o_custkey (IntT))
+            (o_orderdate (DateT)) (o_orderkey (IntT))
+            (o_orderpriority (StringT (padded)))
+            (o_orderstatus (StringT (padded))) (o_shippriority (IntT))
+            (o_totalprice (FixedT))))))
+        orders))))("extra view filter"
+     (p
+      (((name (Simple param0)))
+       ((name (Attr lineitem l_orderkey)) (type_ (IntT))))))("different relations"
+     (view_relations
+      ((((r_name lineitem)
+         (r_schema
+          (((l_comment (StringT)) (l_commitdate (DateT)) (l_discount (FixedT))
+            (l_extendedprice (FixedT)) (l_linenumber (IntT))
+            (l_linestatus (StringT (padded))) (l_orderkey (IntT))
+            (l_partkey (IntT)) (l_quantity (IntT)) (l_receiptdate (DateT))
+            (l_returnflag (StringT (padded))) (l_shipdate (DateT))
+            (l_shipinstruct (StringT (padded))) (l_shipmode (StringT (padded)))
+            (l_suppkey (IntT)) (l_tax (FixedT))))))
+        lineitem)))
+     (query_relations
+      ((((r_name orders)
+         (r_schema
+          (((o_clerk (StringT (padded))) (o_comment (StringT)) (o_custkey (IntT))
+            (o_orderdate (DateT)) (o_orderkey (IntT))
+            (o_orderpriority (StringT (padded)))
+            (o_orderstatus (StringT (padded))) (o_shippriority (IntT))
+            (o_totalprice (FixedT))))))
+        orders))))("different relations"
+     (view_relations
+      ((((r_name lineitem)
+         (r_schema
+          (((l_comment (StringT)) (l_commitdate (DateT)) (l_discount (FixedT))
+            (l_extendedprice (FixedT)) (l_linenumber (IntT))
+            (l_linestatus (StringT (padded))) (l_orderkey (IntT))
+            (l_partkey (IntT)) (l_quantity (IntT)) (l_receiptdate (DateT))
+            (l_returnflag (StringT (padded))) (l_shipdate (DateT))
+            (l_shipinstruct (StringT (padded))) (l_shipmode (StringT (padded)))
+            (l_suppkey (IntT)) (l_tax (FixedT))))))
+        lineitem)))
+     (query_relations
+      ((((r_name lineitem)
+         (r_schema
+          (((l_comment (StringT)) (l_commitdate (DateT)) (l_discount (FixedT))
+            (l_extendedprice (FixedT)) (l_linenumber (IntT))
+            (l_linestatus (StringT (padded))) (l_orderkey (IntT))
+            (l_partkey (IntT)) (l_quantity (IntT)) (l_receiptdate (DateT))
+            (l_returnflag (StringT (padded))) (l_shipdate (DateT))
+            (l_shipinstruct (StringT (padded))) (l_shipmode (StringT (padded)))
+            (l_suppkey (IntT)) (l_tax (FixedT))))))
+        lineitem)
+       (((r_name orders)
+         (r_schema
+          (((o_clerk (StringT (padded))) (o_comment (StringT)) (o_custkey (IntT))
+            (o_orderdate (DateT)) (o_orderkey (IntT))
+            (o_orderpriority (StringT (padded)))
+            (o_orderstatus (StringT (padded))) (o_shippriority (IntT))
+            (o_totalprice (FixedT))))))
+        orders))))("extra view filter"
+     (p
+      (((name (Simple param0)))
+       ((name (Attr lineitem l_orderkey)) (type_ (IntT))))))("no output column matching"
+     (n ((name (Attr lineitem l_comment)) (type_ (StringT)))))("different relations"
+     (view_relations
+      ((((r_name lineitem)
+         (r_schema
+          (((l_comment (StringT)) (l_commitdate (DateT)) (l_discount (FixedT))
+            (l_extendedprice (FixedT)) (l_linenumber (IntT))
+            (l_linestatus (StringT (padded))) (l_orderkey (IntT))
+            (l_partkey (IntT)) (l_quantity (IntT)) (l_receiptdate (DateT))
+            (l_returnflag (StringT (padded))) (l_shipdate (DateT))
+            (l_shipinstruct (StringT (padded))) (l_shipmode (StringT (padded)))
+            (l_suppkey (IntT)) (l_tax (FixedT))))))
+        lineitem)))
+     (query_relations
+      ((((r_name orders)
+         (r_schema
+          (((o_clerk (StringT (padded))) (o_comment (StringT)) (o_custkey (IntT))
+            (o_orderdate (DateT)) (o_orderkey (IntT))
+            (o_orderpriority (StringT (padded)))
+            (o_orderstatus (StringT (padded))) (o_shippriority (IntT))
+            (o_totalprice (FixedT))))))
+        orders))))("different relations"
+     (view_relations
+      ((((r_name lineitem)
+         (r_schema
+          (((l_comment (StringT)) (l_commitdate (DateT)) (l_discount (FixedT))
+            (l_extendedprice (FixedT)) (l_linenumber (IntT))
+            (l_linestatus (StringT (padded))) (l_orderkey (IntT))
+            (l_partkey (IntT)) (l_quantity (IntT)) (l_receiptdate (DateT))
+            (l_returnflag (StringT (padded))) (l_shipdate (DateT))
+            (l_shipinstruct (StringT (padded))) (l_shipmode (StringT (padded)))
+            (l_suppkey (IntT)) (l_tax (FixedT))))))
+        lineitem)))
+     (query_relations
+      ((((r_name lineitem)
+         (r_schema
+          (((l_comment (StringT)) (l_commitdate (DateT)) (l_discount (FixedT))
+            (l_extendedprice (FixedT)) (l_linenumber (IntT))
+            (l_linestatus (StringT (padded))) (l_orderkey (IntT))
+            (l_partkey (IntT)) (l_quantity (IntT)) (l_receiptdate (DateT))
+            (l_returnflag (StringT (padded))) (l_shipdate (DateT))
+            (l_shipinstruct (StringT (padded))) (l_shipmode (StringT (padded)))
+            (l_suppkey (IntT)) (l_tax (FixedT))))))
+        lineitem)
+       (((r_name orders)
+         (r_schema
+          (((o_clerk (StringT (padded))) (o_comment (StringT)) (o_custkey (IntT))
+            (o_orderdate (DateT)) (o_orderkey (IntT))
+            (o_orderpriority (StringT (padded)))
+            (o_orderstatus (StringT (padded))) (o_shippriority (IntT))
+            (o_totalprice (FixedT))))))
+        orders))))("different relations"
+     (view_relations
+      ((((r_name orders)
+         (r_schema
+          (((o_clerk (StringT (padded))) (o_comment (StringT)) (o_custkey (IntT))
+            (o_orderdate (DateT)) (o_orderkey (IntT))
+            (o_orderpriority (StringT (padded)))
+            (o_orderstatus (StringT (padded))) (o_shippriority (IntT))
+            (o_totalprice (FixedT))))))
+        orders)))
+     (query_relations
+      ((((r_name lineitem)
+         (r_schema
+          (((l_comment (StringT)) (l_commitdate (DateT)) (l_discount (FixedT))
+            (l_extendedprice (FixedT)) (l_linenumber (IntT))
+            (l_linestatus (StringT (padded))) (l_orderkey (IntT))
+            (l_partkey (IntT)) (l_quantity (IntT)) (l_receiptdate (DateT))
+            (l_returnflag (StringT (padded))) (l_shipdate (DateT))
+            (l_shipinstruct (StringT (padded))) (l_shipmode (StringT (padded)))
+            (l_suppkey (IntT)) (l_tax (FixedT))))))
+        lineitem))))("different relations"
+     (view_relations
+      ((((r_name orders)
+         (r_schema
+          (((o_clerk (StringT (padded))) (o_comment (StringT)) (o_custkey (IntT))
+            (o_orderdate (DateT)) (o_orderkey (IntT))
+            (o_orderpriority (StringT (padded)))
+            (o_orderstatus (StringT (padded))) (o_shippriority (IntT))
+            (o_totalprice (FixedT))))))
+        orders)))
+     (query_relations
+      ((((r_name lineitem)
+         (r_schema
+          (((l_comment (StringT)) (l_commitdate (DateT)) (l_discount (FixedT))
+            (l_extendedprice (FixedT)) (l_linenumber (IntT))
+            (l_linestatus (StringT (padded))) (l_orderkey (IntT))
+            (l_partkey (IntT)) (l_quantity (IntT)) (l_receiptdate (DateT))
+            (l_returnflag (StringT (padded))) (l_shipdate (DateT))
+            (l_shipinstruct (StringT (padded))) (l_shipmode (StringT (padded)))
+            (l_suppkey (IntT)) (l_tax (FixedT))))))
+        lineitem))))("different relations"
+     (view_relations
+      ((((r_name orders)
+         (r_schema
+          (((o_clerk (StringT (padded))) (o_comment (StringT)) (o_custkey (IntT))
+            (o_orderdate (DateT)) (o_orderkey (IntT))
+            (o_orderpriority (StringT (padded)))
+            (o_orderstatus (StringT (padded))) (o_shippriority (IntT))
+            (o_totalprice (FixedT))))))
+        orders)))
+     (query_relations
+      ((((r_name lineitem)
+         (r_schema
+          (((l_comment (StringT)) (l_commitdate (DateT)) (l_discount (FixedT))
+            (l_extendedprice (FixedT)) (l_linenumber (IntT))
+            (l_linestatus (StringT (padded))) (l_orderkey (IntT))
+            (l_partkey (IntT)) (l_quantity (IntT)) (l_receiptdate (DateT))
+            (l_returnflag (StringT (padded))) (l_shipdate (DateT))
+            (l_shipinstruct (StringT (padded))) (l_shipmode (StringT (padded)))
+            (l_suppkey (IntT)) (l_tax (FixedT))))))
+        lineitem))))("different relations"
+     (view_relations
+      ((((r_name orders)
+         (r_schema
+          (((o_clerk (StringT (padded))) (o_comment (StringT)) (o_custkey (IntT))
+            (o_orderdate (DateT)) (o_orderkey (IntT))
+            (o_orderpriority (StringT (padded)))
+            (o_orderstatus (StringT (padded))) (o_shippriority (IntT))
+            (o_totalprice (FixedT))))))
+        orders)))
+     (query_relations
+      ((((r_name lineitem)
+         (r_schema
+          (((l_comment (StringT)) (l_commitdate (DateT)) (l_discount (FixedT))
+            (l_extendedprice (FixedT)) (l_linenumber (IntT))
+            (l_linestatus (StringT (padded))) (l_orderkey (IntT))
+            (l_partkey (IntT)) (l_quantity (IntT)) (l_receiptdate (DateT))
+            (l_returnflag (StringT (padded))) (l_shipdate (DateT))
+            (l_shipinstruct (StringT (padded))) (l_shipmode (StringT (padded)))
+            (l_suppkey (IntT)) (l_tax (FixedT))))))
+        lineitem)
+       (((r_name orders)
+         (r_schema
+          (((o_clerk (StringT (padded))) (o_comment (StringT)) (o_custkey (IntT))
+            (o_orderdate (DateT)) (o_orderkey (IntT))
+            (o_orderpriority (StringT (padded)))
+            (o_orderstatus (StringT (padded))) (o_shippriority (IntT))
+            (o_totalprice (FixedT))))))
+        orders))))("different relations"
+     (view_relations
+      ((((r_name lineitem)
+         (r_schema
+          (((l_comment (StringT)) (l_commitdate (DateT)) (l_discount (FixedT))
+            (l_extendedprice (FixedT)) (l_linenumber (IntT))
+            (l_linestatus (StringT (padded))) (l_orderkey (IntT))
+            (l_partkey (IntT)) (l_quantity (IntT)) (l_receiptdate (DateT))
+            (l_returnflag (StringT (padded))) (l_shipdate (DateT))
+            (l_shipinstruct (StringT (padded))) (l_shipmode (StringT (padded)))
+            (l_suppkey (IntT)) (l_tax (FixedT))))))
+        lineitem)
+       (((r_name orders)
+         (r_schema
+          (((o_clerk (StringT (padded))) (o_comment (StringT)) (o_custkey (IntT))
+            (o_orderdate (DateT)) (o_orderkey (IntT))
+            (o_orderpriority (StringT (padded)))
+            (o_orderstatus (StringT (padded))) (o_shippriority (IntT))
+            (o_totalprice (FixedT))))))
+        orders)))
+     (query_relations
+      ((((r_name lineitem)
+         (r_schema
+          (((l_comment (StringT)) (l_commitdate (DateT)) (l_discount (FixedT))
+            (l_extendedprice (FixedT)) (l_linenumber (IntT))
+            (l_linestatus (StringT (padded))) (l_orderkey (IntT))
+            (l_partkey (IntT)) (l_quantity (IntT)) (l_receiptdate (DateT))
+            (l_returnflag (StringT (padded))) (l_shipdate (DateT))
+            (l_shipinstruct (StringT (padded))) (l_shipmode (StringT (padded)))
+            (l_suppkey (IntT)) (l_tax (FixedT))))))
+        lineitem))))("different relations"
+     (view_relations
+      ((((r_name lineitem)
+         (r_schema
+          (((l_comment (StringT)) (l_commitdate (DateT)) (l_discount (FixedT))
+            (l_extendedprice (FixedT)) (l_linenumber (IntT))
+            (l_linestatus (StringT (padded))) (l_orderkey (IntT))
+            (l_partkey (IntT)) (l_quantity (IntT)) (l_receiptdate (DateT))
+            (l_returnflag (StringT (padded))) (l_shipdate (DateT))
+            (l_shipinstruct (StringT (padded))) (l_shipmode (StringT (padded)))
+            (l_suppkey (IntT)) (l_tax (FixedT))))))
+        lineitem)
+       (((r_name orders)
+         (r_schema
+          (((o_clerk (StringT (padded))) (o_comment (StringT)) (o_custkey (IntT))
+            (o_orderdate (DateT)) (o_orderkey (IntT))
+            (o_orderpriority (StringT (padded)))
+            (o_orderstatus (StringT (padded))) (o_shippriority (IntT))
+            (o_totalprice (FixedT))))))
+        orders)))
+     (query_relations
+      ((((r_name lineitem)
+         (r_schema
+          (((l_comment (StringT)) (l_commitdate (DateT)) (l_discount (FixedT))
+            (l_extendedprice (FixedT)) (l_linenumber (IntT))
+            (l_linestatus (StringT (padded))) (l_orderkey (IntT))
+            (l_partkey (IntT)) (l_quantity (IntT)) (l_receiptdate (DateT))
+            (l_returnflag (StringT (padded))) (l_shipdate (DateT))
+            (l_shipinstruct (StringT (padded))) (l_shipmode (StringT (padded)))
+            (l_suppkey (IntT)) (l_tax (FixedT))))))
+        lineitem))))("different relations"
+     (view_relations
+      ((((r_name lineitem)
+         (r_schema
+          (((l_comment (StringT)) (l_commitdate (DateT)) (l_discount (FixedT))
+            (l_extendedprice (FixedT)) (l_linenumber (IntT))
+            (l_linestatus (StringT (padded))) (l_orderkey (IntT))
+            (l_partkey (IntT)) (l_quantity (IntT)) (l_receiptdate (DateT))
+            (l_returnflag (StringT (padded))) (l_shipdate (DateT))
+            (l_shipinstruct (StringT (padded))) (l_shipmode (StringT (padded)))
+            (l_suppkey (IntT)) (l_tax (FixedT))))))
+        lineitem)
+       (((r_name orders)
+         (r_schema
+          (((o_clerk (StringT (padded))) (o_comment (StringT)) (o_custkey (IntT))
+            (o_orderdate (DateT)) (o_orderkey (IntT))
+            (o_orderpriority (StringT (padded)))
+            (o_orderstatus (StringT (padded))) (o_shippriority (IntT))
+            (o_totalprice (FixedT))))))
+        orders)))
+     (query_relations
+      ((((r_name lineitem)
+         (r_schema
+          (((l_comment (StringT)) (l_commitdate (DateT)) (l_discount (FixedT))
+            (l_extendedprice (FixedT)) (l_linenumber (IntT))
+            (l_linestatus (StringT (padded))) (l_orderkey (IntT))
+            (l_partkey (IntT)) (l_quantity (IntT)) (l_receiptdate (DateT))
+            (l_returnflag (StringT (padded))) (l_shipdate (DateT))
+            (l_shipinstruct (StringT (padded))) (l_shipmode (StringT (padded)))
+            (l_suppkey (IntT)) (l_tax (FixedT))))))
+        lineitem))))("different relations"
+     (view_relations
+      ((((r_name lineitem)
+         (r_schema
+          (((l_comment (StringT)) (l_commitdate (DateT)) (l_discount (FixedT))
+            (l_extendedprice (FixedT)) (l_linenumber (IntT))
+            (l_linestatus (StringT (padded))) (l_orderkey (IntT))
+            (l_partkey (IntT)) (l_quantity (IntT)) (l_receiptdate (DateT))
+            (l_returnflag (StringT (padded))) (l_shipdate (DateT))
+            (l_shipinstruct (StringT (padded))) (l_shipmode (StringT (padded)))
+            (l_suppkey (IntT)) (l_tax (FixedT))))))
+        lineitem)
+       (((r_name orders)
+         (r_schema
+          (((o_clerk (StringT (padded))) (o_comment (StringT)) (o_custkey (IntT))
+            (o_orderdate (DateT)) (o_orderkey (IntT))
+            (o_orderpriority (StringT (padded)))
+            (o_orderstatus (StringT (padded))) (o_shippriority (IntT))
+            (o_totalprice (FixedT))))))
+        orders)))
+     (query_relations
+      ((((r_name orders)
+         (r_schema
+          (((o_clerk (StringT (padded))) (o_comment (StringT)) (o_custkey (IntT))
+            (o_orderdate (DateT)) (o_orderkey (IntT))
+            (o_orderpriority (StringT (padded)))
+            (o_orderstatus (StringT (padded))) (o_shippriority (IntT))
+            (o_totalprice (FixedT))))))
+        orders)))) |}]

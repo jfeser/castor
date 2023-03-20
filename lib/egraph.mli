@@ -1,5 +1,7 @@
 open Core
 
+exception Merge_error of Sexp.t
+
 module Id : sig
   type t [@@deriving compare, equal, hash, sexp_of]
 end
