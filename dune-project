@@ -20,7 +20,7 @@
   combinat
   ocamlgraph
   iter
-  cmph
+  llvm
   (postgresql (>= 4.4))
   (bos (>= 0.2))
   (logs (>= 0.6))
