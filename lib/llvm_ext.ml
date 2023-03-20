@@ -29,6 +29,9 @@ module TypeKind = struct
     | Metadata
     | X86_mmx
     | Token
+    | ScalableVector
+    | BFloat
+    | X86_amx
   [@@deriving compare, equal, sexp]
 end
 

@@ -955,9 +955,7 @@ module Make () = struct
             else elem_t
           in
           fprintf fmt "%a *" pp_type elem_t
-      | Half | Float | Double | X86fp80 | Fp128 | Ppc_fp128 | Label | Function
-      | Array | Vector | Metadata | X86_mmx | Token ->
-          Error.(create "Unknown type." t [%sexp_of: lltype] |> raise)
+      | _ -> Error.(create "Unknown type." t [%sexp_of: lltype] |> raise)
     and pp_params fmt ts =
       Array.iteri ts ~f:(fun i t ->
           if i = 0 then fprintf fmt "params*" else fprintf fmt "%a" pp_type t;
@@ -979,9 +977,7 @@ module Make () = struct
       | Function ->
           fprintf fmt "%a %s(%a);@," pp_type (return_type t) n pp_params
             (param_types t)
-      | Void | Half | Float | Double | X86fp80 | Fp128 | Ppc_fp128 | Label
-      | Integer | Struct | Array | Vector | Metadata | X86_mmx | Token ->
-          ignore_val ()
+      | _ -> ignore_val ()
     in
     let fmt = Caml.Format.formatter_of_out_channel ch in
     pp_open_vbox fmt 0;

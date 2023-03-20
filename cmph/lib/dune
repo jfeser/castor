@@ -9,7 +9,7 @@
  (name cmph)
  (public_name cmph)
  (modules cmph util)
- (libraries core ctypes ctypes.foreign)
+ (libraries core core_unix core_unix.filename_unix ctypes ctypes.foreign)
  (c_library_flags
   (:standard
    (:include flags.inc)
