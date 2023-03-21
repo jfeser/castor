@@ -1,5 +1,4 @@
 open Core
-open Ast
 open Collections
 open Abslayout_fold
 module V = Visitors
@@ -35,22 +34,22 @@ let of_int ~byte_width x =
   done;
   Bytes.to_string buf
 
-let string_sentinal : Type.string_ -> _ = function
+let string_sentinal : Ast.string_t -> _ = function
   | { nchars = Bottom; _ } -> 0
   | { nchars = Interval (_, max); _ } -> max + 1
   | { nchars = Top; _ } -> failwith "No available sentinal values."
 
-let int_sentinal : Type.int_ -> _ = function
+let int_sentinal : Ast.int_t -> _ = function
   | { range = Bottom; _ } -> 0
   | { range = Interval (_, max); _ } -> max + 1
   | { range = Top; _ } -> failwith "No available sentinal values."
 
-let date_sentinal : Type.date -> _ = function
+let date_sentinal : Ast.date_t -> _ = function
   | { range = Bottom; _ } -> 0
   | { range = Interval (_, max); _ } -> max + 1
   | { range = Top; _ } -> failwith "No available sentinal values."
 
-let fixed_sentinal : Type.fixed -> _ = function
+let fixed_sentinal : Ast.fixed_t -> _ = function
   | { value = { range = Bottom; _ }; _ } -> 0
   | { value = { range = Interval (_, max); _ }; _ } -> max + 1
   | { value = { range = Top; _ }; _ } ->
@@ -58,8 +57,8 @@ let fixed_sentinal : Type.fixed -> _ = function
 
 let bool_sentinal = 2
 
-let null_sentinal = function
-  | Type.IntT x -> int_sentinal x
+let null_sentinal : Ast.type_ -> _ = function
+  | IntT x -> int_sentinal x
   | BoolT _ -> bool_sentinal
   | StringT x -> string_sentinal x
   | DateT x -> date_sentinal x
@@ -201,7 +200,7 @@ let serialize_field hdr name value =
 class ['self] serialize_fold ?debug () =
   object (self : 'self)
     inherit [_, _] abslayout_fold
-    method type_ meta = meta#type_
+    method type_ meta : Ast.type_ = meta#type_
     method serializer = new logged_serializer ?debug ()
     method empty _ = self#serializer
 
@@ -347,7 +346,7 @@ class ['self] serialize_fold ?debug () =
       let fold () (ks, kp, vp) =
         let ks =
           match key_type with
-          | Type.TupleT (ts, _) ->
+          | TupleT (ts, _) ->
               List.map2_exn ks ts ~f:(fun v t ->
                   self#serialize_scalar key_serial t v;
                   let int_key =
@@ -369,7 +368,7 @@ class ['self] serialize_fold ?debug () =
         let keys = Queue.to_list keys_queue in
         let keys =
           match key_type with
-          | Type.TupleT _ ->
+          | TupleT _ ->
               let compare (_, k1, _) (_, k2, _) =
                 Zorder.compare (Option.value_exn k1) (Option.value_exn k2)
               in
@@ -418,9 +417,9 @@ class ['self] serialize_fold ?debug () =
       let sval = serialize_field hdr "value" x in
       s#write_string sval
 
-    method serialize_fixed s t x =
+    method serialize_fixed s (t : Ast.type_) x =
       match t with
-      | Type.FixedT { value = { scale; _ }; _ } ->
+      | FixedT { value = { scale; _ }; _ } ->
           let hdr = make_header t in
           let sval =
             serialize_field hdr "value" Fixed_point.((convert x scale).value)
@@ -486,7 +485,7 @@ class ['self] serialize_fold ?debug () =
       main
   end
 
-let set_pos (r : _ annot) (pos : int) =
+let set_pos (r : _ Ast.annot) (pos : int) =
   {
     r with
     meta =

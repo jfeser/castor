@@ -248,8 +248,7 @@ let of_pred_open scan of_pred ctx pred b =
 
 let scan_null b (cb : callback) = cb b [ Null ]
 
-let scan_int ~debug ctx b (Type.({ nullable; range; _ } as t) : Type.int_)
-    (cb : callback) =
+let scan_int ~debug ctx b ({ nullable; range; _ } as t) (cb : callback) =
   let open Builder in
   let start = Ctx.find_exn ctx (Name.create "start") b in
   let ival = Slice (start, Abs_int.byte_width ~nullable range) in
@@ -262,8 +261,7 @@ let scan_int ~debug ctx b (Type.({ nullable; range; _ } as t) : Type.int_)
   debug_print ~debug "int" ival b;
   cb b [ ival ]
 
-let scan_date ~debug ctx b (Type.({ nullable; range; _ } as t) : Type.date)
-    (cb : callback) =
+let scan_date ~debug ctx b ({ nullable; range; _ } as t) (cb : callback) =
   let open Builder in
   let start = Ctx.find_exn ctx (Name.create "start") b in
   let ival = Slice (start, Abs_int.byte_width ~nullable range) in
@@ -277,7 +275,7 @@ let scan_date ~debug ctx b (Type.({ nullable; range; _ } as t) : Type.date)
   debug_print ~debug "date" dval b;
   cb b [ dval ]
 
-let scan_fixed ~debug ctx b Type.({ nullable; value = { range; scale } } as t)
+let scan_fixed ~debug ctx b ({ nullable; value = { range; scale } } as t)
     (cb : callback) =
   let open Builder in
   let start = Ctx.find_exn ctx (Name.create "start") b in
@@ -297,7 +295,7 @@ let scan_bool ctx b (cb : callback) =
   let start = Ctx.find_exn ctx (Name.create "start") b in
   cb b [ Unop { op = `LoadBool; arg = start } ]
 
-let scan_string ~debug ctx b (Type.({ nullable; _ } as st) as t : Type.string_)
+let scan_string ~debug ctx b ({ nullable; _ } as st as t : string_t)
     (cb : callback) =
   let open Builder in
   let hdr = Header.make_header (StringT t) in
@@ -676,7 +674,7 @@ let scan_depjoin ~debug scan ctx b { d_lhs; d_rhs } (child_types, _)
 let scan_open ~debug scan of_pred ctx b r t (cb : callback) =
   let ctx = add_layout_start ctx r in
   match (r.node, t) with
-  | _, Type.EmptyT -> ()
+  | _, EmptyT -> ()
   | AScalar _, IntT t' -> scan_int ~debug ctx b t' cb
   | AScalar _, DateT t' -> scan_date ~debug ctx b t' cb
   | AScalar _, FixedT t' -> scan_fixed ~debug ctx b t' cb

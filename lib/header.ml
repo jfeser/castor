@@ -70,7 +70,7 @@ and make_access hdr name start =
   in
   ret
 
-let rec make_header t =
+let rec make_header (t : Ast.type_) =
   let make_size range =
     match Abs_int.to_int range with
     | Some x -> `Empty x
@@ -78,14 +78,14 @@ let rec make_header t =
   in
   let open Field in
   match t with
-  | Type.IntT { range; nullable; _ } ->
+  | IntT { range; nullable; _ } ->
       let len = Abs_int.byte_width ~nullable range in
       [
         { name = "len"; size = `Empty len; align = 1 };
         { name = "count"; size = `Empty 1; align = 1 };
         { name = "value"; size = `Fixed len; align = 1 };
       ]
-  | Type.DateT { range; nullable; _ } ->
+  | DateT { range; nullable; _ } ->
       let len = Abs_int.byte_width ~nullable range in
       [
         { name = "len"; size = `Empty len; align = 1 };

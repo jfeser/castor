@@ -9,65 +9,13 @@ include (val Log.make "castor.type")
 
 exception TypeError of Error.t [@@deriving sexp]
 
-module AbsFixed = struct
-  module I = Abs_int
-
-  type t = { range : I.t; scale : int } [@@deriving compare, sexp]
-
-  let of_fixed f = { range = I.of_int f.Fixed_point.value; scale = f.scale }
-  let zero = of_fixed (Fixed_point.of_int 0)
-  let bot = { range = I.bot; scale = 1 }
-  let top = { range = I.top; scale = 1 }
-
-  let rec unify dir f1 f2 =
-    if f1.scale = f2.scale then { f1 with range = dir f1.range f2.range }
-    else if f1.scale > f2.scale then unify dir f2 f1
-    else
-      let scale_factor = f2.scale / f1.scale in
-      let scaled_range = I.O.(f1.range * I.of_int scale_factor) in
-      { f2 with range = dir f2.range scaled_range }
-
-  let meet = unify I.meet
-  let join = unify I.join
-end
-
-type int_ = { range : I.t; nullable : bool [@sexp.bool] }
-[@@deriving compare, sexp]
-
-type date = int_ [@@deriving compare, sexp]
-type bool_ = { nullable : bool [@sexp.bool] } [@@deriving compare, sexp]
-
-type string_ = { nchars : I.t; nullable : bool [@sexp.bool] }
-[@@deriving compare, sexp]
-
-type list_ = { count : I.t } [@@deriving compare, sexp]
-type tuple = { kind : [ `Cross | `Concat ] } [@@deriving compare, sexp]
-type hash_idx = { key_count : I.t } [@@deriving compare, sexp]
-type ordered_idx = { key_count : I.t } [@@deriving compare, sexp]
-
-type fixed = { value : AbsFixed.t; nullable : bool [@sexp.bool] }
-[@@deriving compare, sexp]
-
-type t =
-  | NullT
-  | IntT of int_
-  | DateT of date
-  | FixedT of fixed
-  | BoolT of bool_
-  | StringT of string_
-  | TupleT of (t list * tuple)
-  | ListT of (t * list_)
-  | HashIdxT of (t * t * hash_idx)
-  | OrderedIdxT of (t * t * ordered_idx)
-  | FuncT of (t list * [ `Child_sum | `Width of int ])
-  | EmptyT
-[@@deriving compare, sexp]
+type t = Ast.type_ [@@deriving compare, sexp]
 
 let least_general_of_primtype = function
   | Prim_type.IntT { nullable } -> IntT { range = I.bot; nullable }
   | NullT -> NullT
   | DateT { nullable } -> DateT { range = I.bot; nullable }
-  | FixedT { nullable } -> FixedT { value = AbsFixed.bot; nullable }
+  | FixedT { nullable } -> FixedT { value = Abs_fixed.bot; nullable }
   | StringT { nullable; _ } -> StringT { nchars = I.bot; nullable }
   | BoolT { nullable } -> BoolT { nullable }
   | TupleT _ | VoidT -> failwith "Not a layout type."
@@ -89,7 +37,7 @@ let rec unify_exn t1 t2 =
       DateT { range = I.O.(b1 || b2); nullable = n1 || n2 }
   | FixedT { value = v1; nullable = n1 }, FixedT { value = v2; nullable = n2 }
     ->
-      FixedT { value = AbsFixed.join v1 v2; nullable = n1 || n2 }
+      FixedT { value = Abs_fixed.join v1 v2; nullable = n1 || n2 }
   | IntT x, NullT | NullT, IntT x -> IntT { x with nullable = true }
   | DateT x, NullT | NullT, DateT x -> DateT { x with nullable = true }
   | FixedT x, NullT | NullT, FixedT x -> FixedT { x with nullable = true }
@@ -283,7 +231,7 @@ class ['self] type_fold =
       | String x ->
           StringT { nchars = I.of_int (String.length x); nullable = false }
       | Null -> NullT
-      | Fixed x -> FixedT { value = AbsFixed.of_fixed x; nullable = false }
+      | Fixed x -> FixedT { value = Abs_fixed.of_fixed x; nullable = false }
 
     method list _ { l_values = elem_l; _ } =
       let init = (least_general_of_layout elem_l, 0) in
@@ -469,7 +417,7 @@ module Parallel = struct
         aggs = [];
         build =
           (fun _ _ ->
-            FixedT { value = AbsFixed.top; nullable = false (* TODO *) });
+            FixedT { value = Abs_fixed.top; nullable = false (* TODO *) });
       }
 
     let string_t _ =

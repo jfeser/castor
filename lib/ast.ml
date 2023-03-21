@@ -139,3 +139,35 @@ module Query = struct
 end
 
 let strip_meta r = (r :> t)
+
+type int_t = { range : Abs_int.t; nullable : bool [@sexp.bool] }
+[@@deriving compare, sexp]
+
+type date_t = int_t [@@deriving compare, sexp]
+type bool_t = { nullable : bool [@sexp.bool] } [@@deriving compare, sexp]
+
+type string_t = { nchars : Abs_int.t; nullable : bool [@sexp.bool] }
+[@@deriving compare, sexp]
+
+type list_t = { count : Abs_int.t } [@@deriving compare, sexp]
+type tuple_t = { kind : [ `Cross | `Concat ] } [@@deriving compare, sexp]
+type hash_idx_t = { key_count : Abs_int.t } [@@deriving compare, sexp]
+type ordered_idx_t = { key_count : Abs_int.t } [@@deriving compare, sexp]
+
+type fixed_t = { value : Abs_fixed.t; nullable : bool [@sexp.bool] }
+[@@deriving compare, sexp]
+
+type type_ =
+  | NullT
+  | IntT of int_t
+  | DateT of date_t
+  | FixedT of fixed_t
+  | BoolT of bool_t
+  | StringT of string_t
+  | TupleT of (type_ list * tuple_t)
+  | ListT of (type_ * list_t)
+  | HashIdxT of (type_ * type_ * hash_idx_t)
+  | OrderedIdxT of (type_ * type_ * ordered_idx_t)
+  | FuncT of (type_ list * [ `Child_sum | `Width of int ])
+  | EmptyT
+[@@deriving compare, sexp]
