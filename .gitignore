@@ -1,6 +1,7 @@
 .ipynb_checkpoints/
 
 _build/
+_opam/
 
 config-*sh
 config.ini

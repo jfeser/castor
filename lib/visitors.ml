@@ -252,7 +252,7 @@ module Iter = struct
     | `First q | `Exists q -> annot q
 
   let query annot pred = function
-    | Relation _ | AEmpty | Call _ -> ()
+    | Relation _ | AEmpty | Call _ | Limit _ -> ()
     | Select (ps, q) | GroupBy (ps, _, q) ->
         List.iter ~f:(fun (p, _) -> pred p) (Select_list.to_list ps);
         annot q

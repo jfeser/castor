@@ -9,25 +9,6 @@ module A = Constructors.Annot
 
 let pp = Abslayout_pp.pp
 
-let name r =
-  match r.node with
-  | Select _ -> "select"
-  | Filter _ -> "filter"
-  | DepJoin _ -> "depjoin"
-  | Join _ -> "join"
-  | GroupBy _ -> "group_by"
-  | Dedup _ -> "dedup"
-  | OrderBy _ -> "order_by"
-  | Relation _ -> "scan"
-  | AEmpty -> "empty"
-  | AScalar _ -> "scalar"
-  | AList _ -> "list"
-  | ATuple _ -> "tuple"
-  | AHashIdx _ -> "hash_idx"
-  | AOrderedIdx _ -> "ordered_idx"
-  | Range _ -> "range"
-  | Call _ -> "call"
-
 type error = [ `Parse_error of string * int * int ] [@@deriving sexp]
 
 let pp_err f fmt = function

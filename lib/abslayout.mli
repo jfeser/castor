@@ -12,7 +12,6 @@ include Comparator.S with type t := t
 module O : Comparable.Infix with type t := t
 
 val pp : _ annot Fmt.t
-val name : t -> string
 
 val names : t -> Set.M(Name).t
 (** The set of names in a `t`. *)
