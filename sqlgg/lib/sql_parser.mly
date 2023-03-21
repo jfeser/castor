@@ -29,19 +29,19 @@ Simple SQL parser
     include Header
 %}
 
-%token <int> INTEGER
-%token <string> IDENT TEXT BLOB
-%token <float> FLOAT
+%token <int> INT_LIT
+%token <string> IDENT TEXT_LIT BLOB
+%token <float> FLOAT_LIT
 %token <Sql.param_id> PARAM
 %token <int> LCURLY RCURLY
-%token ALL AND ANY AS ASC ASTERISK AVG BETWEEN BIT_AND BIT_OR BY CASE CAST
-COLLATE COMMA CONCAT_OP COUNT CROSS DATE DAY DAY_HOUR DAY_MICROSECOND DAY_MINUTE
+%token ALL AND ANY AS ASC ASTERISK AVG BETWEEN BIT_AND BIT_OR BOOLEAN BY CASE CAST
+COLLATE COMMA CONCAT_OP COUNT CREATE CROSS DATE DAY DAY_HOUR DAY_MICROSECOND DAY_MINUTE
 DAY_SECOND DESC DISTINCT DIV DOT ELSE END EOF EQ EQUAL EXCEPT EXISTS FALSE FOR
-FROM GE GROUP GT HAVING HOUR HOUR_MICROSECOND HOUR_MINUTE HOUR_SECOND IF IN
-INTERSECT INTERVAL IS JOIN JOIN_TYPE1 JOIN_TYPE2 LE LIKE LIKE_OP LIMIT LPAREN
+FROM GE GROUP GT HAVING HOUR HOUR_MICROSECOND HOUR_MINUTE HOUR_SECOND IF IN INTEGER
+INTERSECT INTERVAL IS JOIN JOIN_TYPE1 JOIN_TYPE2 KEY LE LIKE LIKE_OP LIMIT LPAREN
 LSH LT MAX MICROSECOND MIN MINUS MINUTE MINUTE_MICROSECOND MINUTE_SECOND MOD
-MONTH NATURAL NEQ NOT NOT_DISTINCT_OP NULL OFFSET ON OR ORDER PLUS QUARTER
-RPAREN RSH SECOND SECOND_MICROSECOND SELECT SOME SUBSTRING SUM THEN TILDE TIME
+MONTH NATURAL NEQ NOT NOT_DISTINCT_OP NULL NUMERIC OFFSET ON OR ORDER PLUS PRIMARY QUARTER
+REFERENCES RPAREN RSH SECOND SECOND_MICROSECOND SELECT SEMI SOME SUBSTRING SUM TABLE TEXT THEN TILDE TIME
 TIMESTAMP TRUE UNION USING VALUES WEEK WHEN WHERE WITH YEAR YEAR_MONTH
 
 
@@ -61,8 +61,7 @@ TIMESTAMP TRUE UNION USING VALUES WEEK WHEN WHERE WITH YEAR YEAR_MONTH
 
 %type <Sql.op Sql.expr> expr
 
-%start <Sql.op Sql.query> input
-
+%start <Sql.op Sql.stmt list> input
 %%
 
 %inline either(X,Y): X | Y { }
@@ -71,27 +70,31 @@ TIMESTAMP TRUE UNION USING VALUES WEEK WHEN WHERE WITH YEAR YEAR_MONTH
 %inline sequence_(X): LPAREN l=commas(X) { l }
 %inline sequence(X): l=sequence_(X) RPAREN { l }
 
-input: query EOF { $1 }
+input: list(statement) EOF { $1 }
+
+statement: statement1 SEMI { ($1, $loc) }
+statement1:
+  | CREATE TABLE name=IDENT schema=table_definition { Create {name; schema} }
+  | query { Select $1 }
+
+table_definition: LPAREN columns=commas(column_def) RPAREN { columns }
+
+column_def: name=IDENT t=sql_type? extra=column_def_extra* {
+  Base.(make_attribute name (Option.value ~default:Type.Int t) (Set.of_list (module Constraint) @@ List.filter_map ~f:Fn.id extra))
+}
 
 with_clause: WITH separated_nonempty_list(COMMA, with_body) {}
-with_body:
-  | id=IDENT AS LPAREN q=query RPAREN { add_with id q }
+with_body: id=IDENT AS LPAREN q=query RPAREN { add_with id q }
 
-query:
-  | with_clause? c=clauses o=loption(order) lim=limit_t?
-    {
-      { clauses=c; order=o; limit=lim; }
-    }
+query: with_clause? c=clauses o=loption(order) lim=limit_t? { { clauses=c; order=o; limit=lim; } }
 
 clauses:
   | s=select { Clause (s, None) }
   | s=select op=compound_op c=clauses { Clause (s, Some (op, c)) }
 
-select:
-  | SELECT d=select_type r=commas(column1) f=from? w=where? g=loption(group) h=having?
-    {
-      { distinct=d; columns=r; from=f; where=w; group=g; having=h; }
-    }
+select: SELECT d=select_type r=commas(column1) f=from? w=where? g=loption(group) h=having? {
+  { distinct=d; columns=r; from=f; where=w; group=g; having=h; }
+}
 
 table_list: src=source joins=join_source* { (src,joins) }
 
@@ -120,7 +123,8 @@ source: src=source1 alias=maybe_as { src, alias }
 
 select_type: DISTINCT { true } | ALL { false } | { false }
 
-int_or_param: i=INTEGER { `Const i }
+int_or_param:
+  | i=INT_LIT { `Const i }
   | p=PARAM { `Param p }
 
 limit_t: LIMIT lim=int_or_param { make_limit [`Limit,lim] }
@@ -142,12 +146,14 @@ column1:
   | ASTERISK { Sql.All }
   | e=expr m=maybe_as { Sql.Expr (e,m) }
 
-maybe_as: AS? name=IDENT { Some name }
+maybe_as:
+  | AS? name=IDENT { Some name }
   | { None }
 
 anyall: ANY | ALL | SOME { }
 
-attr_name: cname=IDENT { { cname; tname=None} }
+attr_name:
+  | cname=IDENT { { cname; tname=None} }
   | table=IDENT DOT cname=IDENT
   | IDENT DOT table=IDENT DOT cname=IDENT { {cname; tname=Some table} } (* FIXME database identifier *)
 
@@ -167,8 +173,8 @@ expr:
   | LPAREN expr RPAREN { $2 }
   | attr_name collate? { Column $1 }
   | VALUES LPAREN n=IDENT RPAREN { Inserted n }
-  | x = INTEGER; DAY { Fun (`Day, [Value (Int x)]) }
-  | x = INTEGER; YEAR { Fun (`Year, [Value (Int x)]) }
+  | x = INT_LIT; DAY { Fun (`Day, [Value (Int x)]) }
+  | x = INT_LIT; YEAR { Fun (`Year, [Value (Int x)]) }
   | v=literal_value { Value v }
   | e1=expr IN l=sequence(expr) { Fun (`In, [e1; Sequence l]) }
   | e1=expr NOT IN l=sequence(expr) { mk_not @@ Fun (`In, [e1; Sequence l]) }
@@ -229,16 +235,16 @@ choice: name=IDENT? e=choice_body?
 choices: separated_nonempty_list(BIT_OR,choice) { $1 }
 
 literal_value:
-  | x = TEXT collate? { String x }
+  | x = TEXT_LIT collate? { String x }
   | BLOB collate? { failwith "BLOB not supported" }
-  | x = INTEGER { Int x }
-  | x = FLOAT { Float x }
+  | x = INT_LIT { Int x }
+  | x = FLOAT_LIT { Float x }
   | TRUE { Bool true }
   | FALSE { Bool false }
-  | DATE; x = TEXT
-  | TIME; x = TEXT
-  | TIMESTAMP; x = TEXT
-  | CAST LPAREN x=TEXT AS DATE RPAREN { Date x }
+  | DATE; x = TEXT_LIT
+  | TIME; x = TEXT_LIT
+  | TIMESTAMP; x = TEXT_LIT
+  | CAST LPAREN x=TEXT_LIT AS DATE RPAREN { Date x }
   | NULL { Null }
 
 expr_list: l=commas(expr) { l }
@@ -290,3 +296,13 @@ compound_op:
 
 maybe_join_type: JOIN_TYPE1? JOIN_TYPE2? { }
 
+sql_type:
+  | INTEGER { Int }
+  | NUMERIC { Decimal }
+  | TEXT { Text }
+  | BOOLEAN { Bool }
+  | DATE { Type.Date }
+
+column_def_extra:
+  | PRIMARY KEY { Some Constraint.PrimaryKey }
+  | REFERENCES name=IDENT { Some (Constraint.ForeignKey name) }

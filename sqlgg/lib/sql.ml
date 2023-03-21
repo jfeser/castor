@@ -1,7 +1,7 @@
 open! Base
 
 module Type = struct
-  type t = Int | Text | Blob | Float | Bool | Datetime | Any
+  type t = Int | Text | Blob | Float | Bool | Datetime | Date | Decimal | Any
   [@@deriving compare, sexp]
 
   let to_string x = [%sexp_of: t] x |> Base.Sexp.to_string_hum
@@ -29,6 +29,7 @@ module Constraint = struct
 
     type t =
       | PrimaryKey
+      | ForeignKey of string
       | NotNull
       | Null
       | Unique
@@ -53,16 +54,13 @@ module Schema = struct
 end
 
 type num_op = [ `Add | `Sub | `Mul | `Div | `Mod ] [@@deriving compare, sexp]
-
 type bool_op = [ `And | `Or | `Not ] [@@deriving compare, sexp]
-
 type cmp_op = [ `Eq | `Neq | `Ge | `Le | `Gt | `Lt ] [@@deriving compare, sexp]
 
 type bit_op = [ `Bit_and | `Bit_not | `Bit_or | `Lsh | `Rsh ]
 [@@deriving compare, sexp]
 
 type agg_op = [ `Count | `Avg | `Sum | `Min | `Max ] [@@deriving compare, sexp]
-
 type date_op = [ `Day | `Year ] [@@deriving compare, sexp]
 
 type binop =
@@ -97,7 +95,6 @@ type param_id = string option * (int * int) [@@deriving compare, sexp]
 (** optional name and start/end position in string *)
 
 type param = param_id * Type.t [@@deriving compare, sexp]
-
 type params = param list [@@deriving compare, sexp]
 
 type ctor = Simple of param_id * var list option | Verbatim of string * string
@@ -121,7 +118,6 @@ type alter_action =
 [@@deriving compare, sexp]
 
 type select_result = schema * param list [@@deriving compare, sexp]
-
 type direction = [ `Asc | `Desc ] [@@deriving compare, sexp]
 
 type int_or_param = [ `Const of int | `Limit of param ]
@@ -129,14 +125,20 @@ type int_or_param = [ `Const of int | `Limit of param ]
 
 type limit_t = [ `Limit | `Offset ] [@@deriving compare, sexp]
 
-type col_name = {
-  cname : string;  (** column name *)
-  tname : string option;  (** table name *)
-}
-[@@deriving compare, sexp]
+module Col_name = struct
+  module T = struct
+    type t = {
+      cname : string;  (** column name *)
+      tname : string option;  (** table name *)
+    }
+    [@@deriving compare, equal, sexp]
+  end
+
+  include T
+  include Comparator.Make (T)
+end
 
 type limit = param list * bool [@@deriving compare, sexp]
-
 type 'expr choices = (param_id * 'expr option) list [@@deriving compare, sexp]
 
 type value =
@@ -190,7 +192,7 @@ and 'f expr =
   | Fun of 'f * 'f expr list  (** parameters *)
   | Case of ('f expr * 'f expr) list * 'f expr option
   | Subquery of 'f query * [ `AsValue | `Exists ]
-  | Column of col_name
+  | Column of Col_name.t
   | Inserted of string  (** inserted value *)
 [@@deriving compare, sexp]
 
@@ -199,3 +201,18 @@ and 'f column =
   | AllOf of string
   | Expr of 'f expr * string option  (** name *)
 [@@deriving compare, sexp]
+
+type create = { name : string; schema : Schema.t } [@@deriving compare, sexp]
+
+type 'f stmt_body = Create of create | Select of 'f query
+[@@deriving compare, sexp]
+
+type position = Lexing.position = {
+  pos_fname : string;
+  pos_lnum : int;
+  pos_bol : int;
+  pos_cnum : int;
+}
+[@@deriving compare, sexp]
+
+type 'f stmt = 'f stmt_body * (position * position) [@@deriving compare, sexp]

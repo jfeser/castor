@@ -453,3 +453,95 @@ module Async = struct
     exec_sql ?timeout ?bound db
       (Schema_types.types r, Sql.of_ralgebra r |> Sql.to_string)
 end
+
+module Schema = struct
+  type attr = {
+    table_name : string;
+    attr_name : string;
+    type_ : Ast.type_;
+    constraints : [ `Primary_key | `Foreign_key of string | `None ];
+  }
+
+  type t = { tables : string list Lazy.t; attrs : string -> attr list }
+
+  let of_conn _ = assert false
+
+  (* let attrs schema table = *)
+  (*   Map.find_exn schema.tables table *)
+  (*   |> List.map ~f:(fun (cname, _, _) -> *)
+  (*          { Sql.Col_name.cname; tname = Some table }) *)
+
+  (* let col_attrs schema col = *)
+  (*   let open Option.Let_syntax in *)
+  (*   let%map tname = col.tname in *)
+  (*   Map.find_exn schema.tables tname *)
+  (*   |> List.find_exn ~f:(fun (cname, _, _) -> [%equal: string] cname col.cname) *)
+
+  (* let col_type schema col = *)
+  (*   Option.map (col_attrs schema col) ~f:(fun (_, t, _) -> t) *)
+
+  let of_ddl (ddl : Sqlgg.Sql.create list) =
+    let open Sqlgg in
+    let constraints_of_extra (extra : Set.M(Sql.Constraint).t) =
+      if Set.mem extra PrimaryKey then `Primary_key
+      else
+        match
+          Set.find_map extra ~f:(function
+            | ForeignKey tbl -> Some tbl
+            | _ -> None)
+        with
+        | Some tbl -> `Foreign_key tbl
+        | None -> `None
+    in
+    let type_of_domain = function _ -> assert false in
+    let attrs_of_create (c : Sql.create) =
+      List.map c.schema ~f:(fun attr ->
+          {
+            table_name = c.name;
+            attr_name = attr.name;
+            type_ = type_of_domain attr.domain;
+            constraints = constraints_of_extra attr.extra;
+          })
+    in
+    let tables = List.map ddl ~f:(fun c -> (c.name, attrs_of_create c)) in
+    {
+      tables = List.map tables ~f:fst |> Lazy.return;
+      attrs = List.Assoc.find_exn ~equal:[%equal: string] tables;
+    }
+
+  (* let is_primary_key_of db col tbl = *)
+  (*   match col_attrs db col with *)
+  (*   | Some (_, _, `Primary_key) -> *)
+  (*       [%equal: string] tbl (Option.value_exn col.tname) *)
+  (*   | _ -> false *)
+
+  (* let is_foreign_key_of db col tbl = *)
+  (*   match col_attrs db col with *)
+  (*   | Some (_, _, `Foreign_key tbl') -> [%equal: string] tbl tbl' *)
+  (*   | _ -> false *)
+
+  (* let foreign_key db col = *)
+  (*   match col_attrs db col with *)
+  (*   | Some (_, _, `Foreign_key t) -> Some t *)
+  (*   | _ -> None *)
+
+  (* let is_foreign_key db col = *)
+  (*   match col_attrs db col with *)
+  (*   | Some (_, _, `Foreign_key _) -> true *)
+  (*   | _ -> false *)
+
+  (* let foreign_key_table db col = *)
+  (*   col_attrs db col *)
+  (*   |> Option.bind ~f:(function *)
+  (*        | _, _, `Foreign_key tbl -> Some tbl *)
+  (*        | _ -> None) *)
+
+  (* let referrers db t = *)
+  (*   db.tables |> Map.to_alist *)
+  (*   |> List.filter ~f:(fun (_, cols) -> *)
+  (*          List.exists cols ~f:(function *)
+  (*            | _, _, `Foreign_key t'' -> [%equal: string] t t'' *)
+  (*            | _ -> false)) *)
+  (*   |> List.map ~f:fst *)
+  (*   |> List.dedup_and_sort ~compare:[%compare: string] *)
+end

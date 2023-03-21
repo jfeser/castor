@@ -16,13 +16,13 @@ let%expect_test "byte-width-2" =
 let%expect_test "absfixed-unify" =
   List.reduce_exn
     [
-      AbsFixed.(of_fixed { value = 3; scale = 1 });
-      AbsFixed.(of_fixed { value = 34; scale = 100 });
-      AbsFixed.(of_fixed { value = 7; scale = 1 });
-      AbsFixed.(of_fixed { value = 7999; scale = 10000 });
+      Abs_fixed.(of_fixed { value = 3; scale = 1 });
+      Abs_fixed.(of_fixed { value = 34; scale = 100 });
+      Abs_fixed.(of_fixed { value = 7; scale = 1 });
+      Abs_fixed.(of_fixed { value = 7999; scale = 10000 });
     ]
-    ~f:AbsFixed.join
-  |> [%sexp_of: AbsFixed.t] |> print_s;
+    ~f:Abs_fixed.join
+  |> [%sexp_of: Abs_fixed.t] |> print_s;
   [%expect {| ((range (Interval 3400 70000)) (scale 10000)) |}]
 
 let%expect_test "mult" =

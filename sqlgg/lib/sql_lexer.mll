@@ -27,11 +27,13 @@ let keywords =
    "asc",ASC;
    "avg", AVG;
    "between",BETWEEN;
+   "boolean",BOOLEAN;
    "by",BY;
    "case", CASE;
    "cast", CAST;
    "collate",COLLATE;
    "count", COUNT;
+   "create",CREATE;
    "cross",CROSS;
    "date",DATE;
    "day", DAY;
@@ -58,10 +60,12 @@ let keywords =
    "hour_second", HOUR_SECOND;
    "if",IF;
    "in",IN;
+   "integer", INTEGER;
    "intersect",INTERSECT;
    "interval", INTERVAL;
    "is", IS;
    "join",JOIN;
+   "key", KEY;
    "like", LIKE;
    "limit",LIMIT;
    "max", MAX;
@@ -75,11 +79,14 @@ let keywords =
    "natural",NATURAL;
    "not",NOT;
    "null",NULL;
+   "numeric", NUMERIC;
    "offset",OFFSET;
    "on",ON;
    "or",OR;
    "order",ORDER;
+   "primary", PRIMARY;
    "quarter", QUARTER;
+   "references", REFERENCES;
    "second", SECOND;
    "second_microsecond", SECOND_MICROSECOND;
    "select",SELECT;
@@ -87,6 +94,8 @@ let keywords =
    "substr", SUBSTRING;
    "substring", SUBSTRING;
    "sum", SUM;
+   "table", TABLE;
+   "text", TEXT;
    "then", THEN;
    "time",TIME;
    "timestamp",TIMESTAMP;
@@ -173,6 +182,7 @@ ruleMain = parse
   (* update line number *)
   | '\n'  { advance_line lexbuf; ruleMain lexbuf}
 
+  | ';'   { SEMI }
   | '('		{ LPAREN }
   | ')'		{ RPAREN }
   | ','   { COMMA }
@@ -208,16 +218,16 @@ ruleMain = parse
   | [':' '@'] (ident as str) { PARAM (Some str,pos lexbuf) }
 
   | '"' { ident (ruleInQuotes "" lexbuf) }
-  | "'" { TEXT (ruleInSingleQuotes "" lexbuf) }
+  | "'" { TEXT_LIT (ruleInSingleQuotes "" lexbuf) }
   (* http://www.postgresql.org/docs/current/interactive/sql-syntax-lexical.html#SQL-SYNTAX-DOLLAR-QUOTING *)
-  | "$" (ident? as tag) "$" { TEXT (ruleInDollarQuotes tag "" lexbuf) }
+  | "$" (ident? as tag) "$" { TEXT_LIT (ruleInDollarQuotes tag "" lexbuf) }
   | "`" { ident (ruleInBackQuotes "" lexbuf) }
   | "[" { ident (ruleInBrackets "" lexbuf) }
   | ['x' 'X'] "'" { BLOB (ruleInSingleQuotes "" lexbuf) }
 
   | ident as str { get_ident str }
-  | digit+ as str { INTEGER (int_of_string str) }
-  | digit+ '.' digit+ as str { FLOAT (float_of_string str) }
+  | digit+ as str { INT_LIT (int_of_string str) }
+  | digit+ '.' digit+ as str { FLOAT_LIT (float_of_string str) }
   | eof		{ EOF }
   | _	{ error lexbuf "ruleMain" }
 and
@@ -280,4 +290,3 @@ ruleCommentMulti acc = parse
   let parse_rule = ruleMain
 
 }
-

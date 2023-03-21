@@ -15,8 +15,7 @@ let parse_buf_exn lexbuf =
     raise (Error (exn, (line, cnum, tok, tail)))
 
 let parse_buf lexbuf = try Some (parse_buf_exn lexbuf) with _ -> None
-
-let parse_stdin () = parse_buf (Lexing.from_channel stdin)
+let parse_stdin () = parse_buf_exn (Lexing.from_channel stdin)
 
 let parse_string str =
   (*Error.log "Parsing : %s" str; *)
@@ -65,7 +64,7 @@ let get_statements ch =
               Buffer.add_string b s;
               loop tokens true
           | `Prop _ -> loop tokens smth
-          | `Semicolon -> Some (answer ()) )
+          | `Semicolon -> Some (answer ()))
     in
     loop tokens false
   in
