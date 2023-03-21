@@ -1,0 +1,11 @@
+(menhir
+ (modules sql_parser))
+
+(ocamllex
+ (modules sql_lexer))
+
+(library
+ (name sql2code)
+ (libraries core fmt iter)
+ (preprocess (pps ppx_compare ppx_sexp_message ppx_sexp_conv ppx_let ppx_expect))
+ (inline_tests))
