@@ -1,4 +1,6 @@
 open! Core
+open Castor
+open Sqlgg
 open Sql.Col_name
 module Python_block = Python_block
 module Db_schema = Db_schema
@@ -17,48 +19,32 @@ let slice_pos str ((start_pos : Lexing.position), (end_pos : Lexing.position)) =
   String.sub str ~pos:start_pos.pos_cnum
     ~len:(end_pos.pos_cnum - start_pos.pos_cnum)
 
-let emit_type : Sql.Type.t -> _ = function
-  | Int -> "int"
-  | Text -> "str"
-  | Float -> "float"
-  | Bool -> "bool"
-  | Decimal -> "decimal.Decimal"
-  | Date -> "datetime.date"
-  | t -> raise_s [%message "unsupported" (t : Sql.Type.t)]
+let emit_type : Prim_type.t -> _ = function
+  | IntT _ -> "int"
+  | DateT _ -> "datetime.date"
+  | FixedT _ -> "decimal.Decimal"
+  | StringT _ -> "str"
+  | BoolT _ -> "bool"
+  | (TupleT _ | VoidT | NullT) as t ->
+      raise_s [%message "unsupported" (t : Prim_type.t)]
 
 let dataclass_name table =
   String.chop_suffix_if_exists ~suffix:"s" (String.capitalize table)
 
-let emit_index_type db_schema (col, kind, name, _) : Python_block.t =
-  match kind with
-  | `Hash ->
-      Stmts
-        [
-          Fmt.str "%s : dict[%s, list[%s]]" name
-            (emit_type (Option.value_exn (Db_schema.col_type db_schema col)))
-            (dataclass_name (Option.value_exn col.tname));
-        ]
-  | `Ordered -> raise_s [%message "ordered indexes unsupported"]
-
-let emit_index_init (_, kind, name, _) : Python_block.t =
-  match kind with
-  | `Hash -> Stmts [ Fmt.str "self.%s = {}" name ]
-  | `Ordered -> raise_s [%message "ordered indexes unsupported"]
-
 let singular = String.chop_suffix_if_exists ~suffix:"s"
 
 let emit_dataclass db_schema name : Python_block.t =
-  let schema = Map.find_exn db_schema.Db_schema.tables name in
+  let schema = Db.Schema.attrs db_schema name in
   let fields =
-    List.filter_map schema ~f:(fun (name, domain, kind) ->
-        match kind with
+    List.filter_map schema ~f:(fun attr ->
+        match attr.constraints with
         | `Foreign_key tbl ->
             Some
               (Fmt.str "%s : '%s'"
                  (String.chop_suffix_exn name ~suffix:"_id")
                  (dataclass_name tbl))
         | `None | `Primary_key ->
-            Some (Fmt.str "%s : %s" name (emit_type domain)))
+            Some (Fmt.str "%s : %s" name (emit_type attr.type_)))
   in
   let referrers =
     List.map (Db_schema.referrers db_schema name) ~f:(fun tbl ->
@@ -75,49 +61,52 @@ let emit_dataclass db_schema name : Python_block.t =
         };
     ]
 
-let emit_add db_schema name : Python_block.t =
-  let var_name = singular name in
-  let schema = Map.find_exn db_schema.Db_schema.tables name in
+let emit_add db_schema table_name : Python_block.t =
+  let var_name = singular table_name in
+  let schema = Db.Schema.attrs db_schema table_name in
   let args, typed_args =
-    List.filter_map schema ~f:(fun (cname, type_, kind) ->
-        match kind with
+    List.filter_map schema ~f:(fun attr ->
+        let name = attr.attr_name in
+        match attr.constraints with
         | `Foreign_key tbl ->
-            Some (cname, Fmt.str "%s : %s" cname (dataclass_name tbl))
+            Some (name, Fmt.str "%s : %s" name (dataclass_name tbl))
         | `Primary_key | `None ->
-            Some (cname, Fmt.str "%s : %s" cname (emit_type type_)))
+            Some (name, Fmt.str "%s : %s" name (emit_type attr.type_)))
     |> List.unzip
   in
   let add_linked =
-    List.filter_map schema ~f:(fun (_, _, kind) ->
-        match kind with
+    List.filter_map schema ~f:(fun attr ->
+        match attr.constraints with
         | `Foreign_key tbl ->
             Some
-              (Fmt.str "%s.%s.%s.add(%s)" var_name (singular tbl) name var_name)
+              (Fmt.str "%s.%s.%s.add(%s)" var_name (singular tbl) table_name
+                 var_name)
         | _ -> None)
   in
   Block
     {
       header =
-        Fmt.str "def add_%s(self, %s) -> %s:" (singular name)
+        Fmt.str "def add_%s(self, %s) -> %s:" (singular table_name)
           (String.concat ~sep:", " typed_args)
-          (dataclass_name name);
+          (dataclass_name table_name);
       body =
         Stmts
-          (Fmt.str "%s = %s(%s)" var_name (dataclass_name name)
+          (Fmt.str "%s = %s(%s)" var_name
+             (dataclass_name table_name)
              (String.concat ~sep:", " args)
            :: add_linked
           @ [
-              Fmt.str "self.%s.append(%s)" name var_name;
+              Fmt.str "self.%s.append(%s)" table_name var_name;
               Fmt.str "return %s" var_name;
             ]);
     }
 
 let emit_remove db_schema name : Python_block.t =
   let var_name = singular name in
-  let schema = Map.find_exn db_schema.Db_schema.tables name in
+  let schema = Db.Schema.attrs db_schema name in
   let remove_linked =
-    List.filter_map schema ~f:(fun (_, _, kind) ->
-        match kind with
+    List.filter_map schema ~f:(fun attr ->
+        match attr.constraints with
         | `Foreign_key tbl ->
             Some
               (Fmt.str "%s.%s.%s.remove(%s)" var_name (singular tbl) name
@@ -334,24 +323,6 @@ let rec remove ~f = function
 let filter preds body =
   match preds with [] -> body | _ -> Filter { preds; body }
 
-let intro_index_scan db_schema plan =
-  let open Option.Let_syntax in
-  match plan with
-  | Filter { preds; body = Scan t } ->
-      let m_lookup, preds' =
-        remove preds ~f:(function
-          | Sql.Fun (`Eq, [ Column ({ tname = Some t'; _ } as col); e ])
-          | Fun (`Eq, [ e; Column ({ tname = Some t'; _ } as col) ]) ->
-              if [%equal: string] t t' then
-                let%map col_index = Db_schema.find_col_eq_index db_schema col in
-                (col_index, e)
-              else None
-          | _ -> None)
-      in
-      let%map index, lookup = m_lookup in
-      filter preds' (Index_scan (index, lookup))
-  | _ -> None
-
 (* let intro_fk_reverse db_schema plan = *)
 (*   let open Option.Let_syntax in *)
 (*   match plan with *)
@@ -374,40 +345,7 @@ let intro_index_scan db_schema plan =
 (*   | _ -> *)
 (*       None *)
 
-let%expect_test "intro-index-scan" =
-  let db_schema =
-    [%of_sexp: Db_schema.t]
-      (Sexp.of_string
-         {|
-((tables
-   ((menu_items ((price Decimal None) (name Text None) (id Int Primary_key)))
-    (orders
-     ((reservation_id Int (Foreign_key reservations))
-      (menu_item_id Int (Foreign_key menu_items)) (id Int Primary_key)))))
-  (indexes ()))
-|})
-  in
-  let plan =
-    Filter
-      {
-        preds =
-          [
-            Sql.Fun
-              ( `Eq,
-                [
-                  Column { tname = Some "orders"; cname = "reservation_id" };
-                  Sql.Column { tname = None; cname = "test" };
-                ] );
-          ];
-        body = Scan "orders";
-      }
-  in
-  print_s [%message (intro_index_scan db_schema plan : plan option)];
-  [%expect
-    {|
-    ("intro_index_scan db_schema plan" ()) |}]
-
-let intro_key_join db_schema plan =
+let intro_key_join (db_schema : Db.Schema.t) plan =
   let intro l r lhs rhs =
     match rhs with
     | Scan rhs_table ->
@@ -430,43 +368,10 @@ let intro_key_join db_schema plan =
         ]
   | _ -> None
 
-let%expect_test "intro-key-join" =
-  let db_schema =
-    [%of_sexp: Db_schema.t]
-      (Sexp.of_string
-         {|
-((tables
-   ((menu_items ((price Decimal None) (name Text None) (id Int Primary_key)))
-    (orders
-     ((reservation_id Int (Foreign_key reservations))
-      (menu_item_id Int (Foreign_key menu_items)) (id Int Primary_key)))))
-  (indexes ()))
-|})
-  in
-  let plan =
-    [%of_sexp: plan]
-      (Sexp.of_string
-         {|
-(Join
-   (preds
-    ((Fun Eq
-      ((Column ((cname id) (tname (menu_items))))
-       (Column ((cname menu_item_id) (tname (orders))))))))
-   (lhs (Scan menu_items)) (rhs (Scan orders)))
-|})
-  in
-  print_s [%message (intro_key_join db_schema plan : plan option)];
-  [%expect
-    {|
-    ("intro_key_join db_schema plan"
-     ((Key_join (foreign_key ((cname menu_item_id) (tname (orders))))
-       (body (Scan orders))))) |}]
-
 let opt db_schema plan =
   plan
   |> fix (rewrite (intro_key_join db_schema))
   |> fix (rewrite (push_filter db_schema))
-  |> fix (rewrite (intro_index_scan db_schema))
 
 let emit_expr _db_schema params ctx =
   let rec emit_expr = function
@@ -535,30 +440,6 @@ let emit_plan fresh schema params =
             ( empty,
               table_name,
               List.map table_schema ~f:(fun col ->
-                  (col, fun row -> sprintf "%s.%s" row col.cname)) )
-        in
-        { loops; compr }
-    | Index_scan (idx_name, expr) ->
-        Db_schema.use_col_eq_index schema idx_name;
-        let tuple_name = fresh "t" in
-        let index_schema = Db_schema.idx_attrs schema idx_name in
-        let ctx =
-          List.map index_schema ~f:(fun (col : Sql.Col_name.t) ->
-              (col, sprintf "%s.%s" tuple_name col.cname))
-        in
-        let index_tuples = sprintf "self.%s[%s]" idx_name (emit_expr [] expr) in
-        let loops consume =
-          Block
-            {
-              header = sprintf "for %s in %s:" tuple_name index_tuples;
-              body = consume ctx;
-            }
-        in
-        let compr =
-          Some
-            ( empty,
-              index_tuples,
-              List.map index_schema ~f:(fun col ->
                   (col, fun row -> sprintf "%s.%s" row col.cname)) )
         in
         { loops; compr }
@@ -909,3 +790,77 @@ let emit_select db_schema query_str query_name select =
             func_body;
           ];
     }
+
+let main () =
+  let input_str = In_channel.input_all In_channel.stdin in
+  let queries = load_queries input_str in
+  let db =
+    let creates =
+      List.filter_map queries ~f:(fun (stmt, _) ->
+          match stmt with Create c -> Some c | _ -> None)
+    in
+    Db.Schema.of_ddl creates
+  in
+  let tables =
+    Db.Schema.relation_names db |> List.sort ~compare:[%compare: string]
+  in
+  let dataclasses = List.map tables ~f:(emit_dataclass db) in
+  let add_methods = List.map tables ~f:(emit_add db) in
+  let remove_methods = List.map tables ~f:(emit_remove db) in
+  let query_methods =
+    List.filter_map queries ~f:(function
+      | Select s, pos -> Some (s, pos)
+      | _ -> None)
+    |> List.filter_mapi ~f:(fun i (select, pos) ->
+           let query_str = String.strip @@ slice_pos input_str pos in
+           try Some (emit_select db query_str (Fmt.str "query_%d" i) select)
+           with exn ->
+             Fmt.epr "@[<v>could not emit plan:@ %a@]@." Exn.pp exn;
+             Backtrace.Exn.most_recent_for_exn exn
+             |> Option.iter ~f:(fun bt ->
+                    Fmt.epr "%s\n" (Backtrace.to_string bt));
+             None)
+  in
+  eprint_s [%message (db : Db.Schema.t)];
+  let tables = Db.Schema.relation_names db in
+  let hints =
+    let table_types =
+      List.map tables ~f:(fun table_name ->
+          Fmt.str "%s : list[%s]" table_name (dataclass_name table_name))
+    in
+    Python_block.Stmts table_types
+  in
+  let init =
+    Python_block.Block
+      {
+        header = "def __init__(self) -> None:";
+        body = Stmts (List.map tables ~f:(Fmt.str "self.%s = []"));
+      }
+  in
+  let app =
+    Python_block.Seq
+      [
+        Stmts
+          [
+            "from collections import defaultdict";
+            "from dataclasses import dataclass, field";
+            "import datetime";
+            "import decimal";
+          ];
+        Seq dataclasses;
+        Block
+          {
+            header = "class App:";
+            body =
+              Seq
+                [
+                  hints;
+                  init;
+                  Seq add_methods;
+                  Seq remove_methods;
+                  Seq query_methods;
+                ];
+          };
+      ]
+  in
+  Python_block.to_string app |> print_endline

@@ -7,11 +7,16 @@ module Schema : sig
     type_ : Prim_type.t;
     constraints : [ `Primary_key | `Foreign_key of string | `None ];
   }
+  [@@deriving sexp]
 
-  type t
+  type t [@@deriving sexp]
 
   val of_ddl : Sqlgg.Sql.create list -> t
+  (** Create a schema from SQL DDL statements (only handles create right now). *)
+
+  val attrs : t -> string -> attr list
   val relation : t -> string -> Relation.t
+  val relation_names : t -> string list
   val all_relations : t -> Relation.t list
   val relation_has_field : t -> string -> Relation.t option
 end

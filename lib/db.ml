@@ -11,8 +11,13 @@ module Schema = struct
     type_ : Prim_type.t;
     constraints : [ `Primary_key | `Foreign_key of string | `None ];
   }
+  [@@deriving sexp]
 
-  type t = { tables : string list Lazy.t; attrs : string -> attr list }
+  type t = {
+    tables : string list Lazy.t;
+    attrs : (string, attr list Lazy.t) List.Assoc.t Lazy.t;
+  }
+  [@@deriving sexp]
 
   let of_ddl (ddl : Sqlgg.Sql.create list) =
     let open Sqlgg in
@@ -27,30 +32,34 @@ module Schema = struct
         | Some tbl -> `Foreign_key tbl
         | None -> `None
     in
-    let type_of_domain = function _ -> assert false in
     let attrs_of_create (c : Sql.create) =
       List.map c.schema ~f:(fun attr ->
           {
             table_name = c.name;
             attr_name = attr.name;
-            type_ = type_of_domain attr.domain;
+            type_ = Prim_type.of_sql attr.domain;
             constraints = constraints_of_extra attr.extra;
           })
     in
     let tables = List.map ddl ~f:(fun c -> (c.name, attrs_of_create c)) in
     {
       tables = List.map tables ~f:fst |> Lazy.return;
-      attrs = List.Assoc.find_exn ~equal:[%equal: string] tables;
+      attrs = lazy (List.map tables ~f:(fun (t, a) -> (t, lazy a)));
     }
+
+  let attrs s r =
+    let (lazy attrs) = s.attrs in
+    List.Assoc.find_exn attrs ~equal:[%equal: string] r |> Lazy.force
 
   let relation s r : Relation.t =
     {
       r_name = r;
       r_schema =
-        Some (List.map (s.attrs r) ~f:(fun a -> (a.attr_name, a.type_)));
+        Some (List.map (attrs s r) ~f:(fun a -> (a.attr_name, a.type_)));
     }
 
-  let all_relations s = List.map (Lazy.force s.tables) ~f:(relation s)
+  let relation_names s = Lazy.force s.tables
+  let all_relations s = List.map (relation_names s) ~f:(relation s)
   let relation_has_field _ = assert false
 end
 
@@ -237,7 +246,12 @@ let create ?(pool_size = default_pool_size) uri =
                schemaname='public'"
            |> Or_error.ok_exn)
        in
-       { tables; attrs = Memo.general (psql_attrs conn) });
+       let attrs =
+         lazy
+           (let (lazy tables) = tables in
+            List.map tables ~f:(fun t -> (t, lazy (psql_attrs conn t))))
+       in
+       { tables; attrs });
   }
 
 let schema x = x.schema

@@ -21,3 +21,4 @@ val to_string : t -> string
 val is_nullable : t -> bool
 val unify : t -> t -> t
 val width : t -> int
+val of_sql : Sqlgg.Sql.Type.t -> t

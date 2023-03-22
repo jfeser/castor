@@ -103,3 +103,11 @@ let rec width = function
   | NullT | IntT _ | BoolT _ | StringT _ | FixedT _ | DateT _ -> 1
   | TupleT ts -> List.map ts ~f:width |> List.sum (module Int) ~f:(fun x -> x)
   | VoidT -> 0
+
+let of_sql : Sqlgg.Sql.Type.t -> t = function
+  | Int -> IntT { nullable = true }
+  | Text | Blob -> StringT { nullable = true; padded = false }
+  | Float | Decimal -> FixedT { nullable = true }
+  | Bool -> BoolT { nullable = true }
+  | Date -> DateT { nullable = true }
+  | t -> raise_s [%message "unsupported" (t : Sqlgg.Sql.Type.t)]
