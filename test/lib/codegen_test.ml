@@ -36,7 +36,7 @@ let run_test ?(params = []) ?(print_layout = false) ?(fork = false) layout_str =
         List.map params ~f:(fun (n, t, _) -> Name.create ~type_:t n)
         |> Set.of_list (module Name)
       in
-      load_string_nostrip_exn conn ~params layout_str
+      load_string_nostrip_exn (Db.schema conn) ~params layout_str
       |> Equiv.annotate
       |> Abslayout_fold.Data.annotate conn
       |> Type.annotate

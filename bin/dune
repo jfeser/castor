@@ -91,6 +91,6 @@
 (executable
  (package castor)
  (public_name sql2code)
- (libraries core fmt iter sql2code)
+ (libraries core fmt iter sql2code castor)
  (preprocess (pps ppx_compare ppx_sexp_message ppx_sexp_conv ppx_let))
  (modules sql2code))

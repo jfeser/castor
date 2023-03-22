@@ -4,6 +4,56 @@ open Collections
 module Psql = Postgresql
 include (val Log.make ~level:(Some Warning) "castor.db")
 
+module Schema = struct
+  type attr = {
+    table_name : string;
+    attr_name : string;
+    type_ : Prim_type.t;
+    constraints : [ `Primary_key | `Foreign_key of string | `None ];
+  }
+
+  type t = { tables : string list Lazy.t; attrs : string -> attr list }
+
+  let of_ddl (ddl : Sqlgg.Sql.create list) =
+    let open Sqlgg in
+    let constraints_of_extra (extra : Set.M(Sql.Constraint).t) =
+      if Set.mem extra PrimaryKey then `Primary_key
+      else
+        match
+          Set.find_map extra ~f:(function
+            | ForeignKey tbl -> Some tbl
+            | _ -> None)
+        with
+        | Some tbl -> `Foreign_key tbl
+        | None -> `None
+    in
+    let type_of_domain = function _ -> assert false in
+    let attrs_of_create (c : Sql.create) =
+      List.map c.schema ~f:(fun attr ->
+          {
+            table_name = c.name;
+            attr_name = attr.name;
+            type_ = type_of_domain attr.domain;
+            constraints = constraints_of_extra attr.extra;
+          })
+    in
+    let tables = List.map ddl ~f:(fun c -> (c.name, attrs_of_create c)) in
+    {
+      tables = List.map tables ~f:fst |> Lazy.return;
+      attrs = List.Assoc.find_exn ~equal:[%equal: string] tables;
+    }
+
+  let relation s r : Relation.t =
+    {
+      r_name = r;
+      r_schema =
+        Some (List.map (s.attrs r) ~f:(fun a -> (a.attr_name, a.type_)));
+    }
+
+  let all_relations s = List.map (Lazy.force s.tables) ~f:(relation s)
+  let relation_has_field _ = assert false
+end
+
 let default_pool_size = 10
 
 let () =
@@ -15,6 +65,7 @@ type t = {
   uri : string;
   conn : (Psql.connection[@sexp.opaque]); [@compare.ignore]
   pool : (Psql.connection Lwt_pool.t[@sexp.opaque]); [@compare.ignore]
+  schema : (Schema.t[@sexp.opaque]); [@compare.ignore]
 }
 [@@deriving compare, sexp]
 
@@ -34,29 +85,8 @@ let ensure_finish c =
 
 [@@@warning "+52"]
 
-let create ?(pool_size = default_pool_size) uri =
-  {
-    uri;
-    conn = connect uri;
-    pool =
-      Lwt_pool.create pool_size
-        ~dispose:(fun c ->
-          ensure_finish c;
-          return_unit)
-        ~validate:(fun c -> valid c |> return)
-        ~check:(fun c is_ok -> is_ok (valid c))
-        (fun () -> connect uri |> return);
-  }
-
-let close { conn; _ } = ensure_finish conn
-
-let with_conn ?pool_size uri f =
-  Exn.protectx (create ?pool_size uri) ~f ~finally:close
-
-let conn { conn; _ } = conn
-
-let rec psql_exec ?(max_retries = 0) db query =
-  let r = db.conn#exec query in
+let rec psql_exec ?(max_retries = 0) (conn : Psql.connection) query =
+  let r = conn#exec query in
   let fail r =
     Or_error.error "Postgres error." (r#error, query)
       [%sexp_of: string * string]
@@ -71,20 +101,13 @@ let rec psql_exec ?(max_retries = 0) db query =
                https://www.postgresql.org/message-id/1368066680.60649.YahooMailNeo%40web162902.mail.bf1.yahoo.com
             *)
             max_retries > 0
-          then psql_exec ~max_retries:(max_retries - 1) db query
+          then psql_exec ~max_retries:(max_retries - 1) conn query
           else fail r
       | _ -> fail r)
   | Single_tuple | Tuples_ok | Command_ok -> Ok r
   | _ -> fail r
 
 let result_to_strings (r : Psql.result) = r#get_all_lst
-
-let command_ok (r : Psql.result) =
-  match r#status with
-  | Command_ok -> Or_error.return ()
-  | _ -> Or_error.error "Unexpected query response." r#error [%sexp_of: string]
-
-let command_ok_exn (r : Psql.result) = command_ok r |> Or_error.ok_exn
 
 let run conn query =
   let open Or_error.Let_syntax in
@@ -108,112 +131,129 @@ let run3 conn query =
     | [ x; x'; x'' ] -> (x, x', x'')
     | _ -> assert false)
 
-let type_of_field =
+let type_of_field conn fname rname =
   let open Or_error.Let_syntax in
-  let f conn fname rname =
-    let open Prim_type in
-    let%bind rows =
-      run2 conn
-      @@ sprintf
-           "select data_type, is_nullable from information_schema.columns \
-            where table_name='%s' and column_name='%s'"
-           rname fname
-    in
-    match rows with
-    | [ (type_str, nullable_str) ] -> (
-        let%bind nullable =
-          if String.(strip nullable_str = "YES") then
-            let%map nulls =
-              run1 conn
+  let open Prim_type in
+  let%bind rows =
+    run2 conn
+    @@ sprintf
+         "select data_type, is_nullable from information_schema.columns where \
+          table_name='%s' and column_name='%s'"
+         rname fname
+  in
+  match rows with
+  | [ (type_str, nullable_str) ] -> (
+      let%bind nullable =
+        if String.(strip nullable_str = "YES") then
+          let%map nulls =
+            run1 conn
+            @@ sprintf "select \"%s\" from \"%s\" where \"%s\" is null limit 1"
+                 fname rname fname
+          in
+          List.length nulls > 0
+        else Ok false
+      in
+      match type_str with
+      | "character" | "char" -> return @@ StringT { nullable; padded = true }
+      | "character varying" | "varchar" | "text" ->
+          return @@ StringT { nullable; padded = false }
+      | "interval" | "integer" | "smallint" | "bigint" ->
+          return @@ IntT { nullable }
+      | "date" -> return @@ DateT { nullable }
+      | "boolean" -> return @@ BoolT { nullable }
+      | "numeric" ->
+          let%bind min, max, is_int =
+            let%bind result =
+              run3 conn
               @@ sprintf
-                   "select \"%s\" from \"%s\" where \"%s\" is null limit 1"
-                   fname rname fname
-            in
-            List.length nulls > 0
-          else Ok false
-        in
-        match type_str with
-        | "character" | "char" -> return @@ StringT { nullable; padded = true }
-        | "character varying" | "varchar" | "text" ->
-            return @@ StringT { nullable; padded = false }
-        | "interval" | "integer" | "smallint" | "bigint" ->
-            return @@ IntT { nullable }
-        | "date" -> return @@ DateT { nullable }
-        | "boolean" -> return @@ BoolT { nullable }
-        | "numeric" ->
-            let%bind min, max, is_int =
-              let%bind result =
-                run3 conn
-                @@ sprintf
-                     {|
+                   {|
    select
      min(round("%s")), max(round("%s")),
      min(case when round("%s") = "%s" then 1 else 0 end)
    from "%s"
    |}
-                     fname fname fname fname rname
-              in
-              match List.hd result with
-              | Some t -> return t
-              | None -> Or_error.error_string "unexpected query result"
+                   fname fname fname fname rname
             in
-            let is_int = Int.of_string is_int = 1 in
-            let fits_in_an_int63 =
-              try
-                Int.of_string min |> ignore;
-                Int.of_string max |> ignore;
-                true
-              with Failure _ -> false
-            in
-            return
-            @@
-            if is_int then
-              if fits_in_an_int63 then IntT { nullable }
-              else (
-                warn (fun m ->
-                    m "Numeric column loaded as string: %s.%s" rname fname);
-                StringT { nullable; padded = false })
-            else FixedT { nullable }
-        | "real" | "double" -> return @@ FixedT { nullable }
-        | "timestamp without time zone" | "time without time zone" ->
-            return @@ StringT { nullable; padded = false }
-        | s -> Or_error.error "Unknown dtype" s [%sexp_of: string])
-    | _ -> Or_error.error_string "unexpected query result"
-  in
-  let memo = Memo.general (fun (conn, n1, n2) -> f conn n1 n2) in
-  fun conn fname rname -> memo (conn, fname, rname)
+            match List.hd result with
+            | Some t -> return t
+            | None -> Or_error.error_string "unexpected query result"
+          in
+          let is_int = Int.of_string is_int = 1 in
+          let fits_in_an_int63 =
+            try
+              Int.of_string min |> ignore;
+              Int.of_string max |> ignore;
+              true
+            with Failure _ -> false
+          in
+          return
+          @@
+          if is_int then
+            if fits_in_an_int63 then IntT { nullable }
+            else (
+              warn (fun m ->
+                  m "Numeric column loaded as string: %s.%s" rname fname);
+              StringT { nullable; padded = false })
+          else FixedT { nullable }
+      | "real" | "double" -> return @@ FixedT { nullable }
+      | "timestamp without time zone" | "time without time zone" ->
+          return @@ StringT { nullable; padded = false }
+      | s -> Or_error.error "Unknown dtype" s [%sexp_of: string])
+  | _ -> Or_error.error_string "unexpected query result"
 
-let relation conn r_name =
-  (* Ensure that table exists in the db. *)
-  let table_exists =
-    run1 conn
-    @@ sprintf
-         "select table_name from information_schema.tables where \
-          table_name='%s'"
-         r_name
-    |> Or_error.ok_exn |> List.is_empty |> not
-  in
-  if not table_exists then
-    Error.create "Table does not exist." r_name [%sexp_of: string]
-    |> Error.raise;
+let psql_attrs conn table_name : Schema.attr list =
+  run1 conn
+  @@ sprintf
+       "select column_name from information_schema.columns where \
+        table_name='%s'"
+       table_name
+  |> Or_error.ok_exn
+  |> List.map ~f:(fun attr_name ->
+         let type_ =
+           type_of_field conn attr_name table_name |> Or_error.ok_exn
+         in
+         { Schema.table_name; attr_name; type_; constraints = `None })
+  |> List.sort ~compare:(fun (a : Schema.attr) a' ->
+         [%compare: string] a.attr_name a'.attr_name)
 
-  let r_schema =
-    run1 conn
-    @@ sprintf
-         "select column_name from information_schema.columns where \
-          table_name='%s'"
-         r_name
-    |> Or_error.ok_exn
-    |> List.map ~f:(fun fname ->
-           let type_ = type_of_field conn fname r_name |> Or_error.ok_exn in
-           (fname, type_))
-    |> List.sort ~compare:[%compare: string * Prim_type.t]
-    |> Option.some
-  in
-  Relation.{ r_name; r_schema }
+let create ?(pool_size = default_pool_size) uri =
+  let conn = connect uri in
+  {
+    uri;
+    conn;
+    pool =
+      Lwt_pool.create pool_size
+        ~dispose:(fun c ->
+          ensure_finish c;
+          return_unit)
+        ~validate:(fun c -> valid c |> return)
+        ~check:(fun c is_ok -> is_ok (valid c))
+        (fun () -> connect uri |> return);
+    schema =
+      (let tables =
+         lazy
+           (run1 conn
+              "select tablename from pg_catalog.pg_tables where \
+               schemaname='public'"
+           |> Or_error.ok_exn)
+       in
+       { tables; attrs = Memo.general (psql_attrs conn) });
+  }
 
-let relation_memo = Memo.general (fun (conn, rname) -> relation conn rname)
-let relation conn rname = relation_memo (conn, rname)
+let schema x = x.schema
+let close { conn; _ } = ensure_finish conn
+
+let with_conn ?pool_size uri f =
+  Exn.protectx (create ?pool_size uri) ~f ~finally:close
+
+let conn { conn; _ } = conn
+
+let command_ok (r : Psql.result) =
+  match r#status with
+  | Command_ok -> Or_error.return ()
+  | _ -> Or_error.error "Unexpected query response." r#error [%sexp_of: string]
+
+let command_ok_exn (r : Psql.result) = command_ok r |> Or_error.ok_exn
 
 let load_int s =
   try Ok (Int.of_string s)
@@ -282,20 +322,6 @@ let exec1 conn s query =
   let%map results = exec conn [ s ] query in
   List.map results ~f:(function [ x ] -> x | _ -> assert false)
 
-let all_relations conn =
-  let names =
-    run1 conn
-      "select tablename from pg_catalog.pg_tables where schemaname='public'"
-    |> Or_error.ok_exn
-  in
-  List.map names ~f:(relation conn)
-
-let relation_has_field conn f =
-  let rels = all_relations conn in
-  List.find rels ~f:(fun r ->
-      List.exists (Option.value_exn r.Relation.r_schema) ~f:(fun (n, _) ->
-          String.(n = f)))
-
 let exec_cursor_exn ?(count = 4096) db schema query =
   let declare_query = sprintf "declare cur cursor for %s" query
   and fetch_query = sprintf "fetch %d from cur" count
@@ -303,16 +329,17 @@ let exec_cursor_exn ?(count = 4096) db schema query =
   and close_trans = "commit" in
 
   let db = create db.uri in
-  psql_exec db open_trans |> Or_error.ok_exn |> command_ok_exn;
-  psql_exec db declare_query |> Or_error.ok_exn |> command_ok_exn;
+  psql_exec db.conn open_trans |> Or_error.ok_exn |> command_ok_exn;
+  psql_exec db.conn declare_query |> Or_error.ok_exn |> command_ok_exn;
   let loader = load_tuples_list schema in
   Seq.unfold ~init:() ~f:(fun () ->
       let tups =
-        psql_exec db fetch_query |> Or_error.ok_exn |> loader |> Or_error.ok_exn
+        psql_exec db.conn fetch_query
+        |> Or_error.ok_exn |> loader |> Or_error.ok_exn
       in
       if List.length tups > 0 then Some (tups, ())
       else (
-        psql_exec db close_trans |> Or_error.ok_exn |> command_ok_exn;
+        psql_exec db.conn close_trans |> Or_error.ok_exn |> command_ok_exn;
         close db;
         None))
 
@@ -402,10 +429,10 @@ module Async = struct
           let wait_for_cancel () =
             let%lwt () = protected timeout in
             info (fun m -> m "Query timeout: %s" query);
-            psql_exec db
+            psql_exec db.conn
             @@ sprintf "select pg_cancel_backend(%d);" conn#backend_pid
             |> ignore;
-            psql_exec db
+            psql_exec db.conn
             @@ sprintf "select pg_terminate_backend(%d);" conn#backend_pid
             |> ignore;
             fail `Timeout
@@ -454,94 +481,9 @@ module Async = struct
       (Schema_types.types r, Sql.of_ralgebra r |> Sql.to_string)
 end
 
-module Schema = struct
-  type attr = {
-    table_name : string;
-    attr_name : string;
-    type_ : Ast.type_;
-    constraints : [ `Primary_key | `Foreign_key of string | `None ];
-  }
-
-  type t = { tables : string list Lazy.t; attrs : string -> attr list }
-
-  let of_conn _ = assert false
-
-  (* let attrs schema table = *)
-  (*   Map.find_exn schema.tables table *)
-  (*   |> List.map ~f:(fun (cname, _, _) -> *)
-  (*          { Sql.Col_name.cname; tname = Some table }) *)
-
-  (* let col_attrs schema col = *)
-  (*   let open Option.Let_syntax in *)
-  (*   let%map tname = col.tname in *)
-  (*   Map.find_exn schema.tables tname *)
-  (*   |> List.find_exn ~f:(fun (cname, _, _) -> [%equal: string] cname col.cname) *)
-
-  (* let col_type schema col = *)
-  (*   Option.map (col_attrs schema col) ~f:(fun (_, t, _) -> t) *)
-
-  let of_ddl (ddl : Sqlgg.Sql.create list) =
-    let open Sqlgg in
-    let constraints_of_extra (extra : Set.M(Sql.Constraint).t) =
-      if Set.mem extra PrimaryKey then `Primary_key
-      else
-        match
-          Set.find_map extra ~f:(function
-            | ForeignKey tbl -> Some tbl
-            | _ -> None)
-        with
-        | Some tbl -> `Foreign_key tbl
-        | None -> `None
-    in
-    let type_of_domain = function _ -> assert false in
-    let attrs_of_create (c : Sql.create) =
-      List.map c.schema ~f:(fun attr ->
-          {
-            table_name = c.name;
-            attr_name = attr.name;
-            type_ = type_of_domain attr.domain;
-            constraints = constraints_of_extra attr.extra;
-          })
-    in
-    let tables = List.map ddl ~f:(fun c -> (c.name, attrs_of_create c)) in
-    {
-      tables = List.map tables ~f:fst |> Lazy.return;
-      attrs = List.Assoc.find_exn ~equal:[%equal: string] tables;
-    }
-
-  (* let is_primary_key_of db col tbl = *)
-  (*   match col_attrs db col with *)
-  (*   | Some (_, _, `Primary_key) -> *)
-  (*       [%equal: string] tbl (Option.value_exn col.tname) *)
-  (*   | _ -> false *)
-
-  (* let is_foreign_key_of db col tbl = *)
-  (*   match col_attrs db col with *)
-  (*   | Some (_, _, `Foreign_key tbl') -> [%equal: string] tbl tbl' *)
-  (*   | _ -> false *)
-
-  (* let foreign_key db col = *)
-  (*   match col_attrs db col with *)
-  (*   | Some (_, _, `Foreign_key t) -> Some t *)
-  (*   | _ -> None *)
-
-  (* let is_foreign_key db col = *)
-  (*   match col_attrs db col with *)
-  (*   | Some (_, _, `Foreign_key _) -> true *)
-  (*   | _ -> false *)
-
-  (* let foreign_key_table db col = *)
-  (*   col_attrs db col *)
-  (*   |> Option.bind ~f:(function *)
-  (*        | _, _, `Foreign_key tbl -> Some tbl *)
-  (*        | _ -> None) *)
-
-  (* let referrers db t = *)
-  (*   db.tables |> Map.to_alist *)
-  (*   |> List.filter ~f:(fun (_, cols) -> *)
-  (*          List.exists cols ~f:(function *)
-  (*            | _, _, `Foreign_key t'' -> [%equal: string] t t'' *)
-  (*            | _ -> false)) *)
-  (*   |> List.map ~f:fst *)
-  (*   |> List.dedup_and_sort ~compare:[%compare: string] *)
-end
+let psql_exec ?max_retries db query = psql_exec ?max_retries db.conn query
+let run db = run db.conn
+let exec db = exec db.conn
+let exec_exn db = exec_exn db.conn
+let scan_exn db = scan_exn db.conn
+let exec1 db = exec1 db.conn

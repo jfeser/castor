@@ -3,33 +3,6 @@ open Ast
 module P = Pred.Infix
 module V = Visitors
 
-let load_params fn query =
-  let open Yojson.Basic in
-  let member_exn ks k' =
-    let out =
-      List.find_map
-        ~f:(fun (k, v) -> if String.(k = k') then Some v else None)
-        ks
-    in
-    Option.value_exn out
-  in
-  let params =
-    from_file fn |> Util.to_list
-    |> List.find_map ~f:(fun q ->
-           let q = Util.to_assoc q in
-           let queries =
-             member_exn q "query" |> Util.(convert_each to_string)
-           in
-           if List.mem queries query ~equal:String.( = ) then
-             let params = member_exn q "params" |> Util.to_assoc in
-             List.map params ~f:(function
-               | p, `String v -> (p, v)
-               | _ -> failwith "Unexpected parameter value")
-             |> Option.some
-           else None)
-  in
-  params
-
 let conv_binop : _ -> Pred.Binop.t =
   let open Pred.Binop in
   function
@@ -52,7 +25,7 @@ let conv_unop : _ -> Pred.Unop.t =
 
 let conv_alias = sprintf "%s_%s"
 
-let conv_sql db =
+let conv_sql db_schema =
   let open Sqlgg in
   let open Constructors.Annot in
   let aliases = ref (Set.empty (module String)) in
@@ -74,7 +47,7 @@ let conv_sql db =
     let q =
       match s with
       | `Subquery s -> conv_query s
-      | `Table t -> relation (Db.relation db t)
+      | `Table t -> relation (Db.Schema.relation db_schema t)
       | `Nested n -> conv_nested n
     in
     match alias with

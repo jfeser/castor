@@ -11,4 +11,4 @@ module Make (C : Config.S) : sig
 end
 
 val param : unit Command.Param.t
-val simplify : ?params:Set.M(Name).t -> Db.t -> Ast.t -> Ast.t
+val simplify : ?params:Set.M(Name).t -> Db.Schema.t -> Ast.t -> Ast.t

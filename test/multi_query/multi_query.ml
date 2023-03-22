@@ -5,13 +5,14 @@ open Ast
 
 let%expect_test "" =
   Db.with_conn "postgresql:///tpch_1k" @@ fun conn ->
+  let schema = Db.schema conn in
   let q =
     Abslayout_load.load_string_exn
       ~params:(Set.of_list (module Name) [ Name.create "param0" ])
-      conn "select([l_shipdate], filter(l_orderkey = param0, lineitem))"
+      schema "select([l_shipdate], filter(l_orderkey = param0, lineitem))"
   in
   let q' =
-    Abslayout_load.load_string_exn conn
+    Abslayout_load.load_string_exn schema
       "join(l_orderkey = o_orderkey, lineitem, orders)"
   in
   let module G = Egraph.AstEGraph in

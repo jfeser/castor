@@ -1,10 +1,27 @@
 open Core
 
+module Schema : sig
+  type attr = {
+    table_name : string;
+    attr_name : string;
+    type_ : Prim_type.t;
+    constraints : [ `Primary_key | `Foreign_key of string | `None ];
+  }
+
+  type t
+
+  val of_ddl : Sqlgg.Sql.create list -> t
+  val relation : t -> string -> Relation.t
+  val all_relations : t -> Relation.t list
+  val relation_has_field : t -> string -> Relation.t option
+end
+
 type t
 
 val src : Logs.Src.t
 val create : ?pool_size:int -> string -> t
 val with_conn : ?pool_size:int -> string -> (t -> 'a) -> 'a
+val schema : t -> Schema.t
 val close : t -> unit
 val conn : t -> Postgresql.connection
 val param : unit Command.Param.t
@@ -23,9 +40,6 @@ val exec_cursor_exn :
 val exec_to_file : fn:string -> t -> Prim_type.t list -> string -> unit
 val exec_from_file : fn:string -> Value.t list Sequence.t
 val check : t -> string -> unit Or_error.t
-val relation : t -> string -> Relation.t
-val all_relations : t -> Relation.t list
-val relation_has_field : t -> string -> Relation.t option
 
 module Async : sig
   type error = {
@@ -46,19 +60,3 @@ module Async : sig
   val exec_sql : (Prim_type.t list * string) exec
   val exec : < resolved : Resolve.resolved ; .. > Ast.annot exec
 end
-
-module Schema : sig
-  type attr = {
-    table_name : string;
-    attr_name : string;
-    type_ : Ast.type_;
-    constraints : [ `Primary_key | `Foreign_key of string | `None ];
-  }
-
-  type conn
-  type t
-
-  val of_ddl : Sqlgg.Sql.create list -> t
-  val of_conn : conn -> t
-end
-with type conn := t

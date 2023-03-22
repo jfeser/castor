@@ -4,7 +4,7 @@ open Castor_test.Test_util
 let run_test ?(params = []) ?implang ?type_ ?opt () =
   Db.with_conn "postgresql:///castor_test" @@ fun conn ->
   let layout =
-    load_stdin_nostrip_exn params conn
+    load_stdin_nostrip_exn params (Db.schema conn)
     |> Equiv.annotate
     |> Abslayout_fold.Data.annotate conn
     |> Type.annotate

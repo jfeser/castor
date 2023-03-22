@@ -18,7 +18,7 @@ let run_test ?(params = []) layout_str =
       List.map params ~f:(fun (n, t, _) -> Name.{ n with type_ = Some t })
       |> Set.of_list (module Name)
     in
-    load_string_exn ~params conn layout_str
+    load_string_exn ~params (Db.schema conn) layout_str
     |> Equiv.annotate
     |> Abslayout_fold.Data.annotate conn
     |> Type.annotate

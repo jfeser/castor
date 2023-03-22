@@ -110,11 +110,11 @@ let%expect_test "" =
                         ascalar(0 as z))))))))))) |}]
 
 let%expect_test "" =
-  let conn = Lazy.force Test_util.test_db_conn in
+  let schema = Lazy.force Test_util.test_db_schema in
 
   let q =
     "depjoin(select([f], r), select([g], filter(0.f = f, r1)))"
-    |> Abslayout_load.load_string_exn conn
+    |> Abslayout_load.load_string_exn schema
     |> to_visible_depjoin
     |> map_meta (fun _ ->
            object
@@ -159,10 +159,10 @@ let%expect_test "" =
              r1))))) |}]
 
 let%expect_test "" =
-  let conn = Lazy.force Test_util.test_db_conn in
+  let schema = Lazy.force Test_util.test_db_schema in
   let q =
     "depjoin(r, select([g], filter(0.f = f, r1)))"
-    |> Abslayout_load.load_string_exn conn
+    |> Abslayout_load.load_string_exn schema
     |> strip_meta |> to_visible_depjoin
   in
   Fmt.pr "%a" pp q;

@@ -44,7 +44,7 @@ module Make (Config : Config.S) = struct
     info (fun m -> m "Computing cost of:@, %a." Abslayout.pp r);
     let out =
       let open Result.Let_syntax in
-      let%bind layout = load_layout ~params cost_conn r in
+      let%bind layout = load_layout ~params (Db.schema cost_conn) r in
       let%bind type_ =
         Parallel.type_of ?timeout:cost_timeout cost_conn (strip_meta layout)
       in

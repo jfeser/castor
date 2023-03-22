@@ -9,7 +9,7 @@ let main queries =
       | Error e ->
           failwith
           @@ Fmt.str "Failed to parse %s: %a" fn (Abslayout.pp_err Fmt.nop) e)
-  |> Query.of_many conn
+  |> Query.of_many (Db.schema conn)
   |> Format.printf "%a" Query.pp
 
 let spec =

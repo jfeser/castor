@@ -1,17 +1,18 @@
 open Test_util
 
-let run_test conn str =
-  Abslayout_load.load_string_exn conn str
+let run_test schema str =
+  Abslayout_load.load_string_exn schema str
   |> Equiv.eqs |> Set.to_list
   |> Format.printf "%a" Fmt.Dump.(list @@ pair Name.pp Name.pp)
 
 let%expect_test "" =
-  run_test (Lazy.force test_db_conn)
+  run_test
+    (Lazy.force test_db_schema)
     "join(true, select([id as p_id], log), select([id as c_id], log))";
   [%expect {| [] |}]
 
 let%expect_test "" =
-  run_test (Lazy.force tpch_conn)
+  run_test (Lazy.force tpch_schema)
     {|
    alist(dedup(select([l_suppkey as l1_suppkey], lineitem)),
                      select([l_suppkey as supplier_no, sum(agg0) as total_revenue],
@@ -40,7 +41,7 @@ let%expect_test "" =
         (supplier_no, l_suppkey)] |}]
 
 let%expect_test "" =
-  run_test (Lazy.force tpch_conn)
+  run_test (Lazy.force tpch_schema)
     {|
    join(((l_partkey = s3_ps_partkey) &&
         ((l_suppkey = s3_ps_suppkey) &&
@@ -66,7 +67,7 @@ let%expect_test "" =
         (s3_ps_suppkey, ps_suppkey); (s3_ps_supplycost, ps_supplycost)] |}]
 
 let%expect_test "" =
-  run_test (Lazy.force tpch_conn)
+  run_test (Lazy.force tpch_schema)
     {|
    dedup(
        select([substring(c1_phone, 0, 2) as cntrycode, c1_acctbal],

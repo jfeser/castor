@@ -5,7 +5,7 @@ open Castor_eopt
 type test = {
   queries : Ast.t list;
   transforms : (string * Ops.t) list;
-  conn : Db.t option;
+  conn : Db.Schema.t option;
 }
 
 let params = Set.of_list (module Name) [ Name.create "param0" ]
@@ -31,7 +31,7 @@ let parse_test sexp =
       | _ -> failwith "expected a transform name")
   in
   let parse_db = function
-    | Some [ Sexp.Atom x ] -> Some (Db.create x)
+    | Some [ Sexp.Atom x ] -> Some (Db.schema @@ Db.create x)
     | None -> None
     | _ -> failwith "expected a database url"
   in

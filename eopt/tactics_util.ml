@@ -75,16 +75,17 @@ let rec aliases r =
 
 let alias_map r = aliases r |> closure
 
-let all_values_attr cost_conn n =
+let all_values_attr db_schema n =
   let open Option.Let_syntax in
-  let%bind rel = Db.relation_has_field cost_conn (Name.name n) in
+  let%bind rel = Db.Schema.relation_has_field db_schema (Name.name n) in
   return @@ A.select [ (`Name n, Name.name n) ] @@ A.relation rel
 
 (** Approximate selection of all valuations of a list of predicates from a
    relation. Works if the relation is parameterized, but only when the
    predicates do not depend on those parameters. *)
-let all_values_approx_2 cost_conn (preds : _ pred select_list) r =
+let all_values_approx_2 db_schema (preds : _ pred select_list) r =
   let open Or_error.Let_syntax in
+  let relation_has_field = Db.Schema.relation_has_field db_schema in
   (* Otherwise, if all grouping keys are from named relations, select all
      possible grouping keys. *)
   let alias_map = aliases r in
@@ -99,8 +100,8 @@ let all_values_approx_2 cost_conn (preds : _ pred select_list) r =
     Equiv.eqs r |> Set.to_list
     |> List.filter_map ~f:(fun (n, n') ->
            match
-             ( Db.relation_has_field cost_conn (Name.name n),
-               Db.relation_has_field cost_conn (Name.name n') )
+             ( relation_has_field (Name.name n),
+               relation_has_field (Name.name n') )
            with
            | None, None | Some _, Some _ -> None
            | Some _, None -> Some (n', n)
@@ -117,7 +118,7 @@ let all_values_approx_2 cost_conn (preds : _ pred select_list) r =
         List.map
           (Pred.names p |> Set.to_list)
           ~f:(fun n ->
-            match Db.relation_has_field cost_conn (Name.name n) with
+            match relation_has_field (Name.name n) with
             | Some r -> Ok (r, n)
             | None ->
                 Or_error.error "`Name does not come from base relation." n
@@ -134,7 +135,7 @@ let all_values_approx_2 cost_conn (preds : _ pred select_list) r =
     |> List.map ~f:(fun (r, ns) ->
            A.dedup
            @@ A.select (Select_list.of_names ns)
-           @@ A.relation (Db.relation cost_conn r))
+           @@ A.relation (Db.Schema.relation db_schema r))
     |> List.reduce ~f:(A.join (`Bool true))
   in
 

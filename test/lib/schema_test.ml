@@ -104,7 +104,7 @@ let%expect_test "" =
                                      ascalar(0 as x0)))))))))],
                concat))))
    |}
-    |> Abslayout_load.load_string_exn (Lazy.force Test_util.tpch_conn)
+    |> Abslayout_load.load_string_exn (Lazy.force Test_util.tpch_schema)
   in
   let r1 =
     {|
@@ -120,7 +120,7 @@ let%expect_test "" =
                                null:fixed as x121],
                          ascalar(0 as var0)))
    |}
-    |> Abslayout_load.load_string_exn (Lazy.force Test_util.tpch_conn)
+    |> Abslayout_load.load_string_exn (Lazy.force Test_util.tpch_schema)
   in
   let r2 =
     {|
@@ -201,7 +201,7 @@ let%expect_test "" =
                                                  orders)))))),
                                      ascalar(0 as x0)))))))))
      |}
-    |> load_string_exn @@ Lazy.force tpch_conn
+    |> load_string_exn @@ Lazy.force tpch_schema
   in
   schema r |> Fmt.pr "%a" pp;
   [%expect {| [x122; x123; x124; x125; x126; x127; x128] |}];
@@ -217,7 +217,7 @@ let%expect_test "" =
 
 let%expect_test "" =
   let r =
-    load_string_exn (Lazy.force tpch_conn)
+    load_string_exn (Lazy.force tpch_schema)
       {|
    filter((ps_availqty >
      (select([(0.5 * sum(l_quantity)) as tot],

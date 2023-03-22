@@ -1,6 +1,6 @@
 let run_test ~params ~db ?parallel ?serial ?cost () =
   Db.with_conn ~pool_size:2 db @@ fun conn ->
-  let layout = Abslayout_load.load_stdin_nostrip_exn params conn in
+  let layout = Abslayout_load.load_stdin_nostrip_exn params (Db.schema conn) in
 
   let module Type_cost = Type_cost.Make (struct
     let cost_conn = conn

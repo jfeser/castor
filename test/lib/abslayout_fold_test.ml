@@ -3,11 +3,11 @@ open Abslayout_load
 open Abslayout_fold
 module Q = Fold_query
 
-let test_conn = Test_util.test_db_conn |> Lazy.force
+let test_schema = Test_util.test_db_schema |> Lazy.force
 
 let%expect_test "" =
   let ralgebra =
-    "alist(r1, filter(0.f = g, ascalar(0.g)))" |> load_string_exn test_conn
+    "alist(r1, filter(0.f = g, ascalar(0.g)))" |> load_string_exn test_schema
   in
   let q = Q.of_ralgebra @@ Equiv.annotate ralgebra in
   let r = Q.to_ralgebra q in
@@ -42,7 +42,7 @@ let%expect_test "" =
     {|
    depjoin(ascalar(0 as f), select([(0.f + g) as s], alist(r1, ascalar(0.g))))
    |}
-    |> load_string_exn test_conn
+    |> load_string_exn test_schema
   in
   let q = Q.of_ralgebra @@ Equiv.annotate ralgebra in
   let r = Q.to_ralgebra q in
@@ -90,7 +90,7 @@ let%expect_test "" =
                   "t6"."x6" |}]
 
 let%expect_test "" =
-  let ralgebra = load_string_exn test_conn Test_util.sum_complex in
+  let ralgebra = load_string_exn test_schema Test_util.sum_complex in
   let q = Q.of_ralgebra @@ Equiv.annotate ralgebra in
   let r = Q.to_ralgebra q in
   Format.printf "%a" pp r;
@@ -132,7 +132,7 @@ let%expect_test "" =
 
 let%expect_test "" =
   let ralgebra =
-    load_string_exn test_conn "alist(r1, alist(r1, ascalar(0.f)))"
+    load_string_exn test_schema "alist(r1, alist(r1, ascalar(0.f)))"
   in
   let q = Q.of_ralgebra @@ Equiv.annotate ralgebra in
 

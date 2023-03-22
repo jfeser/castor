@@ -86,19 +86,22 @@ let test_db_conn =
      at_exit (fun () -> Db.close conn);
      conn)
 
+let test_db_schema = Lazy.map test_db_conn ~f:Db.schema
+
 let tpch_conn =
   lazy
     (let conn = Db.create @@ Sys.getenv_exn "CASTOR_TPCH_TEST_DB" in
      at_exit (fun () -> Db.close conn);
      conn)
 
+let tpch_schema = Lazy.map tpch_conn ~f:Db.schema
 let sexp_diff_display = Sexp_diff.Display.Display_options.create Two_column
 
 let run_eval_test :
     ?conn:Db.t Lazy.t -> string -> ('a annot -> 'b annot) -> unit =
  fun ?(conn = test_db_conn) s f ->
   let conn = Lazy.force conn in
-  let r = Abslayout_load.load_string_exn conn s in
+  let r = Abslayout_load.load_string_exn (Db.schema conn) s in
   let r' = f r in
 
   let s = Schema.schema r in

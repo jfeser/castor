@@ -2,7 +2,7 @@ open Project
 open Abslayout_load
 open Test_util
 
-let conn = Lazy.force tpch_conn
+let schema = Lazy.force tpch_schema
 
 let params =
   let open Prim_type in
@@ -16,7 +16,7 @@ let params =
 
 let%expect_test "" =
   let r =
-    load_string_exn ~params conn
+    load_string_exn ~params schema
       {|
          alist(dedup(
                  select([o_year],
@@ -124,7 +124,7 @@ let%expect_test "" =
 
 let%expect_test "" =
   let r =
-    load_string_exn ~params conn
+    load_string_exn ~params schema
       {|groupby([count() as c], [o_orderdate], dedup(select([o_orderdate, o_orderkey], orders)))|}
   in
   project ~params r |> Format.printf "%a@." Abslayout.pp;
@@ -133,14 +133,14 @@ let%expect_test "" =
          groupby([count() as c], [o_orderdate],
            dedup(select([o_orderdate, o_orderkey], orders))) |}]
 
-let run_test ?(params = Set.empty (module Name)) conn s =
-  load_string_exn ~params conn s
+let run_test ?(params = Set.empty (module Name)) schema s =
+  load_string_exn ~params schema s
   |> project ~params
   |> Format.printf "%a@." Abslayout.pp
 
 let%expect_test "" =
   run_test
-    (Lazy.force Test_util.test_db_conn)
+    (Lazy.force Test_util.test_db_schema)
     {|
    groupby([min(ct2) as x12, max(ct2) as x13], [],
     groupby([count() as ct2], [], select([f], r1)))
@@ -152,7 +152,7 @@ let%expect_test "" =
 
 let%expect_test "filter-exists" =
   run_test
-    (Lazy.force Test_util.tpch_conn)
+    (Lazy.force Test_util.tpch_schema)
     {|
        filter(exists(groupby([l_orderkey, sum(l_quantity) as sum_l_quantity], [l_orderkey], lineitem)),
                      orders)
@@ -164,7 +164,7 @@ let%expect_test "filter-exists" =
 
 let%expect_test "" =
   run_test
-    (Lazy.force Test_util.tpch_conn)
+    (Lazy.force Test_util.tpch_schema)
     {|
    groupby([min(ct0) as x0, max(ct0) as x1],
      [],
@@ -178,7 +178,7 @@ let%expect_test "" =
 
 let%expect_test "" =
   run_test
-    (Lazy.force Test_util.tpch_conn)
+    (Lazy.force Test_util.tpch_schema)
     {|
    groupby([min(ct0) as x0, max(ct0) as x1],
      [],
@@ -192,7 +192,7 @@ let%expect_test "" =
 
 let%expect_test "" =
   run_test
-    (Lazy.force Test_util.tpch_conn)
+    (Lazy.force Test_util.tpch_schema)
     {|
    select([p_brand, p_type, p_size, count() as supplier_cnt],
    dedup(select([p_type, p_brand, p_size, ps_suppkey],
@@ -208,7 +208,7 @@ let%expect_test "" =
 
 let%expect_test "" =
   run_test
-    (Lazy.force Test_util.tpch_conn)
+    (Lazy.force Test_util.tpch_schema)
     {|
        select([p_brand, p_type, p_size, count() as supplier_cnt],
          alist(dedup(join(true, part, partsupp)),
@@ -233,7 +233,7 @@ let%expect_test "" =
 
 let%expect_test "" =
   run_test
-    (Lazy.force Test_util.tpch_conn)
+    (Lazy.force Test_util.tpch_schema)
     {|
        alist(dedup(
                select([p_brand, p_type, p_size],

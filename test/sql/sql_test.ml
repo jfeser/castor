@@ -5,7 +5,7 @@ open Abslayout_load
 let run_test ?(conn = Test_util.test_db_conn) s =
   Logs.Src.set_level src (Some Debug);
   let conn = Lazy.force conn in
-  let r = load_string_exn conn s in
+  let r = load_string_exn (Db.schema conn) s in
   let sql_str = of_ralgebra r |> to_string_hum in
   (match Db.check conn sql_str with
   | Ok () -> ()
@@ -17,7 +17,7 @@ let sexp_diff_display = Sexp_diff.Display.Display_options.create Two_column
 
 let run_eval_test ?(conn = Test_util.test_db_conn) s =
   let conn = Lazy.force conn in
-  let r = load_string_exn conn s in
+  let r = load_string_exn (Db.schema conn) s in
 
   let sort_relation = List.sort ~compare:[%compare: Value.t list] in
   let expected =

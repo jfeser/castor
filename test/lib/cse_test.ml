@@ -4,7 +4,7 @@ open Cse
 let%expect_test "" =
   let r =
     "join(true, dedup(r), select([min(f) as m], dedup(r)))"
-    |> Abslayout_load.load_string_exn (Lazy.force test_db_conn)
+    |> Abslayout_load.load_string_exn (Lazy.force test_db_schema)
   in
   let common = extract_common r in
   Format.printf "%a" Fmt.Dump.(list @@ pair string Abslayout_pp.pp) common.views;

@@ -15,7 +15,7 @@ let main ~params:all_params ~simplify ~project ~unnest ~sql ~cse ch =
     |> Set.of_list (module Name)
   in
   let module Config = struct
-    let conn = Db.create (Sys.getenv_exn "CASTOR_DB")
+    let schema = Db.schema @@ Db.create (Sys.getenv_exn "CASTOR_DB")
     let params = params
   end in
   let module S = Simplify_tactic.Make (Config) in
@@ -31,7 +31,7 @@ let main ~params:all_params ~simplify ~project ~unnest ~sql ~cse ch =
   in
 
   let query_str = In_channel.input_all ch in
-  let query = load_string_exn ~params Config.conn query_str in
+  let query = load_string_exn ~params Config.schema query_str in
   let query = simplify query in
   let query =
     let q =

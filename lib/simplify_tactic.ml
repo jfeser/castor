@@ -9,9 +9,10 @@ include (val Log.make ~level:(Some Warning) "castor.simplify-tactic")
 module Config = Ops.Config
 
 module Make (C : Config.S) = struct
-  open C
   module O = Ops.Make (C)
   open O
+
+  let params = C.params
 
   let filter_const r =
     match r.node with
@@ -178,9 +179,9 @@ module Make (C : Config.S) = struct
   let unnest_and_simplify = global unnest_and_simplify "unnest-and-simplify"
 end
 
-let simplify ?(params = Set.empty (module Name)) conn r =
+let simplify ?(params = Set.empty (module Name)) schema r =
   let module C = struct
-    let conn = conn
+    let schema = schema
     let params = params
   end in
   let module O = Ops.Make (C) in

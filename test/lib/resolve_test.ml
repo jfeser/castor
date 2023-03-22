@@ -2,7 +2,7 @@ open Abslayout
 open Abslayout_load
 open Test_util
 
-let conn = Lazy.force tpch_conn
+let schema = Lazy.force tpch_schema
 
 let pp_refcount fmt meta =
   Fmt.pf fmt "@[<hov 2>{";
@@ -13,7 +13,7 @@ let pp_refcount fmt meta =
 let pp_with_refcount = Abslayout_pp.pp_with_meta pp_refcount
 
 let load s =
-  load_string_exn conn s
+  load_string_exn schema s
   |> Resolve.resolve_exn ~params:(Set.empty (module Name))
 
 let%expect_test "" =

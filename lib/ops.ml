@@ -31,7 +31,7 @@ let param =
 
 module Config = struct
   module type S = sig
-    val conn : Db.t
+    val schema : Db.Schema.t
     val params : Set.M(Name).t
   end
 end
@@ -291,7 +291,7 @@ module Make (C : Config.S) = struct
     | t :: ts -> seq' t (seq_many' ts)
 
   let id = local (fun r -> Some r) "id"
-  let prep r = Abslayout_load.annotate conn r
+  let prep r = Abslayout_load.annotate schema r
 
   let schema_validated tf =
     let schema_validated p r =
@@ -399,7 +399,7 @@ module Make (C : Config.S) = struct
     let schema_validated tf =
       let schema_validated p r =
         Seq.map (apply tf p r) ~f:(fun r' ->
-            let prep r = Abslayout_load.annotate conn r in
+            let prep r = Abslayout_load.annotate schema r in
             Check.annot r';
             Check.schema (prep r) (prep r');
             r')
@@ -409,7 +409,7 @@ module Make (C : Config.S) = struct
     let resolve_validated tf =
       let resolve_validated p r =
         Seq.map (apply tf p r) ~f:(fun r' ->
-            let prep r = Abslayout_load.annotate conn r in
+            let prep r = Abslayout_load.annotate schema r in
             Check.resolve ~params (prep r) (prep r');
             r')
       in

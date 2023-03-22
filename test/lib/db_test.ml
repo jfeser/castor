@@ -1,10 +1,10 @@
 open Db
 open Relation
 
-let conn = Test_util.tpch_conn |> Lazy.force
+let schema = Test_util.tpch_schema |> Lazy.force
 
 let%expect_test "" =
-  Db.all_relations conn
+  Db.Schema.all_relations schema
   |> List.sort ~compare:[%compare: Relation.t]
   |> List.iter ~f:(fun r ->
          Option.iter r.r_schema ~f:(fun s ->

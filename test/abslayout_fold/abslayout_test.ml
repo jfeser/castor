@@ -16,7 +16,9 @@ let run_print_test ?params query =
           List.map ~f:(fun (n, t, _) -> Name.create ~type_:t n) p
           |> Set.of_list (module Name))
     in
-    let layout = load_string_exn ?params:sparams conn query |> Equiv.annotate in
+    let layout =
+      load_string_exn ?params:sparams (Db.schema conn) query |> Equiv.annotate
+    in
     let stream = Data.of_ralgebra conn layout in
     (new print_fold)#run stream layout |> List.iter ~f:print_endline
   in
@@ -91,8 +93,7 @@ let%expect_test "" =
 let%expect_test "" =
   run_print_test
     "atuple([filter(false, ascalar(0 as a)), ascalar(1 as b)], cross)";
-  [%expect
-    {|
+  [%expect {|
         Tuple
         Scalar: (Int 0)
         Scalar: (Int 1) |}]

@@ -405,9 +405,7 @@ let%expect_test "intro-index-scan" =
   print_s [%message (intro_index_scan db_schema plan : plan option)];
   [%expect
     {|
-    ("intro_key_join db_schema plan"
-     ((Key_join (foreign_key ((cname menu_item_id) (tname (orders))))
-       (body (Scan orders))))) |}]
+    ("intro_index_scan db_schema plan" ()) |}]
 
 let intro_key_join db_schema plan =
   let intro l r lhs rhs =

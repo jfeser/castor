@@ -51,7 +51,7 @@ let main ~debug ~gprof ~params ~query ~enable_redshift_dates ~output_layout ?db
       List.map params ~f:(fun (n, t) -> Name.create ~type_:t n)
       |> Set.of_list (module Name)
     in
-    load_layout_exn ~params:load_params conn ralgebra
+    load_layout_exn ~params:load_params (Db.schema conn) ralgebra
   in
 
   (* Attach the streams needed for folding over the ast. *)

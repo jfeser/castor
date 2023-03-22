@@ -5,9 +5,9 @@ open Abslayout_load
 open Free
 
 let%expect_test "" =
-  let conn = Lazy.force test_db_conn in
+  let schema = Lazy.force test_db_schema in
   let n s = P.name (Name.of_string_exn s) in
-  let r s = Db.relation conn s |> A.relation in
+  let r s = Db.Schema.relation schema s |> A.relation in
 
   A.select [ (n "g", "g") ] (A.filter Pred.Infix.(n "0.f" = n "f") (r "r1"))
   |> free |> [%sexp_of: Set.M(Name).t] |> print_s;
@@ -23,7 +23,7 @@ let%expect_test "free" =
                  atuple([ascalar(0.s_suppkey), ascalar(0.s_name), ascalar(0.s_address), ascalar(0.s_phone)], cross))),
              ""))
    |}
-    |> load_string_exn (Lazy.force tpch_conn)
+    |> load_string_exn (Lazy.force tpch_schema)
   in
   free r |> Set.to_list |> Fmt.pr "%a" (Fmt.Dump.list Name.pp);
   [%expect {| [] |}]
@@ -37,7 +37,7 @@ let%expect_test "free" =
                  atuple([ascalar(0.s_suppkey), ascalar(0.s_name), ascalar(0.s_address), ascalar(0.s_phone)], cross))),
              "")
    |}
-    |> load_string_exn (Lazy.force tpch_conn)
+    |> load_string_exn (Lazy.force tpch_schema)
   in
   free r |> Set.to_list |> Fmt.pr "%a" (Fmt.Dump.list Name.pp);
   [%expect {| [] |}]
@@ -51,7 +51,7 @@ let%expect_test "free" =
                      partsupp))
    |}
     |> Abslayout.of_string_exn
-    |> Abslayout_load.annotate (Lazy.force tpch_conn)
+    |> Abslayout_load.annotate (Lazy.force tpch_schema)
   in
 
   free r |> Set.to_list |> Fmt.pr "%a" (Fmt.Dump.list Name.pp);

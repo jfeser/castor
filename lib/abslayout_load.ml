@@ -3,11 +3,13 @@ open Ast
 open Abslayout
 module V = Visitors
 
-let annotate_relations conn =
+let annotate_relations db_schema =
   let visitor =
     object
       inherit [_] V.endo
-      method! visit_Relation () _ r = Relation (Db.relation conn r.r_name)
+
+      method! visit_Relation () _ r =
+        Relation (Db.Schema.relation db_schema r.r_name)
     end
   in
   visitor#visit_t ()
