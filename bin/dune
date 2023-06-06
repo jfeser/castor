@@ -16,15 +16,6 @@
   (pps ppx_sexp_conv ppx_let))
  (modules compile))
 
-; (executable
-;  (package castor)
-;  (public_name castor-to-cozy)
-;  (name to_cozy)
-;  (libraries core core_unix.command_unix castor)
-;  (preprocess
-;   (pps ppx_sexp_conv ppx_let))
-;  (modules to_cozy))
-
 (executable
  (package castor)
  (public_name sample-tpch)
@@ -34,24 +25,6 @@
   (pps ppx_sexp_conv ppx_let))
  (modules sample_tpch))
 
-; (executable
-;  (package castor)
-;  (public_name sql-to-castor)
-;  (name parse_sql)
-;  (libraries core core_unix.command_unix sqlgg castor yojson)
-;  (preprocess
-;   (pps ppx_sexp_conv ppx_let))
-;  (modules parse_sql))
-
-; (executable
-;  (package castor)
-;  (public_name cozy-to-castor)
-;  (name parse_cozy)
-;  (libraries core core_unix.command_unix castor)
-;  (preprocess
-;   (pps ppx_sexp_conv ppx_let))
-;  (modules parse_cozy))
-
 (executable
  (package castor)
  (public_name castor-combine)
@@ -60,24 +33,6 @@
  (preprocess
   (pps ppx_sexp_conv ppx_let))
  (modules combine))
-
-; (executable
-;  (package castor)
-;  (name opt)
-;  (public_name opt.exe)
-;  (libraries core core_unix.command_unix castor logs logs.fmt fmt fmt.tty)
-;  (preprocess
-;   (pps ppx_sexp_conv ppx_let ppx_sexp_conv ppx_compare ppx_hash))
-;  (modules opt))
-
-; (executable
-;  (package castor)
-;  (name xform)
-;  (public_name xform.exe)
-;  (libraries core core_unix.command_unix castor logs logs.fmt fmt fmt.tty)
-;  (preprocess
-;   (pps ppx_sexp_conv ppx_let ppx_sexp_conv ppx_compare ppx_hash))
-;  (modules xform))
 
 (executable
  (package castor)
