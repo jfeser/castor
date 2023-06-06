@@ -55,7 +55,7 @@ module type EGRAPH = sig
   val rewrite : t -> pat -> pat -> unit
 end
 
-module Make (L : LANG) (A : ANALYSIS with type 'a lang = 'a L.t) :
+module Make (L : LANG) (_ : ANALYSIS with type 'a lang = 'a L.t) :
   EGRAPH with type 'a lang := 'a L.t
 
 module SymbolLang (S : sig
