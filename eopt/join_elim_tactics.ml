@@ -22,7 +22,8 @@ let elim_join_nest g _ =
       |> Map.of_alist_exn (module Name))
       join.pred
   in
-  let lhs = C.tuple g (List.map lhs_schema ~f:(C.scalar_name g)) Cross
+  let lhs =
+    C.tuple g (List.map (Schema.zero lhs_schema) ~f:(C.scalar_name g)) Cross
   and rhs = C.filter g pred (of_annot g @@ Subst.incr @@ to_annot g join.r2) in
   (root, C.depjoin g { d_lhs = join.r1; d_rhs = C.tuple g [ lhs; rhs ] Cross })
 

@@ -4,6 +4,7 @@ open Collections
 open Ast
 module V = Visitors
 
+let debug = false
 let empty = Set.empty (module Name)
 let of_list = Set.of_list (module Name)
 let union_list = Set.union_list (module Name)
@@ -53,10 +54,8 @@ let query_open ~schema annot =
           Set.union (one_bound_free b1) (one_bound_free b2)
         in
         annot r'
-        || decr_exn
-             (union_list
-                ([ annot r'' - zero (schema r') ]
-                @ List.map ~f:bound_free oi_lookup))
+        || decr_exn (annot r'' - zero (schema r'))
+        || union_list (List.map ~f:bound_free oi_lookup)
     | ATuple (rs, (Zip | Concat | Cross)) -> List.map rs ~f:annot |> union_list
     | (Limit _ | Call _) as q ->
         raise_s [%message "Not implemented" (q : (_, _) query)]
@@ -65,7 +64,12 @@ let query_open ~schema annot =
     Util.reraise
       (fun exn ->
         Exn.create_s [%message "Free.query_open" (r : (_, _) query) (exn : exn)])
-      (fun () -> run r)
+      (fun () ->
+        let ret = run r in
+        if debug then
+          print_s
+            [%message "free" (r : (_ pred, _) query) (ret : Set.M(Name).t)];
+        ret)
 
 let rec annot r = query_open ~schema:schema_set annot r.node
 let pred p = pred_open annot p

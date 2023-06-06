@@ -274,7 +274,9 @@ module Make (L : LANG) (A : ANALYSIS with type 'a lang := 'a L.t) = struct
                [%message
                  "Failed to merge eclasses"
                    (id1 : Id.t)
+                   (class1.nodes : Set.M(ENode).t)
                    (id2 : Id.t)
+                   (class2.nodes : Set.M(ENode).t)
                    (err : Sexp.t)]));
 
       if not ([%equal: A.t] data_old class1.data) then

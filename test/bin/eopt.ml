@@ -64,9 +64,12 @@ let run_test () =
     let n_enodes = G.n_enodes g in
     let n_eclasses = G.n_classes g in
     List.iter transforms ~f:(fun (xform_name, xform) ->
-        try Ops.apply g ctx xform
-        with Egraph.Merge_error e ->
-          raise (Egraph.Merge_error [%message xform_name (e : Sexp.t)]));
+        Util.reraise
+          (function
+            | Egraph.Merge_error e ->
+                Egraph.Merge_error [%message xform_name (e : Sexp.t)]
+            | e -> e)
+          (fun () -> Ops.apply g ctx xform));
     let n_enodes' = G.n_enodes g in
     let n_eclasses' = G.n_classes g in
     if (n_enodes <> n_enodes' || n_eclasses <> n_eclasses') && iter < max_iters
