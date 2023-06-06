@@ -28,27 +28,38 @@ let conv_alias = sprintf "%s_%s"
 let conv_sql db_schema =
   let open Sqlgg in
   let open Constructors.Annot in
-  let aliases = ref (Set.empty (module String)) in
-  let alias_of_name = ref (Map.empty (module String)) in
+  let fresh = Fresh.create () in
 
-  let conv_order _ q =
-    Log.warn (fun m -> m "Dropping orderby clause.");
-    q
-  in
   let conv_limit l q =
-    if Option.is_some l then Log.warn (fun m -> m "Dropping limit clause.");
-    q
+    match l with
+    | None -> q
+    | Some (_, true) -> limit 1 q
+    | Some (_, false) ->
+        Log.warn (fun m -> m "Dropping limit clause.");
+        q
   in
+
   let conv_distinct d q = if d then dedup q else q in
 
-  let rec conv_filter f q =
-    match f with Some e -> filter (conv_expr e) q | None -> q
+  let rec conv_order order q subst =
+    let key =
+      List.map order ~f:(fun (sql_expr, sql_dir) ->
+          let dir =
+            match sql_dir with Some `Asc -> Asc | Some `Desc | None -> Desc
+          in
+          (Subst.subst_pred subst (conv_expr sql_expr), dir))
+    in
+    order_by key q
+  and conv_filter f q subst =
+    match f with
+    | Some e -> filter (Subst.subst_pred subst (conv_expr e)) q
+    | None -> q
   and conv_source (s, alias) =
     let q =
       match s with
       | `Subquery s -> conv_query s
       | `Table t -> relation (Db.Schema.relation db_schema t)
-      | `Nested n -> conv_nested n
+      | `Nested n -> conv_nested Map.empty n
     in
     match alias with
     | Some a ->
@@ -62,29 +73,29 @@ let conv_sql db_schema =
         in
         select select_list q
     | None -> q
-  and conv_nested (q, qs) =
+  and conv_nested subst (q, qs) =
     match qs with
     | [] -> conv_source q
     | (q', j) :: qs' -> (
         match j with
         | `Cross | `Default ->
-            join (bool true) (conv_source q) (conv_nested (q', qs'))
+            join (bool true) (conv_source q) (conv_nested subst (q', qs'))
         | `Search e ->
-            join (conv_expr e) (conv_source q) (conv_nested (q', qs'))
+            join (conv_expr subst e) (conv_source q)
+              (conv_nested subst (q', qs'))
         | `Using _ | `Natural -> failwith "Join type not supported")
   and conv_subquery q = conv_query q
-  and conv_column (c : Sql.Col_name.t) =
-    let n =
+  and conv_column subst (c : Sql.Col_name.t) =
+    let name =
       match c.tname with
-      | Some a -> if Set.mem !aliases a then conv_alias a c.cname else c.cname
-      | None -> (
-          match Map.find !alias_of_name c.cname with
-          | Some a -> conv_alias a c.cname
-          | None -> c.cname)
+      | Some table_name ->
+          `Name { Name.name = Name.Attr (table_name, c.cname); type_ = None }
+      | None -> `Name (Name.create c.cname)
     in
-    Name.create n
-  and conv_expr e =
-    let open Pred in
+    Subst.subst_pred subst name
+  and conv_expr subst e =
+    let conv_expr = conv_expr subst in
+    let module Infix = Pred.Infix in
     match e with
     | Sql.Value v -> (
         match v with
@@ -94,8 +105,9 @@ let conv_sql db_schema =
         | Bool x -> `Bool x
         | Float x -> `Fixed (Fixed_point.of_float x)
         | Null -> `Null None)
-    | Param _ | Choices (_, _) | Inserted _ | Sequence _ ->
-        failwith "unsupported"
+    | Param ((Some name, _), _) -> `Name (Name.create name)
+    | Param ((None, _), _) -> `Name (Name.create (Fresh.name fresh "param_%d"))
+    | Choices (_, _) | Inserted _ | Sequence _ -> failwith "unsupported"
     | Case (branches, else_) ->
         let else_ =
           Option.map else_ ~f:conv_expr |> Option.value ~default:(`Null None)
@@ -145,7 +157,7 @@ let conv_sql db_schema =
             Error.create "Unsupported op" op [%sexp_of: Sql.op] |> Error.raise)
     | Subquery (s, `Exists) -> `Exists (conv_subquery s)
     | Subquery (s, `AsValue) -> `First (conv_subquery s)
-    | Column c -> `Name (conv_column c)
+    | Column c -> conv_column subst c
   and conv_select s =
     (* Build query in order. First, FROM *)
     let query =

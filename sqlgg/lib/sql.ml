@@ -2,7 +2,7 @@ open! Base
 
 module Type = struct
   type t = Int | Text | Blob | Float | Bool | Datetime | Date | Decimal | Any
-  [@@deriving compare, sexp]
+  [@@deriving compare, hash, sexp]
 
   let to_string x = [%sexp_of: t] x |> Base.Sexp.to_string_hum
 
@@ -91,15 +91,23 @@ type op =
 
 type schema = Schema.t [@@deriving compare, sexp]
 
-type param_id = string option * (int * int) [@@deriving compare, sexp]
+type param_id = string option * (int * int) [@@deriving compare, hash, sexp]
 (** optional name and start/end position in string *)
 
-type param = param_id * Type.t [@@deriving compare, sexp]
-type params = param list [@@deriving compare, sexp]
+module Param = struct
+  module T = struct
+    type t = param_id * Type.t [@@deriving compare, hash, sexp]
+  end
+
+  include T
+  include Comparator.Make (T)
+end
+
+type params = Param.t list [@@deriving compare, sexp]
 
 type ctor = Simple of param_id * var list option | Verbatim of string * string
 
-and var = Single of param | Choice of param_id * ctor list
+and var = Single of Param.t | Choice of param_id * ctor list
 [@@deriving compare, sexp]
 
 type vars = var list [@@deriving compare, sexp]
@@ -117,10 +125,10 @@ type alter_action =
   | `None ]
 [@@deriving compare, sexp]
 
-type select_result = schema * param list [@@deriving compare, sexp]
+type select_result = schema * Param.t list [@@deriving compare, sexp]
 type direction = [ `Asc | `Desc ] [@@deriving compare, sexp]
 
-type int_or_param = [ `Const of int | `Limit of param ]
+type int_or_param = [ `Const of int | `Limit of Param.t ]
 [@@deriving compare, sexp]
 
 type limit_t = [ `Limit | `Offset ] [@@deriving compare, sexp]
@@ -138,7 +146,7 @@ module Col_name = struct
   include Comparator.Make (T)
 end
 
-type limit = param list * bool [@@deriving compare, sexp]
+type limit = Param.t list * bool [@@deriving compare, sexp]
 type 'expr choices = (param_id * 'expr option) list [@@deriving compare, sexp]
 
 type value =
@@ -187,7 +195,7 @@ and 'f order = ('f expr * direction option) list [@@deriving compare, sexp]
 and 'f expr =
   | Value of value  (** literal value *)
   | Sequence of 'f expr list
-  | Param of param
+  | Param of Param.t
   | Choices of param_id * 'f expr choices
   | Fun of 'f * 'f expr list  (** parameters *)
   | Case of ('f expr * 'f expr) list * 'f expr option

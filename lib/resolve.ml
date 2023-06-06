@@ -272,6 +272,9 @@ let resolve_open resolve stage outer_ctx =
       let r, value_ctx = rsame outer_ctx r in
       let pred = resolve_pred stage (Ctx.merge outer_ctx value_ctx) pred in
       (Filter (pred, r), value_ctx)
+  | Limit (l, r) ->
+      let r, value_ctx = rsame outer_ctx r in
+      (Limit (l, r), value_ctx)
   | DepJoin { d_lhs; d_rhs } ->
       let d_lhs, lctx = rsame outer_ctx d_lhs in
       let lctx = Ctx.zero lctx in

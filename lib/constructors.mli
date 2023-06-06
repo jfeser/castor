@@ -52,6 +52,7 @@ module Annot : sig
   val list' : _ annot Ast.list_ -> < > annot
   val tuple : _ annot list -> Ast.tuple -> < > annot
   val call : string -> < > annot
+  val limit : int -> < > annot -> < > annot
 
   val hash_idx :
     ?key_layout:_ annot -> _ annot -> _ annot -> _ pred list -> < > annot

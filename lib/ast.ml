@@ -104,7 +104,7 @@ type ('p, 'r) query =
   | Dedup of 'r
   | Relation of Relation.t
   | Range of ('p * 'p)
-  | Limit of int
+  | Limit of int * 'r
   | AEmpty
   | AScalar of 'p scalar
   | AList of 'r list_

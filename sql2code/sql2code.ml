@@ -33,21 +33,21 @@ let dataclass_name table =
 
 let singular = String.chop_suffix_if_exists ~suffix:"s"
 
-let emit_dataclass db_schema name : Python_block.t =
-  let schema = Db.Schema.attrs db_schema name in
+let emit_dataclass db_schema table_name : Python_block.t =
+  let schema = Db.Schema.attrs db_schema table_name in
   let fields =
     List.filter_map schema ~f:(fun attr ->
         match attr.constraints with
         | `Foreign_key tbl ->
             Some
               (Fmt.str "%s : '%s'"
-                 (String.chop_suffix_exn name ~suffix:"_id")
+                 (String.chop_suffix_exn attr.attr_name ~suffix:"_id")
                  (dataclass_name tbl))
         | `None | `Primary_key ->
-            Some (Fmt.str "%s : %s" name (emit_type attr.type_)))
+            Some (Fmt.str "%s : %s" attr.attr_name (emit_type attr.type_)))
   in
   let referrers =
-    List.map (Db_schema.referrers db_schema name) ~f:(fun tbl ->
+    List.map (Db_schema.referrers db_schema table_name) ~f:(fun tbl ->
         Fmt.str "%s : set['%s'] = field(default_factory=set, compare=False)" tbl
           (dataclass_name tbl))
   in
@@ -56,7 +56,7 @@ let emit_dataclass db_schema name : Python_block.t =
       Stmts [ "@dataclass(frozen=True)" ];
       Block
         {
-          header = Fmt.str "class %s:" (dataclass_name name);
+          header = Fmt.str "class %s:" (dataclass_name table_name);
           body = Stmts (fields @ referrers);
         };
     ]
@@ -385,9 +385,9 @@ let emit_expr _db_schema params ctx =
     | Column x -> lookup_column_exn ctx x
     | Param p ->
         List.find_map params ~f:(fun (name, param) ->
-            if [%compare.equal: Sql.param] p param then Some name else None)
+            if [%compare.equal: Sql.Param.t] p param then Some name else None)
         |> Option.value_exn
-             ~error:(Error.of_lazy_sexp (lazy [%message (p : Sql.param)]))
+             ~error:(Error.of_lazy_sexp (lazy [%message (p : Sql.Param.t)]))
     | (Sequence _ | Choices _ | Case _ | Subquery _ | Inserted _) as expr ->
         raise_s [%message "unsupported" (expr : Sql.op Sql.expr)]
   in
@@ -792,6 +792,7 @@ let emit_select db_schema query_str query_name select =
     }
 
 let main () =
+  Log.setup_log Warning;
   let input_str = In_channel.input_all In_channel.stdin in
   let queries = load_queries input_str in
   let db =
@@ -804,6 +805,19 @@ let main () =
   let tables =
     Db.Schema.relation_names db |> List.sort ~compare:[%compare: string]
   in
+  List.iter queries ~f:(fun (q, _) ->
+      match q with
+      | Select q ->
+          let castor_query = Of_sql.conv_sql db q in
+          print_s [%message (castor_query : Ast.t)];
+          print_s
+            [%message
+              (Resolve.resolve_exn
+                 ~params:(Set.empty (module Name))
+                 castor_query
+                : _ Ast.annot)]
+      | _ -> ());
+
   let dataclasses = List.map tables ~f:(emit_dataclass db) in
   let add_methods = List.map tables ~f:(emit_add db) in
   let remove_methods = List.map tables ~f:(emit_remove db) in

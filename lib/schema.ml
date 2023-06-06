@@ -48,7 +48,8 @@ let schema_query_open schema r =
     | DepJoin { d_rhs = r; _ }
     | Filter (_, r)
     | Dedup r
-    | OrderBy { rel = r; _ } ->
+    | OrderBy { rel = r; _ }
+    | Limit (_, r) ->
         schema r
     | AOrderedIdx { oi_keys = lhs; oi_values = rhs; _ }
     | AHashIdx { hi_keys = lhs; hi_values = rhs; _ } ->

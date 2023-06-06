@@ -45,6 +45,7 @@ module Query = struct
 
   let list' = alist
   let list a c = list' { l_keys = a; l_values = c }
+  let limit = limit
 end
 
 (** Construct annotated queries. Discards any existing metadata. *)
@@ -110,6 +111,7 @@ module Annot = struct
   let list' x = wrap @@ Query.list' (strip_meta_alist x)
   let tuple a b = wrap @@ Query.tuple (strip_meta_list a) b
   let call a = wrap @@ Query.call a
+  let limit l r = wrap @@ Query.limit l r
 
   let hash_idx ?key_layout a c d =
     wrap

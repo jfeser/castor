@@ -281,9 +281,10 @@ class virtual ['self] base_endo =
       let r0 = self#visit_string env c0 in
       if c0 == r0 then this else Call r0
 
-    method visit_Limit env this c0 =
-      let r0 = self#visit_int env c0 in
-      if c0 == r0 then this else Limit r0
+    method visit_Limit env this l r =
+      let l' = self#visit_int env l in
+      let r' = self#visit_t env r in
+      if l == l' && r == r' then this else Limit (l', r')
 
     method visit_query env this =
       match this with
@@ -303,7 +304,7 @@ class virtual ['self] base_endo =
       | AHashIdx c0 as this -> self#visit_AHashIdx env this c0
       | AOrderedIdx c0 as this -> self#visit_AOrderedIdx env this c0
       | Call c0 as this -> self#visit_Call env this c0
-      | Limit c0 as this -> self#visit_Limit env this c0
+      | Limit (c0, r) as this -> self#visit_Limit env this c0 r
 
     method visit_annot env this =
       let r0 = self#visit_query env this.node in
@@ -579,9 +580,10 @@ class virtual ['self] base_map =
       let r0 = self#visit_string env c0 in
       Call r0
 
-    method visit_Limit env c0 =
-      let r0 = self#visit_int env c0 in
-      Limit r0
+    method visit_Limit env l r =
+      let l' = self#visit_int env l in
+      let r' = self#visit_t env r in
+      Limit (l', r')
 
     method visit_query env this =
       match this with
@@ -601,7 +603,7 @@ class virtual ['self] base_map =
       | AHashIdx c0 -> self#visit_AHashIdx env c0
       | AOrderedIdx c0 -> self#visit_AOrderedIdx env c0
       | Call c0 -> self#visit_Call env c0
-      | Limit c0 -> self#visit_Limit env c0
+      | Limit (l, r) -> self#visit_Limit env l r
 
     method visit_annot env this =
       let r0 = self#visit_query env this.node in
@@ -873,7 +875,10 @@ class virtual ['self] base_iter =
       ()
 
     method visit_Call env c0 = self#visit_string env c0
-    method visit_Limit env c0 = self#visit_int env c0
+
+    method visit_Limit env l r =
+      self#visit_int env l;
+      self#visit_t env r
 
     method visit_query env this =
       match this with
@@ -893,7 +898,7 @@ class virtual ['self] base_iter =
       | AHashIdx c0 -> self#visit_AHashIdx env c0
       | AOrderedIdx c0 -> self#visit_AOrderedIdx env c0
       | Call c0 -> self#visit_Call env c0
-      | Limit c0 -> self#visit_Limit env c0
+      | Limit (l, r) -> self#visit_Limit env l r
 
     method visit_annot env this =
       let r0 = self#visit_query env this.node in
@@ -1165,7 +1170,9 @@ class virtual ['self] base_reduce =
       s0
 
     method visit_Call env c0 = self#visit_string env c0
-    method visit_Limit env c0 = self#visit_int env c0
+
+    method visit_Limit env l r =
+      self#plus (self#visit_int env l) (self#visit_t env r)
 
     method visit_query env this =
       match this with
@@ -1185,7 +1192,7 @@ class virtual ['self] base_reduce =
       | AHashIdx c0 -> self#visit_AHashIdx env c0
       | AOrderedIdx c0 -> self#visit_AOrderedIdx env c0
       | Call c0 -> self#visit_Call env c0
-      | Limit c0 -> self#visit_Limit env c0
+      | Limit (l, r) -> self#visit_Limit env l r
 
     method visit_annot env this =
       let s0 = self#visit_query env this.node in
@@ -1466,9 +1473,10 @@ class virtual ['self] base_mapreduce =
       let r0, s0 = self#visit_string env c0 in
       (Call r0, s0)
 
-    method visit_Limit env c0 =
-      let r0, s0 = self#visit_int env c0 in
-      (Limit r0, s0)
+    method visit_Limit env l r =
+      let r0, s0 = self#visit_int env l in
+      let r1, s1 = self#visit_t env r in
+      (Limit (r0, r1), self#plus s0 s1)
 
     method visit_query env this =
       match this with
@@ -1488,7 +1496,7 @@ class virtual ['self] base_mapreduce =
       | AHashIdx c0 -> self#visit_AHashIdx env c0
       | AOrderedIdx c0 -> self#visit_AOrderedIdx env c0
       | Call c0 -> self#visit_Call env c0
-      | Limit c0 -> self#visit_Limit env c0
+      | Limit (c0, c1) -> self#visit_Limit env c0 c1
 
     method visit_annot env this =
       let r0, s0 = self#visit_query env this.node in
