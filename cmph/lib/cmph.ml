@@ -17,7 +17,6 @@ module Bindings = struct
     structure "cmph_io_adapter_t"
 
   let _data = field cmph_io_adapter_t "data" (ptr void)
-
   let nkeys = field cmph_io_adapter_t "nkeys" uint32_t
 
   let read =
@@ -68,9 +67,7 @@ module Bindings = struct
     foreign "cmph_search" (cmph_t @-> string @-> int @-> returning int)
 
   let cmph_destroy = foreign "cmph_destroy" (cmph_t @-> returning void)
-
   let cmph_pack = foreign "cmph_pack" (cmph_t @-> ocaml_bytes @-> returning void)
-
   let cmph_packed_size = foreign "cmph_packed_size" (cmph_t @-> returning int)
 
   let cmph_search_packed =
@@ -81,11 +78,12 @@ exception Error of [ `Empty | `Hash_new_failed of string | `Parameter_range | `F
 [@@deriving sexp]
 
 module KeySet = struct
+  (* Unused functions must be retained to prevent garbage collection. *)
   type t = {
     length : int;
-    read : unit ptr -> char ptr ptr -> Unsigned.uint32 ptr -> int;
-    dispose : unit ptr -> char ptr -> Unsigned.uint32 -> unit;
-    rewind : unit ptr -> unit;
+    _read : unit ptr -> char ptr ptr -> Unsigned.uint32 ptr -> int;
+    _dispose : unit ptr -> char ptr -> Unsigned.uint32 -> unit;
+    _rewind : unit ptr -> unit;
     adapter : (Bindings.cmph_io_adapter_t, [ `Struct ]) structured ptr;
   }
 
@@ -121,12 +119,17 @@ module KeySet = struct
     setf adapter Bindings.read read;
     setf adapter Bindings.dispose dispose;
     setf adapter Bindings.rewind rewind;
-    { length = Array.length keys; read; dispose; rewind; adapter = addr adapter }
+    {
+      length = Array.length keys;
+      _read = read;
+      _dispose = dispose;
+      _rewind = rewind;
+      adapter = addr adapter;
+    }
 end
 
 module Config = struct
   type hash = [ `Jenkins | `Count ] [@@deriving sexp]
-
   type chd_config = { keys_per_bucket : int; keys_per_bin : int } [@@deriving sexp]
 
   type algo =
@@ -143,7 +146,7 @@ module Config = struct
 
   type t = {
     config : Bindings.cmph_config_t;
-    keyset : KeySet.t;
+    _keyset : KeySet.t;
     mutable freed : bool;
   }
 
@@ -166,7 +169,6 @@ module Config = struct
     | `Chd _ -> "Chd"
 
   let default_chd = `Chd { keys_per_bucket = 4; keys_per_bin = 1 }
-
   let default_chd_ph = `Chd_ph { keys_per_bucket = 4; keys_per_bin = 1 }
 
   let valid_algo algo keyset =
@@ -193,19 +195,19 @@ module Config = struct
     Bindings.cmph_config_set_graphsize config 0.90;
     Bindings.cmph_config_set_algo config (algo_value algo);
     Bindings.cmph_config_set_verbosity config (if verbose then 1 else 0);
-    ( match algo with
+    (match algo with
     | `Chd c | `Chd_ph c ->
         Bindings.cmph_config_set_b config c.keys_per_bucket;
         Bindings.cmph_config_set_keys_per_bin config c.keys_per_bin
-    | _ -> () );
-    { config; keyset; freed = false }
+    | _ -> ());
+    { config; _keyset = keyset; freed = false }
 
   let assert_valid { freed; _ } = if freed then raise @@ Error `Freed
 
   let destroy c =
     if not c.freed then (
       Bindings.cmph_config_destroy c.config;
-      c.freed <- true )
+      c.freed <- true)
 
   let with_config ?verbose ?algo ?seed keyset f =
     let c = create ?verbose ?algo ?seed keyset in
@@ -257,7 +259,7 @@ module Hash = struct
         Config.destroy c.config;
         if not c.freed then (
           Bindings.cmph_destroy c.hash;
-          c.freed <- true )
+          c.freed <- true)
 
   let with_hash c f =
     let h = of_config c in
