@@ -117,7 +117,7 @@ module Make (C : Config.S) = struct
 
   let is_param_filter r p =
     match (Path.get_exn p r).node with
-    | Filter (pred, _) -> overlaps (Free.pred_free pred) params
+    | Filter (pred, _) -> overlaps (Free.pred pred) params
     | _ -> false
 
   let contains f r p =
@@ -131,8 +131,8 @@ module Make (C : Config.S) = struct
     | Filter (pred, _) ->
         List.exists (Pred.conjuncts pred) ~f:(function
           | `Binop (Eq, p1, p2) ->
-              let x1 = overlaps (Free.pred_free p1) params in
-              let x2 = overlaps (Free.pred_free p2) params in
+              let x1 = overlaps (Free.pred p1) params in
+              let x2 = overlaps (Free.pred p2) params in
               Bool.(x1 <> x2)
           | _ -> false)
     | _ -> false
@@ -142,8 +142,8 @@ module Make (C : Config.S) = struct
     | Filter (pred, _) ->
         List.exists (Pred.conjuncts pred) ~f:(function
           | `Binop ((Lt | Gt | Ge | Le), p1, p2) ->
-              let x1 = overlaps (Free.pred_free p1) params in
-              let x2 = overlaps (Free.pred_free p2) params in
+              let x1 = overlaps (Free.pred p1) params in
+              let x2 = overlaps (Free.pred p2) params in
               Bool.(x1 <> x2)
           | _ -> false)
     | _ -> false
@@ -322,12 +322,12 @@ module Make (C : Config.S) = struct
       match apply tf p r with
       | Some r' ->
           (if A.O.(r = r') then
-           info (fun m -> m "Invariant transformation %s" name)
-          else
-            let local_r = Path.get_exn p r and local_r' = Path.get_exn p r' in
-            info (fun m ->
-                m "%s transformed:@ %a@ ===== to ======@ %a" name A.pp local_r
-                  A.pp local_r'));
+             info (fun m -> m "Invariant transformation %s" name)
+           else
+             let local_r = Path.get_exn p r and local_r' = Path.get_exn p r' in
+             info (fun m ->
+                 m "%s transformed:@ %a@ ===== to ======@ %a" name A.pp local_r
+                   A.pp local_r'));
           Some r'
       | None ->
           info (fun m -> m "Transform %s does not apply" name);

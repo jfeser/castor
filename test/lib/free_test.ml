@@ -10,7 +10,7 @@ let%expect_test "" =
   let r s = Db.Schema.relation schema s |> A.relation in
 
   A.select [ (n "g", "g") ] (A.filter Pred.Infix.(n "0.f" = n "f") (r "r1"))
-  |> free |> [%sexp_of: Set.M(Name).t] |> print_s;
+  |> annot |> [%sexp_of: Set.M(Name).t] |> print_s;
   [%expect {| (((name (Bound 0 f)))) |}]
 
 let%expect_test "free" =
@@ -25,7 +25,7 @@ let%expect_test "free" =
    |}
     |> load_string_exn (Lazy.force tpch_schema)
   in
-  free r |> Set.to_list |> Fmt.pr "%a" (Fmt.Dump.list Name.pp);
+  annot r |> Set.to_list |> Fmt.pr "%a" (Fmt.Dump.list Name.pp);
   [%expect {| [] |}]
 
 let%expect_test "free" =
@@ -39,7 +39,7 @@ let%expect_test "free" =
    |}
     |> load_string_exn (Lazy.force tpch_schema)
   in
-  free r |> Set.to_list |> Fmt.pr "%a" (Fmt.Dump.list Name.pp);
+  annot r |> Set.to_list |> Fmt.pr "%a" (Fmt.Dump.list Name.pp);
   [%expect {| [] |}]
 
 let%expect_test "free" =
@@ -54,5 +54,5 @@ let%expect_test "free" =
     |> Abslayout_load.annotate (Lazy.force tpch_schema)
   in
 
-  free r |> Set.to_list |> Fmt.pr "%a" (Fmt.Dump.list Name.pp);
+  annot r |> Set.to_list |> Fmt.pr "%a" (Fmt.Dump.list Name.pp);
   [%expect {| [0.k0] |}]

@@ -84,7 +84,7 @@ let annotate_stage r =
   annot [] r
 
 let is_static r =
-  Free.free r
+  Free.annot r
   |> Set.for_all ~f:(fun n ->
          match
            List.find r.meta#stage ~f:(fun (n', _) -> [%equal: Name.t] n n')

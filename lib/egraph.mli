@@ -11,7 +11,6 @@ module type LANG = sig
 
   val pp : 'a Fmt.t -> 'a t Fmt.t
   val match_func : 'a t -> 'b t -> bool
-  val args : 'a t -> 'a list
   val map_args : ('a -> 'b) -> 'a t -> 'b t
 end
 
@@ -20,7 +19,7 @@ module type ANALYSIS = sig
   type t [@@deriving equal, sexp_of]
 
   val of_enode : ('a -> t) -> 'a lang -> t
-  val merge : t -> t -> t
+  val merge : t -> t -> (t, Sexp.t) result
 end
 
 module type EGRAPH = sig

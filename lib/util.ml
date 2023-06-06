@@ -1,5 +1,11 @@
 open Core
 
+let reraise wrap func =
+  try func ()
+  with exn ->
+    let bt = Caml.Printexc.get_raw_backtrace () in
+    Exn.raise_with_original_backtrace (wrap exn) bt
+
 (** Run a command, logging it if it fails. *)
 let command_exn ?quiet:_ = function
   | [] -> Error.of_string "Empty command" |> Error.raise

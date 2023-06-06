@@ -57,7 +57,9 @@ let decr n =
   | _ -> Some n
 
 let decr_exn n =
-  Option.value_exn ~message:"trying to decrease zero index" (decr n)
+  match decr n with
+  | None -> raise_s [%message "trying to decrease zero index" (n : t)]
+  | Some n -> n
 
 let set_index n i =
   match n.name with

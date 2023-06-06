@@ -119,7 +119,7 @@ let%expect_test "" =
     n1_0 -> {c0};
     n2_0 -> {c1};
     n3_0 -> {};
-    n4_0 -> {c0 c3};
+    n4_0 -> {c3 c0};
     }
     ("different relations"
      (view_relations

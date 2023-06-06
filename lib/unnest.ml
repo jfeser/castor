@@ -54,7 +54,7 @@ and free_query = function
         free d.d_lhs
         || decr_exn
              (free d.d_rhs - zero (Set.of_list (module Name) (schema d.d_lhs))))
-  | Query q -> Free.free_query_open ~schema_set free q
+  | Query q -> Free.query_open ~schema:schema_set free q
 
 let assert_schema_invariant q q' =
   let s = Schema.schema q in

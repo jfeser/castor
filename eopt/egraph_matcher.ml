@@ -30,6 +30,10 @@ module M = struct
     |> concat_map (fun id ->
            G.enodes g id |> Iter.filter_map m |> concat_map (fun x -> f (id, x)))
 
+  let any g f =
+    G.classes g
+    |> concat_map (fun id -> G.enodes g id |> concat_map (fun x -> f (id, x)))
+
   let any_orderby x = mk_match_any Ast.orderby_val x
   let any_groupby x = mk_match_any Ast.groupby_val x
   let any_filter x = mk_match_any Ast.filter_val x

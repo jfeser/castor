@@ -1,15 +1,14 @@
-(* open Castor *)
-(* open Ast *)
-(* open Collections *)
-(* module A = Abslayout *)
+open Castor.Ast
+open Castor.Collections
+module Schema = Castor.Schema
+open Egraph_matcher
 
-(* let row_store r = *)
-(*   (\* Relation has no free variables that are bound at runtime. *\) *)
-(*   let scope = Fresh.name Global.fresh "s%d" in *)
-(*   let scalars = *)
-(*     Schema.schema r |> Schema.scoped scope |> List.map ~f:A.scalar_name *)
-(*   in *)
-(*   Some (A.list (strip_meta r) scope (A.tuple scalars Cross)) *)
+let row_store g _ =
+  (* Relation has no free variables that are bound at runtime. *)
+  let%map root, _ = M.any g in
+  let scalars =
+    G.schema g root |> Schema.zero |> List.map ~f:(C.scalar_name g)
+  in
+  (root, C.list g { l_keys = root; l_values = C.tuple g scalars Cross })
 
-(* let row_store = *)
-(*   of_func_pre row_store ~pre:Is_serializable.annotate_stage ~name:"to-row-store" *)
+let () = Ops.register row_store "row-store"

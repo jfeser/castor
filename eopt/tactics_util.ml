@@ -27,7 +27,7 @@ let over_approx params r =
     end
   in
   let r = visitor#visit_t () r in
-  let remains = Set.inter (Free.free r) params in
+  let remains = Set.inter (Free.annot r) params in
   if Set.is_empty remains then Ok r
   else
     Or_error.error "Failed to remove all parameters." remains
@@ -36,7 +36,7 @@ let over_approx params r =
 (** Precise selection of all valuations of a list of predicates from a relation.
    *)
 let all_values_precise ps r =
-  if Set.is_empty (Free.free r) then Ok (A.dedup (A.select ps r))
+  if Set.is_empty (Free.annot r) then Ok (A.dedup (A.select ps r))
   else Or_error.errorf "Predicate contains free variables."
 
 let all_values_approx_1 params ps r =
@@ -158,7 +158,7 @@ let all_values params cost_conn ps r =
 (** Check that a predicate is fully supported by a relation (it does not
       depend on anything in the context.) *)
 let is_supported stage bound pred =
-  Set.for_all (Free.pred_free pred) ~f:(fun n ->
+  Set.for_all (Free.pred pred) ~f:(fun n ->
       Set.mem bound n
       (* TODO: We assume that compile time names that are bound in the context
          are ok, but this might not be true? *)

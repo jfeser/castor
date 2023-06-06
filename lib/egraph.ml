@@ -23,7 +23,6 @@ module type LANG = sig
 
   val pp : 'a Fmt.t -> 'a t Fmt.t
   val match_func : 'a t -> 'b t -> bool
-  val args : 'a t -> 'a list
   val map_args : ('a -> 'b) -> 'a t -> 'b t
 end
 
@@ -32,7 +31,7 @@ module type ANALYSIS = sig
   type t [@@deriving equal, sexp_of]
 
   val of_enode : ('a -> t) -> 'a lang -> t
-  val merge : t -> t -> t
+  val merge : t -> t -> (t, Sexp.t) result
 end
 
 module type EGRAPH = sig
@@ -68,6 +67,22 @@ module type EGRAPH = sig
 end
 
 module Make (L : LANG) (A : ANALYSIS with type 'a lang := 'a L.t) = struct
+  module Lang = struct
+    include L
+
+    let args l =
+      let args = ref [] in
+      ignore
+        (L.map_args
+           (fun x ->
+             args := x :: !args;
+             x)
+           l);
+      List.rev !args
+  end
+
+  (* An e-node is a language term with a unique ID. It may refer to other e-nodes
+     by their IDs. *)
   module ENode = struct
     module T = struct
       type t = Id.t L.t [@@deriving compare, hash, sexp_of]
@@ -77,20 +92,37 @@ module Make (L : LANG) (A : ANALYSIS with type 'a lang := 'a L.t) = struct
     include Comparator.Make (T)
   end
 
+  module ENodeWithId = struct
+    module T = struct
+      type t = ENode.t * Id.t [@@deriving compare, hash, sexp_of]
+    end
+
+    include T
+    include Comparator.Make (T)
+  end
+
+  (* An e-class is a set of equivalent e-nodes. E-classes track the following:
+     - Their set of e-nodes,
+     - The IDs of e-nodes that /refer/ to an e-node in the e-class,
+     - Analysis results for the nodes in the class. *)
   module EClass = struct
     type t = {
+      (* The nodes in this e-class. *)
       mutable nodes : Set.M(ENode).t;
-      parents : Id.t H.M(ENode).t;
+      mutable parents : Set.M(ENodeWithId).t;
+      (* The analysis data for this e-class. *)
       mutable data : A.t;
     }
     [@@deriving sexp_of]
   end
 
   type t = {
+    (* Mapping from e-node data to e-node IDs. *)
     memo : Id.t H.M(ENode).t;
+    (* Mapping from e-node IDs to e-classes. *)
     mutable classes : EClass.t Map.M(Id).t;
-    mutable worklist : (ENode.t * Id.t) list;
-    mutable analysis_worklist : (ENode.t * Id.t) list;
+    mutable worklist : ENodeWithId.t list;
+    mutable analysis_worklist : ENodeWithId.t list;
     mutable max_id : int;
   }
   [@@deriving sexp_of]
@@ -119,7 +151,7 @@ module Make (L : LANG) (A : ANALYSIS with type 'a lang := 'a L.t) = struct
             let enode_dot_id = sprintf "n%d_%d" key.id eid in
             Fmt.pf fmt "%s -> {@[<h>%a@]};@ " enode_dot_id
               (Fmt.list ~sep:Fmt.sp pp_id)
-              (L.args enode))
+              (Lang.args enode))
           keys_iter);
 
     Fmt.pf fmt "}@,@]"
@@ -130,7 +162,7 @@ module Make (L : LANG) (A : ANALYSIS with type 'a lang := 'a L.t) = struct
         ~init:(Set.of_list (module Id) (Map.keys g.classes))
         ~f:(fun roots eclass ->
           Set.fold eclass.nodes ~init:roots ~f:(fun roots enode ->
-              L.args enode |> List.fold_left ~init:roots ~f:Set.remove))
+              Lang.args enode |> List.fold_left ~init:roots ~f:Set.remove))
     in
 
     let rec pp_class_ref fmt id =
@@ -166,7 +198,7 @@ module Make (L : LANG) (A : ANALYSIS with type 'a lang := 'a L.t) = struct
       EClass.
         {
           nodes = Set.empty (module ENode);
-          parents = H.create (module ENode);
+          parents = Set.empty (module ENodeWithId);
           data = A.of_enode (data g) node;
         }
     in
@@ -198,10 +230,10 @@ module Make (L : LANG) (A : ANALYSIS with type 'a lang := 'a L.t) = struct
 
         g.classes <- Map.add_exn g.classes ~key:eclass_id ~data:(eclass g n);
 
-        L.args n
+        Lang.args n
         |> List.iter ~f:(fun arg_eclass_id ->
                let arg_eclass = Map.find_exn g.classes arg_eclass_id in
-               H.add_exn arg_eclass.parents ~key:n ~data:eclass_id);
+               arg_eclass.parents <- Set.add arg_eclass.parents (n, eclass_id));
 
         H.set g.memo ~key:n ~data:eclass_id;
         eclass_id
@@ -215,7 +247,7 @@ module Make (L : LANG) (A : ANALYSIS with type 'a lang := 'a L.t) = struct
       let class1, id2, class2 =
         let class1 = Map.find_exn g.classes id1
         and class2 = Map.find_exn g.classes id2 in
-        if H.length class1.parents < H.length class2.parents then
+        if Set.length class1.parents < Set.length class2.parents then
           (class2, id1, class1)
         else (class1, id2, class2)
       in
@@ -223,33 +255,32 @@ module Make (L : LANG) (A : ANALYSIS with type 'a lang := 'a L.t) = struct
       (* class 2 gets removed and merged into class 1 *)
       g.classes <- Map.remove g.classes id2;
       class1.nodes <- Set.union class1.nodes class2.nodes;
-      H.merge_into ~src:class2.parents ~dst:class2.parents ~f:(fun ~key pid1 ->
-        function
-        | Some pid2 ->
-            if [%equal: Id.t] pid1 pid2 then Set_to pid1
-            else
-              raise_s
-                [%message
-                  "enode present in multiple eclasses"
-                    (key : ENode.t)
-                    (pid1 : Id.t)
-                    (pid2 : Id.t)]
-        | None -> Set_to pid1);
+      class1.parents <- Set.union class1.parents class2.parents;
 
       (* ensure that id1 is the canonical id *)
       Union_find.union id1.canon id2.canon;
       Union_find.set id2.canon id1.id;
 
       (* anything that references id2 needs to be updated *)
-      g.worklist <- H.to_alist class2.parents @ g.worklist;
+      g.worklist <- Set.to_list class2.parents @ g.worklist;
 
       (* handle eclass analysis *)
       let data_old = class1.data in
-      class1.data <- A.merge data_old class2.data;
+      (match A.merge class1.data class2.data with
+      | Ok data -> class1.data <- data
+      | Error err ->
+          raise
+            (Merge_error
+               [%message
+                 "Failed to merge eclasses"
+                   (id1 : Id.t)
+                   (id2 : Id.t)
+                   (err : Sexp.t)]));
+
       if not ([%equal: A.t] data_old class1.data) then
-        g.analysis_worklist <- H.to_alist class1.parents @ g.analysis_worklist;
+        g.analysis_worklist <- Set.to_list class1.parents @ g.analysis_worklist;
       if not ([%equal: A.t] data_old class2.data) then
-        g.analysis_worklist <- H.to_alist class2.parents @ g.analysis_worklist;
+        g.analysis_worklist <- Set.to_list class2.parents @ g.analysis_worklist;
 
       id1
 
@@ -270,10 +301,21 @@ module Make (L : LANG) (A : ANALYSIS with type 'a lang := 'a L.t) = struct
           let eclass_id = find eclass_id in
           let class_ = Map.find_exn g.classes eclass_id in
           let class_data = class_.data in
-          class_.data <- A.merge class_data (A.of_enode (data g) enode);
+
+          (match A.merge class_data (A.of_enode (data g) enode) with
+          | Ok data -> class_.data <- data
+          | Error err ->
+              raise
+                (Merge_error
+                   [%message
+                     "Failed to merge in new enode"
+                       (eclass_id : Id.t)
+                       (enode : ENode.t)
+                       (err : Sexp.t)]));
+
           if not ([%equal: A.t] class_.data class_data) then
             g.analysis_worklist <-
-              H.to_alist class_.parents @ g.analysis_worklist);
+              Set.to_list class_.parents @ g.analysis_worklist);
       process_unions g)
 
   let rebuild_classes g =
@@ -293,7 +335,7 @@ module Make (L : LANG) (A : ANALYSIS with type 'a lang := 'a L.t) = struct
           Set.filter eclass.nodes ~f:(L.match_func pat) |> Set.to_list
         in
         List.concat_map matching_enodes ~f:(fun enode ->
-            List.map2_exn (L.args pat) (L.args enode) ~f:(search_eclass g)
+            List.map2_exn (Lang.args pat) (Lang.args enode) ~f:(search_eclass g)
             |> List.all
             |> List.map
                  ~f:
@@ -334,7 +376,6 @@ struct
   type 'a t = { func : S.t; args : 'a list } [@@deriving compare, hash, sexp_of]
 
   let map_args f x = { x with args = List.map x.args ~f }
-  let args x = x.args
   let match_func x y = [%equal: S.t] x.func y.func
 
   let pp pp_a fmt x =
@@ -354,14 +395,6 @@ module AstLang = struct
 
   and map_args_pred f p = V.Map.pred f (map_args_pred f) p
 
-  let rec args_iter : ('a -> unit) -> 'a t -> unit =
-   fun f x -> V.Iter.query f (pred_args_iter f) x
-
-  and pred_args_iter : ('a -> unit) -> 'a Ast.pred -> unit =
-   fun f x -> V.Iter.pred f (pred_args_iter f) x
-
-  let args : 'a t -> 'a list = fun x -> Iter.to_list (fun f -> args_iter f x)
-
   let match_func q q' =
     try
       ignore (V.Map2.query () () q q');
@@ -373,22 +406,26 @@ module UnitAnalysis = struct
   type t = unit [@@deriving sexp_of, equal]
 
   let of_enode _ _ = ()
-  let merge _ _ = ()
+  let merge _ _ = Ok ()
 end
 
 module OptAnalysis = struct
-  type t = { schema : Schema.t } [@@deriving sexp_of, equal]
+  type t = { schema : Schema.t; free : Set.M(Name).t }
+  [@@deriving sexp_of, equal]
 
   let of_enode data q =
-    { schema = Schema.schema_query_open (fun id -> (data id).schema) q }
+    {
+      schema = Schema.schema_query_open (fun id -> (data id).schema) q;
+      free =
+        Free.query_open
+          ~schema:(fun id -> Set.of_list (module Name) (data id).schema)
+          (fun id -> (data id).free)
+          q;
+    }
 
   let merge x x' =
-    if [%equal: Schema.t] x.schema x'.schema then x
-    else
-      raise
-        (Merge_error
-           [%message
-             "mismatched schemas" (x.schema : Schema.t) (x'.schema : Schema.t)])
+    if [%equal: t] x x' then Ok x
+    else Error [%message "mismatch" (x : t) (x' : t)]
 end
 
 module AstEGraph = struct
@@ -407,7 +444,7 @@ module AstEGraph = struct
     let enodes = (Map.find_exn g.classes id).nodes in
     let enodes =
       if b = 0 then
-        Set.filter enodes ~f:(fun x -> List.length (AstLang.args x) = 0)
+        Set.filter enodes ~f:(fun x -> List.length (Lang.args x) = 0)
       else enodes
     in
     let enode =

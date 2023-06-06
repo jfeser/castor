@@ -101,7 +101,6 @@ let annotate_schema r =
   and pred p = V.Map.pred annot pred p in
   annot r
 
-let schema_set r = Set.of_list (module Name) (schema r)
 let names r = schema r |> List.map ~f:Name.name
 
 let to_type q =

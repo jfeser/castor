@@ -19,7 +19,7 @@ module P = Pred.Infix
 
 (* let fresh_name = Fresh.name Global.fresh *)
 let schema_set r = Schema.schema r |> Set.of_list (module Name)
-let free = Free.pred_free_open (fun _ -> Set.empty (module Name))
+let free = Free.pred_open (fun _ -> Set.empty (module Name))
 
 (** Split predicates that sit under a binder into the parts that depend on
        bound variables and the parts that don't. *)
