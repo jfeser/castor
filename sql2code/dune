@@ -1,5 +1,0 @@
-(library
- (name sql2code)
- (libraries core castor fmt iter sqlgg)
- (preprocess (pps ppx_compare ppx_sexp_message ppx_sexp_conv ppx_let ppx_expect))
- (inline_tests))
