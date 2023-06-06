@@ -7,7 +7,7 @@ license: "MIT"
 homepage: "https://github.com/jfeser/castor"
 bug-reports: "https://github.com/jfeser/castor/issues"
 depends: [
-  "dune" {>= "3.1" & build & >= "1.10"}
+  "dune" {>= "3.8" & build & >= "1.10"}
   "castor"
   "postgresql" {>= "4.4"}
   "bos" {>= "0.2"}
