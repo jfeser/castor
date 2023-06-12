@@ -14,12 +14,21 @@ module type LANG = sig
   val map_args : ('a -> 'b) -> 'a t -> 'b t
 end
 
+(** [ANALYSIS] is a module type for analyses on egraphs. *)
 module type ANALYSIS = sig
   type 'a lang
+  (** ['a lang] is the type of enode data. *)
+
   type t [@@deriving equal, sexp_of]
 
   val of_enode : ('a -> t) -> 'a lang -> t
+  (** [of_enode f e] computes the analysis result for the enode [e] using [f] to
+      analyze child eclasses. *)
+
   val merge : t -> t -> (t, Sexp.t) result
+  (** [merge a1 a2] merges the analysis results [a1] and [a2]. If the results are
+      incompatible, [Error msg] is returned, where [msg] is a description of the
+      error. *)
 end
 
 module type EGRAPH = sig
@@ -36,17 +45,25 @@ module type EGRAPH = sig
   type t [@@deriving sexp_of]
 
   val create : unit -> t
-  val eclass_id_equiv : Id.t -> Id.t -> bool
-  val enode_equiv : t -> ENode.t -> ENode.t -> bool
+  (** [create ()] creates a new empty egraph. *)
+
   val add : t -> Id.t lang -> Id.t
+  (** [add g e] adds the enode [e] to [g]. *)
+
   val merge : t -> Id.t -> Id.t -> Id.t
+  (** [merge g e1 e2] merges the eclasses of [e1] and [e2] in [g]. *)
+
   val rebuild : t -> unit
   val classes : t -> Id.t Iter.t
   val enodes : t -> Id.t -> ENode.t Iter.t
   val n_enodes : t -> int
   val n_classes : t -> int
+
   val pp_dot : t Fmt.t
+  (** [pp_dot] is a pretty-printer for egraphs in the dot format. *)
+
   val pp : t Fmt.t
+  (** [pp] is a pretty-printer for egraphs. *)
 
   type pat = [ `Apply of pat lang | `Var of int ]
 

@@ -70,10 +70,12 @@ let run_test () =
                 Egraph.Merge_error [%message xform_name (e : Sexp.t)]
             | e -> e)
           (fun () -> Ops.apply g ctx xform));
+    G.rebuild g;
     let n_enodes' = G.n_enodes g in
     let n_eclasses' = G.n_classes g in
-    if (n_enodes <> n_enodes' || n_eclasses <> n_eclasses') && iter < max_iters
-    then saturate (iter + 1)
+    if iter >= max_iters then print_endline "max iters reached"
+    else if n_enodes <> n_enodes' || n_eclasses <> n_eclasses' then
+      saturate (iter + 1)
   in
 
   try

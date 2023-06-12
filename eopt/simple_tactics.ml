@@ -4,7 +4,7 @@ module Schema = Castor.Schema
 open Egraph_matcher
 
 let row_store g _ =
-  (* Relation has no free variables that are bound at runtime. *)
+  (* TODO: Only apply to terms in runtime position (or at least not to things that are already data structures) *)
   let%map root, _ = M.any g in
   let scalars =
     G.schema g root |> Schema.zero |> List.map ~f:(C.scalar_name g)

@@ -11,7 +11,7 @@ module Id = struct
     type t = { id : int; canon : int Union_find.t [@ignore] }
     [@@deriving compare, equal, hash]
 
-    let sexp_of_t x = [%sexp_of: int] x.id
+    let sexp_of_t x = [%sexp_of: int] (Union_find.get x.canon)
   end
 
   include T
@@ -48,8 +48,6 @@ module type EGRAPH = sig
   type t [@@deriving sexp_of]
 
   val create : unit -> t
-  val eclass_id_equiv : Id.t -> Id.t -> bool
-  val enode_equiv : t -> ENode.t -> ENode.t -> bool
   val add : t -> Id.t lang -> Id.t
   val merge : t -> Id.t -> Id.t -> Id.t
   val rebuild : t -> unit
@@ -177,7 +175,7 @@ module Make (L : LANG) (A : ANALYSIS with type 'a lang := 'a L.t) = struct
     Map.iteri g.classes ~f:(fun ~key ~data ->
         if Set.length data.nodes > 1 || Set.mem roots key then (
           Fmt.pf fmt "@[<v 2>";
-          Fmt.pf fmt "$%d:@," key.id;
+          Fmt.pf fmt "$%a:@," Sexp.pp ([%sexp_of: Id.t] key);
           Set.iter data.nodes ~f:(Fmt.pf fmt "@[<h>%a@]@," (L.pp pp_class_ref));
           Fmt.pf fmt "@]@,"));
     Fmt.pf fmt "@]"
@@ -500,14 +498,14 @@ let%expect_test "" =
     {|
     (g
      ((memo
-       ((((func +) (args (0 1))) 2) (((func x) (args ())) 0)
-        (((func y) (args ())) 1)))
+       ((((func +) (args (0 0))) 2) (((func x) (args ())) 0)
+        (((func y) (args ())) 0)))
       (classes
        ((0
          ((nodes (((func x) (args ())) ((func y) (args ()))))
-          (parents ((((func +) (args (0 1))) 2))) (data ())))
-        (2 ((nodes (((func +) (args (0 1))))) (parents ()) (data ())))))
-      (worklist ((((func +) (args (0 1))) 2))) (analysis_worklist ()) (max_id 3))) |}];
+          (parents ((((func +) (args (0 0))) 2))) (data ())))
+        (2 ((nodes (((func +) (args (0 0))))) (parents ()) (data ())))))
+      (worklist ((((func +) (args (0 0))) 2))) (analysis_worklist ()) (max_id 3))) |}];
   E.rebuild g;
   print_s [%message (g : E.t)];
   [%expect
@@ -515,11 +513,11 @@ let%expect_test "" =
     (g
      ((memo
        ((((func +) (args (0 0))) 2) (((func x) (args ())) 0)
-        (((func y) (args ())) 1)))
+        (((func y) (args ())) 0)))
       (classes
        ((0
          ((nodes (((func x) (args ())) ((func y) (args ()))))
-          (parents ((((func +) (args (0 1))) 2))) (data ())))
+          (parents ((((func +) (args (0 0))) 2))) (data ())))
         (2 ((nodes (((func +) (args (0 0))))) (parents ()) (data ())))))
       (worklist ()) (analysis_worklist ()) (max_id 3))) |}];
   assert (E.eclass_id_equiv x y);
