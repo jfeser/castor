@@ -5,10 +5,9 @@
 
 (rule
  (alias runtest)
- (action (with-stderr-to elim-cmp-filter.sexp.output
-           (with-stdout-to elim-cmp-filter.sexp.output
+ (action (with-stdout-to elim-cmp-filter.sexp.output
             (with-stdin-from elim-cmp-filter.sexp
-             (run ../bin/eopt.exe))))))
+             (run ../bin/eopt.exe)))))
 
 
 (rule
@@ -17,10 +16,9 @@
 
 (rule
  (alias runtest)
- (action (with-stderr-to elim-eq-filter.sexp.output
-           (with-stdout-to elim-eq-filter.sexp.output
+ (action (with-stdout-to elim-eq-filter.sexp.output
             (with-stdin-from elim-eq-filter.sexp
-             (run ../bin/eopt.exe))))))
+             (run ../bin/eopt.exe)))))
 
 
 (rule
@@ -29,10 +27,9 @@
 
 (rule
  (alias runtest)
- (action (with-stderr-to elim-join.sexp.output
-           (with-stdout-to elim-join.sexp.output
+ (action (with-stdout-to elim-join.sexp.output
             (with-stdin-from elim-join.sexp
-             (run ../bin/eopt.exe))))))
+             (run ../bin/eopt.exe)))))
 
 
 (rule
@@ -41,10 +38,9 @@
 
 (rule
  (alias runtest)
- (action (with-stderr-to hoist-filter-select.sexp.output
-           (with-stdout-to hoist-filter-select.sexp.output
+ (action (with-stdout-to hoist-filter-select.sexp.output
             (with-stdin-from hoist-filter-select.sexp
-             (run ../bin/eopt.exe))))))
+             (run ../bin/eopt.exe)))))
 
 
 (rule
@@ -53,10 +49,9 @@
 
 (rule
  (alias runtest)
- (action (with-stderr-to multi-query.sexp.output
-           (with-stdout-to multi-query.sexp.output
+ (action (with-stdout-to multi-query.sexp.output
             (with-stdin-from multi-query.sexp
-             (run ../bin/eopt.exe))))))
+             (run ../bin/eopt.exe)))))
 
 
 (rule
@@ -65,8 +60,7 @@
 
 (rule
  (alias runtest)
- (action (with-stderr-to split-filter.sexp.output
-           (with-stdout-to split-filter.sexp.output
+ (action (with-stdout-to split-filter.sexp.output
             (with-stdin-from split-filter.sexp
-             (run ../bin/eopt.exe))))))
+             (run ../bin/eopt.exe)))))
 

@@ -159,6 +159,8 @@ and map_meta_query f q = Map.query (map_meta f) (map_meta_pred f) q
 and map_meta_pred f p = Map.pred (map_meta f) (map_meta_pred f) p
 
 module Reduce = struct
+  type ('a, 'b) t = 'a -> ('a -> 'a -> 'a) -> 'b
+
   let rec list zero ( + ) f l =
     match l with [] -> zero | x :: xs -> f x + list zero ( + ) f xs
 
@@ -206,34 +208,6 @@ module Reduce = struct
     | _ -> failwith "unsupported"
 
   let annot _zero ( + ) query meta { node; meta = m } = query node + meta m
-end
-
-module Stage_reduce = struct
-  open Reduce
-
-  let query zero ( + ) annot pred stage = function
-    | AList { l_keys = q; l_values = q'; _ } ->
-        annot `Compile q + annot stage q'
-    | AScalar p -> pred `Compile p.s_pred
-    | AHashIdx { hi_keys; hi_values; hi_key_layout; hi_lookup; _ } ->
-        annot `Compile hi_keys + annot stage hi_values
-        + option zero (annot stage) hi_key_layout
-        + list zero ( + ) (pred stage) hi_lookup
-    | AOrderedIdx { oi_keys; oi_values; oi_key_layout; oi_lookup; _ } ->
-        annot `Compile oi_keys + annot stage oi_values
-        + option zero (annot stage) oi_key_layout
-        + list zero ( + )
-            (fun (b, b') ->
-              option zero (fun (p, _) -> pred stage p) b
-              + option zero (fun (p, _) -> pred stage p) b')
-            oi_lookup
-    | q -> Reduce.query zero ( + ) (annot stage) (pred stage) q
-
-  let pred zero ( + ) annot pred stage p =
-    Reduce.pred zero ( + ) (annot stage) (pred stage) p
-
-  let annot zero ( + ) query meta stage r =
-    Reduce.annot zero ( + ) (query stage) (meta stage) r
 end
 
 module Iter = struct
@@ -296,15 +270,6 @@ module Iter = struct
     meta m
 end
 
-module Annotate = struct
-  let rec annot f r =
-    let node = query f r.node in
-    { node; meta = f (fun r' -> r'.meta) node }
-
-  and query f q = (Map.query (annot f) (pred f)) q
-  and pred f p = Map.pred (annot f) (pred f) p
-end
-
 module Annotate_obj = struct
   let rec annot get set f r =
     let node = query get set f r.node in
@@ -313,130 +278,3 @@ module Annotate_obj = struct
   and query get set f q = (Map.query (annot get set f) (pred get set f)) q
   and pred get set f p = Map.pred (annot get set f) (pred get set f) p
 end
-
-let rec annotate f r =
-  let node = (Map.query (annotate f) (annotate_pred f)) r.node in
-  { node; meta = f (fun r' -> r'.meta) node }
-
-and annotate_pred f p = Map.pred (annotate f) (annotate_pred f) p
-
-class virtual ['self] endo =
-  object (self : 'self)
-    inherit [_] base_endo
-    method visit_'p = self#visit_pred
-    method visit_'r = self#visit_t
-    method visit_'m _ x = x
-
-    method visit_select_list visit_pred env this =
-      Select_list.map this ~f:(fun p _ -> visit_pred env p)
-  end
-
-class virtual ['self] map =
-  object (self : 'self)
-    inherit [_] base_map
-    method visit_'p = self#visit_pred
-    method visit_'r = self#visit_t
-    method visit_'m _ x = x
-
-    method visit_select_list visit_pred env this =
-      Select_list.map this ~f:(fun p _ -> visit_pred env p)
-  end
-
-class virtual ['self] iter =
-  object (self : 'self)
-    inherit [_] base_iter
-    method visit_'p = self#visit_pred
-    method visit_'r = self#visit_t
-    method visit_'m _ _ = ()
-
-    method visit_select_list visit_pred env this =
-      Select_list.to_list this |> List.iter ~f:(fun (p, _) -> visit_pred env p)
-  end
-
-class virtual ['self] reduce =
-  object (self : 'self)
-    inherit [_] base_reduce
-    method visit_'p = self#visit_pred
-    method visit_'r = self#visit_t
-    method visit_'m _ _ = self#zero
-
-    method visit_select_list visit_pred env this =
-      Select_list.to_list this
-      |> List.fold_left ~init:self#zero ~f:(fun acc (p, _) ->
-             self#plus acc (visit_pred env p))
-  end
-
-class virtual ['self] mapreduce =
-  object (self : 'self)
-    inherit [_] base_mapreduce
-    method visit_'p = self#visit_pred
-    method visit_'r = self#visit_t
-    method visit_'m _ x = (x, self#zero)
-
-    method visit_select_list visit_pred env this =
-      let acc, this' =
-        Select_list.fold_map this
-          ~f:(fun acc p _ ->
-            let p', acc' = visit_pred env p in
-            (self#plus acc acc', p'))
-          ~init:self#zero
-      in
-      (this', acc)
-  end
-
-class ['a] names_visitor =
-  object (self : 'a)
-    inherit [_] reduce as super
-    method zero = Set.empty (module Name)
-    method plus = Set.union
-    method! visit_Name () n = Set.singleton (module Name) n
-
-    method! visit_pred () p =
-      match p with
-      | `Exists _ | `First _ -> self#zero
-      | _ -> super#visit_pred () p
-  end
-
-class virtual ['m] runtime_subquery_visitor =
-  object (self : 'a)
-    inherit [_] iter as super
-    method virtual visit_Subquery : 'm annot -> unit
-
-    (* Don't annotate subqueries that run at compile time. *)
-    method! visit_AScalar () _ = ()
-    method! visit_AList () { l_values = r; _ } = super#visit_t () r
-    method! visit_AHashIdx () { hi_values = r; _ } = super#visit_t () r
-    method! visit_AOrderedIdx () { oi_values = r; _ } = super#visit_t () r
-
-    method! visit_Exists () r =
-      super#visit_t () r;
-      self#visit_Subquery r
-
-    method! visit_First () r =
-      super#visit_t () r;
-      self#visit_Subquery r
-  end
-
-class virtual ['self] runtime_subquery_map =
-  object (self : 'self)
-    inherit [_] map as super
-    method virtual visit_Subquery : _
-
-    (* Don't annotate subqueries that run at compile time. *)
-    method! visit_AScalar _ x = AScalar x
-
-    method! visit_AList acc ({ l_values = r; _ } as l) =
-      AList { l with l_values = super#visit_t acc r }
-
-    method! visit_AHashIdx acc ({ hi_values = r; _ } as h) =
-      AHashIdx { h with hi_values = super#visit_t acc r }
-
-    method! visit_AOrderedIdx acc ({ oi_values = r; _ } as o) =
-      AOrderedIdx { o with oi_values = super#visit_t acc r }
-
-    method! visit_Exists acc r =
-      `Exists (self#visit_Subquery (super#visit_t acc r))
-
-    method! visit_First acc r =
-      `First (self#visit_Subquery (super#visit_t acc r))
-  end

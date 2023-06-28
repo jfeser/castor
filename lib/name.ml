@@ -80,3 +80,4 @@ let pp fmt n =
   | Bound (i, x) -> Fmt.pf fmt "%d.%s" i x
 
 let fresh fmt = create (Fresh.name Global.fresh fmt)
+let is_bound n = match n.name with Bound _ -> true | _ -> false

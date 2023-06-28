@@ -21,13 +21,14 @@ $3:
 $4:
   join((l_orderkey = o_orderkey), $0, $3)
   depjoin($0, $14)
+  depjoin($0, $65)
   alist($4, $48)
   
 $5:
   select([l_comment, l_commitdate, l_discount, l_extendedprice, l_linenumber,
           l_linestatus, l_orderkey, l_partkey, l_quantity, l_receiptdate,
           l_returnflag, l_shipdate, l_shipinstruct, l_shipmode, l_suppkey,
-          l_tax], $64)
+          l_tax], $67)
   filter((l_orderkey = 0.l_orderkey), $0)
   alist($5, $32)
   
@@ -45,7 +46,7 @@ $8:
   
 $10:
   select([o_clerk, o_comment, o_custkey, o_orderdate, o_orderkey,
-          o_orderpriority, o_orderstatus, o_shippriority, o_totalprice], $69)
+          o_orderpriority, o_orderstatus, o_shippriority, o_totalprice], $72)
   filter((0.key = o_orderkey), $3)
   alist($10, $46)
   
@@ -72,27 +73,27 @@ $14:
   
 $16:
   ascalar(0.l_comment)
-  alist($16, $71)
+  alist($16, $76)
   
 $17:
   ascalar(0.l_commitdate)
-  alist($17, $73)
+  alist($17, $78)
   
 $18:
   ascalar(0.l_discount)
-  alist($18, $75)
+  alist($18, $80)
   
 $19:
   ascalar(0.l_extendedprice)
-  alist($19, $77)
+  alist($19, $82)
   
 $20:
   ascalar(0.l_linenumber)
-  alist($20, $79)
+  alist($20, $84)
   
 $21:
   ascalar(0.l_linestatus)
-  alist($21, $81)
+  alist($21, $86)
   
 $22:
   ascalar(0.l_orderkey)
@@ -100,19 +101,19 @@ $22:
   
 $23:
   ascalar(0.l_partkey)
-  alist($23, $84)
+  alist($23, $89)
   
 $24:
   ascalar(0.l_quantity)
-  alist($24, $86)
+  alist($24, $91)
   
 $25:
   ascalar(0.l_receiptdate)
-  alist($25, $88)
+  alist($25, $93)
   
 $26:
   ascalar(0.l_returnflag)
-  alist($26, $90)
+  alist($26, $95)
   
 $27:
   ascalar(0.l_shipdate)
@@ -120,19 +121,19 @@ $27:
   
 $28:
   ascalar(0.l_shipinstruct)
-  alist($28, $93)
+  alist($28, $98)
   
 $29:
   ascalar(0.l_shipmode)
-  alist($29, $95)
+  alist($29, $100)
   
 $30:
   ascalar(0.l_suppkey)
-  alist($30, $97)
+  alist($30, $102)
   
 $31:
   ascalar(0.l_tax)
-  alist($31, $99)
+  alist($31, $104)
   
 $32:
   alist($32, $32)
@@ -145,39 +146,39 @@ $35:
   
 $37:
   ascalar(0.o_clerk)
-  alist($37, $103)
+  alist($37, $108)
   
 $38:
   ascalar(0.o_comment)
-  alist($38, $105)
+  alist($38, $110)
   
 $39:
   ascalar(0.o_custkey)
-  alist($39, $107)
+  alist($39, $112)
   
 $40:
   ascalar(0.o_orderdate)
-  alist($40, $109)
+  alist($40, $114)
   
 $41:
   ascalar(0.o_orderkey)
-  alist($41, $111)
+  alist($41, $116)
   
 $42:
   ascalar(0.o_orderpriority)
-  alist($42, $113)
+  alist($42, $118)
   
 $43:
   ascalar(0.o_orderstatus)
-  alist($43, $115)
+  alist($43, $120)
   
 $44:
   ascalar(0.o_shippriority)
-  alist($44, $117)
+  alist($44, $122)
   
 $45:
   ascalar(0.o_totalprice)
-  alist($45, $119)
+  alist($45, $124)
   
 $46:
   alist($46, $46)
@@ -211,124 +212,138 @@ $61:
   atuple([$57, $37, $38, $39, $40, $41, $42, $43, $44, $45], cross)
   
 $64:
-  alist($64, $54)
-  ahashidx($7, $5, 0.l_orderkey)
-  
-$66:
   select([o_clerk, o_comment, o_custkey, o_orderdate, o_orderkey,
-          o_orderpriority, o_orderstatus, o_shippriority, o_totalprice], $134)
-  filter((o_orderkey = 0.o_orderkey), $3)
-  alist($66, $46)
+          o_orderpriority, o_orderstatus, o_shippriority, o_totalprice], $74)
+  filter((0.l_orderkey = o_orderkey), $3)
+  alist($64, $46)
+  
+$65:
+  alist($65, $48)
+  atuple([$32, $64], cross)
   
 $67:
-  select([o_orderkey], $3)
-  alist($67, $111)
-  
-$68:
-  dedup($67)
-  alist($68, $111)
+  alist($67, $54)
+  ahashidx($7, $5, 0.l_orderkey)
   
 $69:
-  alist($69, $132)
-  ahashidx($68, $66, 0.key)
+  select([o_clerk, o_comment, o_custkey, o_orderdate, o_orderkey,
+          o_orderpriority, o_orderstatus, o_shippriority, o_totalprice], $142)
+  filter((o_orderkey = 0.o_orderkey), $3)
+  alist($69, $46)
+  
+$70:
+  select([o_orderkey], $3)
+  alist($70, $116)
   
 $71:
-  alist($71, $71)
+  dedup($70)
+  alist($71, $116)
+  
+$72:
+  alist($72, $139)
+  ahashidx($71, $69, 0.key)
+  
+$74:
+  alist($74, $139)
+  ahashidx($71, $69, 0.l_orderkey)
+  
+$76:
+  alist($76, $76)
   atuple([$16], cross)
   
-$73:
-  alist($73, $73)
+$78:
+  alist($78, $78)
   atuple([$17], cross)
   
-$75:
-  alist($75, $75)
+$80:
+  alist($80, $80)
   atuple([$18], cross)
   
-$77:
-  alist($77, $77)
+$82:
+  alist($82, $82)
   atuple([$19], cross)
-  
-$79:
-  alist($79, $79)
-  atuple([$20], cross)
-  
-$81:
-  alist($81, $81)
-  atuple([$21], cross)
   
 $84:
   alist($84, $84)
-  atuple([$23], cross)
+  atuple([$20], cross)
   
 $86:
   alist($86, $86)
+  atuple([$21], cross)
+  
+$89:
+  alist($89, $89)
+  atuple([$23], cross)
+  
+$91:
+  alist($91, $91)
   atuple([$24], cross)
-  
-$88:
-  alist($88, $88)
-  atuple([$25], cross)
-  
-$90:
-  alist($90, $90)
-  atuple([$26], cross)
   
 $93:
   alist($93, $93)
-  atuple([$28], cross)
+  atuple([$25], cross)
   
 $95:
   alist($95, $95)
+  atuple([$26], cross)
+  
+$98:
+  alist($98, $98)
+  atuple([$28], cross)
+  
+$100:
+  alist($100, $100)
   atuple([$29], cross)
   
-$97:
-  alist($97, $97)
+$102:
+  alist($102, $102)
   atuple([$30], cross)
   
-$99:
-  alist($99, $99)
+$104:
+  alist($104, $104)
   atuple([$31], cross)
   
-$103:
-  alist($103, $103)
+$108:
+  alist($108, $108)
   atuple([$37], cross)
   
-$105:
-  alist($105, $105)
+$110:
+  alist($110, $110)
   atuple([$38], cross)
   
-$107:
-  alist($107, $107)
+$112:
+  alist($112, $112)
   atuple([$39], cross)
   
-$109:
-  alist($109, $109)
+$114:
+  alist($114, $114)
   atuple([$40], cross)
   
-$111:
-  alist($111, $111)
+$116:
+  alist($116, $116)
   atuple([$41], cross)
   
-$113:
-  alist($113, $113)
+$118:
+  alist($118, $118)
   atuple([$42], cross)
   
-$115:
-  alist($115, $115)
+$120:
+  alist($120, $120)
   atuple([$43], cross)
   
-$117:
-  alist($117, $117)
+$122:
+  alist($122, $122)
   atuple([$44], cross)
   
-$119:
-  alist($119, $119)
+$124:
+  alist($124, $124)
   atuple([$45], cross)
   
-$132:
-  alist($132, $132)
+$139:
+  alist($139, $139)
   atuple([$41, $37, $38, $39, $40, $41, $42, $43, $44, $45], cross)
   
-$134:
-  alist($134, $132)
-  ahashidx($68, $66, 0.o_orderkey)
+$142:
+  alist($142, $139)
+  ahashidx($71, $69, 0.o_orderkey)
   

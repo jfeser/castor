@@ -90,7 +90,8 @@ module AstLang : sig
   include LANG with type 'a t := 'a t
 end
 
-module UnitAnalysis : ANALYSIS with type t = unit and type 'a lang := 'a
+module UnitAnalysis (L : LANG) :
+  ANALYSIS with type t = unit and type 'a lang = 'a L.t
 
 module AstEGraph : sig
   open Ast
@@ -101,4 +102,5 @@ module AstEGraph : sig
   val choose : t -> Id.t -> < > annot option
   val choose_exn : t -> Id.t -> < > annot
   val schema : t -> Id.t -> Schema.t
+  val max_debruijn_index : t -> Id.t -> int
 end

@@ -24,3 +24,4 @@ val fresh : (int -> string, unit, string) format -> t
 val of_string_exn : string -> t
 val scope : t -> int option
 val unscoped : t -> t
+val is_bound : t -> bool

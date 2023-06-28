@@ -395,14 +395,11 @@ module AstLang = struct
 
   and map_args_pred f p = V.Map.pred f (map_args_pred f) p
 
-  let match_func q q' =
-    try
-      ignore (V.Map2.query () () q q');
-      true
-    with V.Map2.Mismatch -> false
+  let match_func _ _ = assert false
 end
 
-module UnitAnalysis = struct
+module UnitAnalysis (L : LANG) = struct
+  type 'a lang = 'a L.t
   type t = unit [@@deriving sexp_of, equal]
 
   let of_enode _ _ = ()
@@ -410,8 +407,22 @@ module UnitAnalysis = struct
 end
 
 module OptAnalysis = struct
-  type t = { schema : Schema.t; free : Set.M(Name).t }
+  type t = { schema : Schema.t; free : Set.M(Name).t; max_debruijn_index : int }
   [@@deriving sexp_of, equal]
+
+  let rec max_debruijn_index_query data q =
+    Visitors.Reduce.query (-1) max
+      (fun id -> (data id).max_debruijn_index)
+      (max_debruijn_index_pred data)
+      q
+
+  and max_debruijn_index_pred data = function
+    | `Name { Name.name = Bound (idx, _); _ } -> idx
+    | (p : _ Ast.ppred) ->
+        Visitors.Reduce.pred (-1) max
+          (fun id -> (data id).max_debruijn_index)
+          (max_debruijn_index_pred data)
+          p
 
   let of_enode data q =
     {
@@ -421,6 +432,7 @@ module OptAnalysis = struct
           ~schema:(fun id -> Set.of_list (module Name) (data id).schema)
           (fun id -> (data id).free)
           q;
+      max_debruijn_index = max_debruijn_index_query data q;
     }
 
   let merge x x' =
@@ -466,10 +478,12 @@ module AstEGraph = struct
   let choose_exn g = choose_bounded_exn g 10
   let choose g id = try Some (choose_exn g id) with Choose_failed -> None
   let schema g id = (data g id).schema
+  let max_debruijn_index g id = (data g id).max_debruijn_index
 end
 
 let%expect_test "" =
-  let module E = Make (SymbolLang (String)) (UnitAnalysis) in
+  let module L = SymbolLang (String) in
+  let module E = Make (L) (UnitAnalysis (L)) in
   let g = E.create () in
   let x = E.add g { func = "x"; args = [] } in
   let y = E.add g { func = "y"; args = [] } in
@@ -528,7 +542,7 @@ let%expect_test "" =
 
 let%expect_test "" =
   let module L = SymbolLang (String) in
-  let module E = Make (L) (UnitAnalysis) in
+  let module E = Make (L) (UnitAnalysis (L)) in
   let g = E.create () in
   let x = E.add g { func = "x"; args = [] }
   and y = E.add g { func = "y"; args = [] }

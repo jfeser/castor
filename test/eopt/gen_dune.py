@@ -11,9 +11,8 @@ for name in sys.argv[1:]:
 
 (rule
  (alias runtest)
- (action (with-stderr-to {name}.output
-           (with-stdout-to {name}.output
+ (action (with-stdout-to {name}.output
             (with-stdin-from {name}
-             (run ../bin/eopt.exe))))))
+             (run ../bin/eopt.exe)))))
 """
     )
