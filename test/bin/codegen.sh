@@ -14,6 +14,6 @@ fi
 rm -f "$compile_err"
 
 "$name.d/scanner.exe" -p "$name.d/data.bin" $values > "$name.result.output"
-cp "$name.d/scanner.ll" "$name.ll.output"
+cat "$name.d/scanner.ll" | grep -vE '^target (datalayout|triple) =' > "$name.ll.output"
 cp "$name.d/scanner.ir" "$name.ir.output"
 cp "$name.d/layout.txt" "$name.layout.output"
