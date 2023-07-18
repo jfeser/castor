@@ -21,8 +21,8 @@
               version = "n/a";
               src = ./.;
               duneVersion = "3";
+              nativeBuildInputs = [ ofinal.menhir ];
               propagatedBuildInputs = with ofinal; [
-                menhir
                 dune-site
                 core
                 core_unix
@@ -43,6 +43,8 @@
                 visitors
                 yojson
                 llvmPackages.libllvm
+                sqlgg
+                genhash
               ];
               doCheck = false;
             };
@@ -52,12 +54,13 @@
               version = "n/a";
               src = ./.;
               duneVersion = "3";
+              nativeBuildInputs = [ ofinal.menhir ];
               propagatedBuildInputs = with ofinal; [
-                menhir
                 base
                 stdio
                 ppx_sexp_conv
                 ppx_compare
+                ppx_hash
               ];
               doCheck = false;
             };
@@ -72,6 +75,7 @@
                 ounit
                 ctypes
                 core
+                core_unix
                 ppx_sexp_conv
               ];
               doCheck = false;
@@ -83,6 +87,7 @@
               src = ./.;
               duneVersion = "3";
               propagatedBuildInputs = with ofinal; [
+                core
                 ounit
                 integers
                 ppx_sexp_conv
